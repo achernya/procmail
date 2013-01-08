@@ -1,0 +1,18 @@
+
+#$Id: mansed,v 2.1 1991/10/09 16:29:22 berg Rel $
+
+SHELL=/bin/sh || exec /bin/sh man/mansed $* # we're in a csh, feed myself to sh
+
+if test ! -f "$2"
+then
+ trap "rm -f \"$2\";exit 1" 1 2 3 15
+fi
+
+sed -f man/man.sed <"$1" >"$2"
+
+if test -f "$2"
+then
+ exit 0
+else
+ exit 1
+fi

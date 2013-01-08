@@ -1,11 +1,19 @@
-/*$Id: procmail.h,v 2.3 1991/07/11 11:22:56 berg Rel $*/
+/*$Id: procmail.h,v 2.7 1991/10/22 15:31:26 berg Rel $*/
 
 #include "includes.h"
 
-typedef unsigned char uchar;
+typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
+#ifdef uchar
+#undef uchar
+#endif
+#define uchar uschar
 
 #ifndef console
 #define console devnull
+#endif
+
+#ifndef SYSTEM_MBOX
+#define SYSTEM_MBOX	SYSTEM_MAILBOX
 #endif
 
 #ifdef MAILBOX_SEPARATOR
@@ -13,6 +21,11 @@ typedef unsigned char uchar;
  (tofolder?rwrite(fd,MAILBOX_SEPARATOR,STRLEN(MAILBOX_SEPARATOR)):0)
 #else
 #define mboxseparator(fd)
+#endif
+
+#ifndef KERNEL_LOCKS
+#define lockfd(fd)	0
+#define unlockfd()	0
 #endif
 
 #define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
@@ -38,13 +51,14 @@ struct varval{const char*const name;long val;};
 
 #ifndef MAIN
 extern char*buf,*buf2,*globlock,*loclock,*tolock,*lastfolder;
-extern const char grep[],shellflags[],shell[],lockext[],newline[],binsh[],
+extern const char shellflags[],shell[],lockext[],newline[],binsh[],
  unexpeof[],shellmetas[],*const*gargv,*sgetcp,*rcfile,dirsep[],msgprefix[],
- devnull[],executing[],oquote[],cquote[],whilstwfor[];
+ devnull[],executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[];
 extern struct varval strenvvar[];
 extern long lastdump;
-extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder;
-extern volatile flaggerd,nextexit;
+extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder,ignwerr,
+ fakedelivery;
+extern volatile nextexit;
 extern volatile time_t alrmtime;
 extern pid_t thepid;
 #endif
@@ -52,12 +66,21 @@ extern pid_t thepid;
 #ifdef NOmemmove
 void*memmove();
 #endif
+#ifdef strtol
+#undef strtol
+#define NOstrtol
+long strtol();
+#endif
+#ifdef NOstrpbrk
+char*strpbrk();
+#endif
 
-void*tmalloc(),*trealloc();
+void*tmalloc(),*trealloc(),*regcomp(),sterminate(),stermchild(),flagger(),
+ ftimeout();
 pid_t sfork();
-void sterminate(),stermchild(),flagger(),ftimeout();
 long dump(),pipin(),renvint();
-char*readdyn(),*fromprog(),*cat(),*findnl(),*tstrdup(),*cstr();
+char*readdyn(),*fromprog(),*cat(),*tstrdup(),*cstr(),*pstrspn(),
+ *regexec(),*egrepin();
 const char*tgetenv(),*hostname();
 int sgetc(),getb();
 
@@ -65,6 +88,6 @@ int sgetc(),getb();
  *	External variables that are checked/changed by the signal handlers:
  *	volatile time_t alrmtime;
  *	pid_t pidfilt,pidchild;
- *	volatile int nextexit,flaggerd;
+ *	volatile int nextexit;
  *	int lcking;
  */

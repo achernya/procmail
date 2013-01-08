@@ -1,9 +1,9 @@
 Makefile	We all know what that is.
 README		Important, read it.
 INSTALL		A description of what has to be done to install procmail.
+FAQ		Lists the things you are too lazy to figure out yourself.
 HISTORY		Recent and ancient changes, features (or bugs) documented.
 FEATURES	A summary of all the things procmail is particularly good at.
-STYLE		A short explanation of why the source looks so "awkward"
 lockfile.c	main program for lockfile
 formail.c	main program for formail
 Manifest	You guessed it.
@@ -11,6 +11,7 @@ procmail.c	main program for procmail.
 nonint.c	Collection of routines that don't return ints.
 retint.c	Collection of routines that return ints.
 goodies.c	Some real nice routines, deserve to be put in a library.
+regexp.c	Custom regular expression library, *fully* egrep compatible.
 common.c	Some routines that are used by procmail and formail.
 exopen.c	Collection of routines about an NFS secure excl. open.
 exopen.h	The very same.
@@ -38,3 +39,6 @@ examples/advanced
 		Some extra info for network mounted mailboxes, examples of
 		advanced .procmailrc expressions and using procmail as
 		a local delivery agent.
+examples/mailinglist
+		Comprehensive instructions on maintaining a mailinglist.
+examples/listrc Model-rcfile for use in mailinglists.

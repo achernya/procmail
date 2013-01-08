@@ -1,3 +1,6 @@
 #include <strings.h>
 
-char*strchr(),*strpbrk();
+#ifndef strchr
+char*strchr();
+#endif
+char*strpbrk();

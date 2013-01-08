@@ -1,5 +1,17 @@
-To install procmail, lockfile and formail: edit Makefile accordingly (if you
-use MMDF at your site, edit config.h as well) and type 'make install'.
+Discusses:
+		1. Getting the lot to compile
+		2. Setting up the environment
+		3. Extra options if you are a system administrator
+
+				---
+
+1. Getting the lot to compile
+   --------------------------
+
+To install procmail, lockfile and formail: edit Makefile & config.h accordingly
+and type 'make install'.
+Intended configurable options in Makefile are: the install-destinations
+Intended configurable options in config.h are: HARDLOCKS and MMDF support.
 
 'make install' will:
       - execute autoconf (a shell script that repeatedly calls the C compiler
@@ -9,6 +21,10 @@ use MMDF at your site, edit config.h as well) and type 'make install'.
 	procmail, lockfile and formail
       - copy these binaries to $(BINDIR)
       - copy the man pages to $(MANDIR)
+
+'make deinstall' will:
+      - remove the just installed files in $(BINDIR)
+      - remove the just installed files in $(MANDIR)
 
 
 Minimal requirements:
@@ -26,7 +42,7 @@ autoconf, autoconf.h, config.h, includes.h
 
 For autoconf to work as intended, your compiler should either be fully ANSI
 compliant, or you should NOT turn off all warnings; enabling all warnings
-shouldn't hurt.  In most cases the default options in the Makefile will do.
+shouldn't hurt.	 In most cases the default options in the Makefile will do.
 
 The sources are supposed to be fully ANSI and K&R compliant.
 
@@ -36,55 +52,33 @@ Should procmail seem to hang, check if the $LOCKFILE is still present.
 If you kill procmail with "kill pid" it will clean up the $LOCKFILE
 itself.
 
-Suggested command line for a test run: "procmail -d LOGFILE=/dev/tty"
+Suggested command line for a test run: "procmail -d LOGFILE=:/dev/tty"
 (now type in a mail message).
+
+				---
+
+2. Setting up the environment
+   --------------------------
 
 Every user that wants to use procmail should have a .forward and a
 .procmailrc file in his HOME directory.	 For starters, you can look
 at the supplied example files in "examples".
 (BTW, be sure to make .forward *world* readable).
 
-For more info about the program, see the man page.
+				---
 
-------------------------------------------------------------------------------
------------------------Frequently Asked Questions-----------------------------
-------------------------------------------------------------------------------
+3. Extra options if you are a system administrator
+   -----------------------------------------------
 
-1. Why does the logfile have lines containing "file -i not found"?
+If you are a system administrator you can decide to install procmail
+globally (i.e. as an equivalent substitute for /bin/mail), this has the
+advantage that users do not need to have a .forward file anymore that
+calls up procmail.  Simply having a .procmailrc file in the $HOME directory
+will suffice.  Operation is transparant in this case (i.e. if no .procmailrc
+file is present in the $HOME directory, mail will be delivered as usual).
 
-	Your egrep doesn't understand the -i option (ignore case).  Either
-	use a different grep (e.g. set GREP to /bin/grep), or be sure
-	to specify the 'D' option on every recipe.
+For direct examples on how to do this, look at the examples/advanced file.
 
-2. I installed procmail (i.e. typed 'make install'), but how am I supposed to
-   use it?  When I type procmail on the command line it simply does nothing.
+				---
 
-	You're not supposed to start procmail from the command line.
-	Be sure to have a .forward and a .procmailrc file in your home
-	directory (see the examples subdirectory or the man page).
-
-3. When I compile everything the compiler complains about invalid or illegal
-   pointer combinations, but it produces the executables anyway.
-   Should I be concerned?
-
-	Ignore these warnings, they simply indicate that either your compiler
-	or your system include files are not ANSI/POSIX compliant.
-	The compiler will produce correct code regardless of these warnings.
-
-4. The compiler seems to issue warnings about "loop not entered at top",
-   is that a problem?
-
-	No, no problem at all, it just means I wrote the code :-)
-	That's just about the only uncommon coding technique (not formatting
-	style, that's another topic) I use (don't think I don't try to avoid
-	those jumps in loops, it's just that sometimes they are the best way
-	to code it).
-
-5. The compiler complains about unmodifiable lvalues or assignments to const
-   variable.  Now what?
-
-	Well, if the compiler produces the executables anyway everything
-	probably is all right.  If it doesn't, you might try inserting a
-	"#define const" in the autoconf.h file by hand.  However in any case,
-	your compiler is broken; I would recommend submitting this as a
-	compiler bug to your vendor.
+For more info about the program, see the man page or the FAQ list.

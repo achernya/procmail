@@ -1,4 +1,4 @@
-#$Id: Makefile,v 2.3 1991/06/20 09:54:14 berg Rel $
+#$Id: Makefile,v 2.7 1991/10/18 15:36:39 berg Rel $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
@@ -7,6 +7,19 @@ BINDIR	 = $(BASENAME)/bin
 MANSUFFIX= 1
 MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 
+# Things that can be made are:
+
+# procmail formail lockfile		These are the three programs contained
+#					in this package
+
+# all			Makes all three binaries and the man pages
+# install.man		Installs the man pages to $(MANDIR)
+# install		Is a "make all" followed by copying all the binaries
+#			and man pages to $(BINDIR) and $(MANDIR) respectively
+# clean			Restores the package to pre-make state
+# deinstall		Removes the previously installed binaries and man
+#			pages by carefull surgery
+
 ########################################################################
 # Only edit below this line if you *think* you know what you are doing #
 ########################################################################
@@ -14,27 +27,33 @@ MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 # Directory for the standard include files
 USRINCLUDE = /usr/include
 
-OCFLAGS	 = -O
-OLDFLAGS = -s
+OCFLAGS = -O
+OLDFLAGS= -s
 
 CFLAGS	= $(OCFLAGS) -I$(USRINCLUDE) -I./include
 LDFLAGS = $(OLDFLAGS)
 
-CC = cc
-O = o
-RM= rm -f
+CC	= cc
+MAKE	= make
+SHELL	= /bin/sh
+O	= o
+RM	= rm -f
 
 BINS=procmail lockfile formail
 
-OBJ=procmail.$(O) nonint.$(O) goodies.$(O)
+MANS=man/procmail.1 man/formail.1
+
+MANSO=procmail.$(MANSUFFIX) formail.$(MANSUFFIX) lockfile.$(MANSUFFIX)
+
+OBJ=nonint.$(O) goodies.$(O) regexp.$(O)
 
 DEP=shell.h procmail.h config.h
 
-all:	autoconf.h $(BINS)
+all:	autoconf.h $(BINS) $(MANS)
 
-procmail: $(OBJ) exopen.$(O) common.$(O) retint.$(O)
-	$(CC) $(CFLAGS) -o procmail $(OBJ) exopen.$(O) common.$(O) \
-retint.$(O) $(LDFLAGS)
+procmail: procmail.$(O) $(OBJ) exopen.$(O) common.$(O) retint.$(O)
+	$(CC) $(CFLAGS) -o procmail procmail.$(O) $(OBJ) exopen.$(O) \
+common.$(O) retint.$(O) $(LDFLAGS)
 
 lockfile: lockfile.$(O) exopen.$(O)
 	$(CC) $(CFLAGS) -o lockfile lockfile.$(O) exopen.$(O) ${LDFLAGS}
@@ -46,13 +65,15 @@ _autotst: _autotst.$(O)
 	$(CC) $(CFLAGS) -o _autotst _autotst.$(O) $(LDFLAGS)
 
 autoconf.h: autoconf Makefile
-	/bin/sh autoconf $(O)
+	/bin/sh autoconf $(O) $(MAKE) autoconf.h
 
 Makefile:
 
 $(OBJ): $(DEP)
 
 retint.$(O): $(DEP) exopen.h
+
+procmail.$(O): $(DEP) patchlevel.h
 
 exopen.$(O): config.h includes.h exopen.h
 
@@ -71,16 +92,47 @@ includes.h: autoconf.h
 .c.$(O):
 	$(CC) $(CFLAGS) -c $*.c
 
-install: all
-	chmod 0755 $(BINS)
-	cp $(BINS) $(BINDIR)
-	chmod 0644 man/procmail.$(MANSUFFIX) man/lockfile.$(MANSUFFIX) \
-man/formail.$(MANSUFFIX)
-	cp man/procmail.$(MANSUFFIX) man/lockfile.$(MANSUFFIX) \
-man/formail.$(MANSUFFIX) $(MANDIR)
+man/man.sed: man/manconf.c config.h procmail.h
+	$(CC) $(CFLAGS) -o man/manconf man/manconf.c ${LDFLAGS}
+	man/manconf >man/man.sed
+	rm -f man/manconf
+	chmod 755 man/mansed
 
-again: all
+man/procmail.1: man/man.sed man/procmail.man man/mansed
+	man/mansed man/procmail.man man/procmail.1
+
+man/formail.1: man/man.sed man/formail.man man/mansed
+	man/mansed man/formail.man man/formail.1
+
+install.man: $(MANS)
+	chmod 0644 man/*.1
+	cp man/procmail.1 $(MANDIR)/procmail.$(MANSUFFIX)
+	cp man/lockfile.1 $(MANDIR)/lockfile.$(MANSUFFIX)
+	cp man/formail.1 $(MANDIR)/formail.$(MANSUFFIX)
+
+install: all install.man
+	@chmod 0755 $(BINS)
+	@cp $(BINS) $(BINDIR)
+	@echo
+	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINS)
+	@cd $(MANDIR); echo Installed in $(MANDIR); ls -l $(MANSO)
+	@echo ----------------------------------------------------------------\
+---------------
+	@echo If you are a system administrator, you should consider \
+installing procmail
+	@echo suid-root and/or integrating procmail into the mail-delivery \
+system -- for
+	@echo advanced functionality --.  For more information about this \
+topic you should
+	@echo look in the examples/advanced file.
+	@echo ----------------------------------------------------------------\
+---------------
+
+deinstall:
+	cd $(BINDIR); $(RM) $(BINS); ls -l $(BINS)
+	cd $(MANDIR); $(RM) $(MANSO); ls -l $(MANSO)
 
 clean:
 	$(RM) $(OBJ) common.$(O) lockfile.$(O) exopen.$(O) retint.$(O) \
-formail.$(O) $(BINS) autoconf.h _autotst* grepfor
+formail.$(O) procmail.$(O) $(BINS) autoconf.h _autotst* grepfor $(MANS) \
+man/man.sed

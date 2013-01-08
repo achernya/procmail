@@ -7,20 +7,20 @@
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
- *	#include "STYLE"						*
- *									*
  ************************************************************************/
-#ifdef	RCS
-static char rcsid[]="$Id: formail.c,v 2.8 1991/07/17 14:35:09 berg Rel $";
+#ifdef RCS
+static char rcsid[]="$Id: formail.c,v 2.11 1991/10/18 15:33:23 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/07/17 14:35:09 $";
-#include "config.h"	    /* overkill, only need BinSh & MAILBOX_SEPARATOR */
+static char rcsdate[]="$Date: 1991/10/18 15:33:23 $";
+#include "config.h"					  /* slight overkill */
 #include "includes.h"
+
+char*pstrspn();
 
 #define BSIZE		4096
 
-#define FROM		"From "
-#define UNKNOWN		"foo@bar"
+#define NAMEPREFIX	"formail: "
+#define HEAD_DELIMITER	':'
 
 #define Re		(re+1)
 #define Nextchar(x)	do{x=getchar();if(feof(stdin))goto foundeof;}while(0)
@@ -33,24 +33,38 @@ static const char From[]=FROM,replyto[]="Reply-To:",Fromm[]="From:",
  returnpath[]="Return-Path",sender[]="Sender:",outofmem[]="Out of memory\n",
  subject[]="Subject:",re[]=" Re:",couldntw[]="Couldn't write to stdout",
  references[]="References:",messageid[]="Message-ID:",Date[]="Date:",
- article[]="Article ",Path[]="Path:",Received[]="Received:";
+ article[]="Article ",Path[]="Path:",Received[]="Received:",To[]="To: ",
+ OldP[]=OLD_PREFIX,inreplyto[]="In-Reply-To:",errorsto[]="Errors-To",
+ retreceiptto[]="Return-Receipt-To";
 const char binsh[]=BinSh;
-static const struct {const char*head;int len,wrepl;}sest[]={
- {sender,STRLEN(sender),0},{replyto,STRLEN(replyto),4},
- {Fromm,STRLEN(Fromm),2},{returnpath,STRLEN(returnpath),1}};
-static struct {const char*const headr;const int lenr;size_t offset;}rex[]={
- {subject,STRLEN(subject)},{references,STRLEN(references)},
- {messageid,STRLEN(messageid)}};
+/*
+ *	sender determination fields in order of importance reliability
+ *	reply-address determination fields (wrepl specifies the weight)
+ */
+static const struct {const char*head;int len,wrepl;}sest[]=
+{ {errorsto,STRLEN(errorsto),5},{retreceiptto,STRLEN(retreceiptto),6},
+  {sender,STRLEN(sender),0},{replyto,STRLEN(replyto),4},
+  {Fromm,STRLEN(Fromm),2},{returnpath,STRLEN(returnpath),1}
+};
+/*
+ *	digest splitting fields
+ */
+static const struct {const char*hedr;int lnr;}cdigest[]=
+{ {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)},
+  {article,STRLEN(article)},{Path,STRLEN(Path)},{Received,STRLEN(Received)}
+};
+
+static struct {const char*const headr;const int lenr;char*rexp;}rex[]=
+{ {subject,STRLEN(subject)},{references,STRLEN(references)},
+  {messageid,STRLEN(messageid)}
+};
 #define subj	rex[0]
 #define refr	rex[1]
 #define msid	rex[2]
-static const struct {const char*hedr;int lnr;}cdigest[]={
- {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)},
- {article,STRLEN(article)},{Path,STRLEN(Path)},{Received,STRLEN(Received)}};
 #define mxl(a,b)	mx(STRLEN(a),STRLEN(b))
 #ifndef MAILBOX_SEPARATOR
 #define dig_HDR_LEN	mx(mxl(From,Fromm),mxl(Date,subject))
-#define mboxseparator		From
+#define mboxseparator	From
 #define flushseparator(i,p)
 #else
 static const char mboxseparator[]=MAILBOX_SEPARATOR;
@@ -59,265 +73,404 @@ static const char mboxseparator[]=MAILBOX_SEPARATOR;
 #define dig_HDR_LEN	\
  mx(mx(mxl(From,Fromm),mxl(Date,subject)),STRLEN(mboxseparator))
 #endif
-static errout,oldstdout;
+static struct hedit{char*hline;long hlen;struct hedit*next;}*hlist;
+static errout,oldstdout,quiet;
 static pid_t child= -1;
 static FILE*mystdout;
 static size_t nrskip,nrtotal= -1;
 
 #ifdef	NOstrstr
-char*strstr(whole,part)const char*whole,*const part;{register const char*w,*p;
- do{
-   w=whole;p=part;
-   do
-      if(!*p)
-	 return(char*)whole;
-   while(*w++==*p++);}
- while(*whole++);
- return(char*)0;}
+char*strstr(whole,part)const char*whole,*const part;
+{ register const char*w,*p;
+  do
+   { w=whole;p=part;
+     do
+	if(!*p)
+	   return(char*)whole;
+     while(*w++==*p++);}
+  while(*whole++);
+  return(char*)0;
+}
 #endif
 
-void*tmalloc(len)const size_t len;{void*p;
- if(p=malloc(len))
-   return p;
- log(outofmem);exit(EX_OSERR);}
+void*tmalloc(len)const size_t len;
+{ void*p;
+  if(p=malloc(len))
+     return p;
+  nlog(outofmem);exit(EX_OSERR);
+}
 
-void*trealloc(old,len)void*old;const size_t len;{
- if(old=realloc(old,len))
-   return old;
- log(outofmem);exit(EX_OSERR);}
+void*trealloc(old,len)void*old;const size_t len;
+{ if(old=realloc(old,len))
+     return old;
+  nlog(outofmem);exit(EX_OSERR);
+}
 
 #include "shell.h"
 
-main(lastm,argv)const char*const argv[];{time_t t;
- int i,nowm,thelen=0,split=0,force=0,bogus=1,every=0,areply=0,
-   trust=0,digest=0,nowait=0;
- size_t buflen,p=0,lnl=0,thename,ll;
- char*buf,*chp;
- while(*++argv){
-   if((lastm= **argv)=='+')
-      goto number;
-   else if(lastm!='-')
-      goto usg;
-   for(i=1;;){
-      switch((*argv)[i++]){
-	 case 't':trust=1;continue;    /* trust the sender for valid headers */
-	 case 'r':areply=1;continue;			 /* generate a reply */
-	 case 'f':force=1;continue;		  /* accept arbitrary format */
-	 case 'e':every=1;bogus=0;continue;	      /* split on every From */
-	 case 'd':digest=1;continue;			 /* split up digests */
-	 case 'n':nowait=1;continue;	      /* don't wait for the programs */
-	 case 's':split=1;
-	    if(!(*argv++)[i])
-	       goto parsedoptions;
-	    goto usg;
-number:	 default:
-	    if((*argv)[1]-'0'>(unsigned)9){
-usg:	       log("Usage: formail [+nnn] [-nnn] [-bfrtned] \
-[-s command argument ...]\n");return EX_USAGE;}
-	    ll=strtol((*argv)+1,(char**)0,10);
-	    if(lastm=='+')
-	       nrskip=ll;
-	    else
-	       nrtotal=ll;
-	    break;
-	 case 'b':bogus=0;continue;		 /* leave bogus Froms intact */
-	 case '\0':;}
-      break;}}
+struct hedit*overrideh(target)const char*const target;
+{ const struct hedit*hlp;size_t len;
+  for(hlp=hlist;hlp;hlp=hlp->next)
+   { len=hlp->hlen;
+     if(hlp->hlen<0)
+	len= -hlp->hlen;					 /* absolute */
+     if(!strnicmp(hlp->hline,target,len))		     /* header found */
+	return (struct hedit*)hlp;
+   }
+  return(struct hedit*)0;				  /* no header found */
+}
+
+main(lastm,argv)const char*const argv[];
+{ int i,ch,nowm,split=0,force=0,bogus=1,every=0,areply=0,trust=0,digest=0,
+   nowait=0,keepb=0;
+  size_t buflen,p=0,lnl=0,ll;time_t t;char*buf,*chp,*namep;struct hedit*hlp;
+  while(chp=(char*)*++argv)
+   { if((lastm= *chp++)==FM_SKIP)
+	goto number;
+     else if(lastm!=FM_TOTAL)
+	goto usg;
+     for(;;)
+      { switch(lastm= *chp++)
+	 { case FM_TRUST:trust=1;continue;
+	   case FM_REPLY:areply=1;continue;
+	   case FM_FORCE:force=1;continue;
+	   case FM_EVERY:every=1;bogus=0;continue;
+	   case FM_DIGEST:digest=1;continue;
+	   case FM_NOWAIT:nowait=1;continue;
+	   case FM_KEEPB:keepb=1;continue;
+	   case FM_QUIET:quiet=1;continue;
+	   case FM_SPLIT:split=1;
+	      if(!*chp&&*++argv)
+		 goto parsedoptions;
+	      goto usg;
+number:	   default:
+	      if(*chp-'0'>(unsigned)9)
+	       {
+usg:		 log(FM_USAGE);return EX_USAGE;
+	       }
+	      ll=strtol(chp,(char**)0,10);
+	      if(lastm==FM_SKIP)
+		 nrskip=ll;
+	      else
+		 nrtotal=ll;
+	      break;
+	   case FM_BOGUS:bogus=0;continue;
+	   case FM_REN_INSERT:case FM_DEL_INSERT:hlp=hlist;
+	      (hlist=malloc(sizeof*hlist))->next=hlp;
+	      if(!*chp&&!(chp=(char*)*++argv))	/* concatenated or seperate? */
+		 goto usg;
+	      hlist->hline=chp;				/* add header string */
+	      if(!(buf=strchr(chp,HEAD_DELIMITER)))
+	       { nlog("Invalid field-name:");logqnl(chp);goto usg;
+	       }
+	      buflen=buf-chp+1;
+	      hlist->hlen=lastm==FM_REN_INSERT?buflen:-(long)buflen;
+	   case '\0':;
+	 }
+	break;
+      }
+   }
 parsedoptions:
 #ifdef MAILBOX_SEPARATOR
- if(split){
-   bogus=0;every=1;}
+  if(split)
+   { bogus=0;every=1;
+   }
 #endif
- mystdout=stdout;signal(SIGPIPE,SIG_IGN);
- if(split){
-   oldstdout=dup(STDOUT);fclose(stdout);startprog(argv);}
- else if(every)
-   goto usg;
- while('\n'==(i=getchar()));
- buf=malloc(buflen=BSIZE);t=time((time_t*)0);
- for(;;){					 /* start parsing the header */
-   if((buf[p++]=i)=='\n'){
-      chp=buf+lnl;
+  mystdout=stdout;signal(SIGPIPE,SIG_IGN);
+  if(split)
+   { oldstdout=dup(STDOUT);fclose(stdout);startprog(argv);
+   }
+  else if(every)
+     goto usg;
+  *(namep=malloc(1))='\0';buf=malloc(buflen=BSIZE);t=time((time_t*)0);
+  i=maxindex(rex);
+  do *(rex[i].rexp=malloc(1))='\0';
+  while(i--);
+  while('\n'==(ch=getchar()));
+  for(;;)					 /* start parsing the header */
+   { if((buf[p++]=ch)=='\n')
+      { if(lnl==p-1)				    /* end of header reached */
+	   break;
+	switch(ch=getchar())		      /* concatenate continued lines */
+	 { case ' ':case '\t':p--;continue;
+	 }
+	chp=buf+lnl;
 #ifdef MAILBOX_SEPARATOR
-      if(!strncmp(mboxseparator,chp,STRLEN(mboxseparator))){
-	 if(!lnl){
-	    if(split){
-	       p=0;goto redigest;}
-	    force=1;}	     /* separator up front, don't add a 'From ' line */
-	 else if(bogus)
-	    *chp=' ';}
+	if(!strncmp(mboxseparator,chp,STRLEN(mboxseparator)))
+	 { if(!lnl)
+	    { if(split)
+	       { p=0;goto redigest;
+	       }
+	      force=1;	     /* separator up front, don't add a 'From ' line */
+	    }
+	   else if(bogus)
+	      *chp=' ';
+	 }
 #endif
-      i=maxindex(rex);
-      while(strnicmp(rex[i].headr,chp,rex[i].lenr)&&i--);
-      if(i>=0)					  /* found anything already? */
-	 rex[i].offset=lnl+rex[i].lenr;
-      else if(!strncmp(From,chp,STRLEN(From))){
-	 if(!lnl){				/* was the real "From " line */
-	    if(!areply)
-	       goto endofheader;
-	    nowm=trust?1:3/*wreply*/;ll=lnl+STRLEN(From);goto foundfrom;}
+	i=maxindex(rex);
+	while(strnicmp(rex[i].headr,chp,ll=rex[i].lenr)&&i--);
+	if(i>=0)				  /* found anything already? */
+	 { ll=p-lnl-ll;
+	   ((char*)tmemmove(rex[i].rexp=realloc(rex[i].rexp,ll),
+	    buf+lnl+rex[i].lenr,ll))[ll-1]='\0';
+	 }
+	else if(!strncmp(From,chp,STRLEN(From)))
+	 { if(!lnl)				/* was the real "From " line */
+	    { nowm=trust?1:3/*wreply*/;ll=lnl+STRLEN(From);goto foundfrom;
+	    }
 #ifndef MAILBOX_SEPARATOR
-	 if(bogus){
-	    tmemmove(chp+1,chp,p++-lnl);*chp='>';}		   /* disarm */
+	   if(bogus)
+	    { tmemmove(chp+1,chp,p++-lnl);*chp=ESCAP;		   /* disarm */
+	    }
 #endif
 	 }
-      else{
-	 i=maxindex(sest);
-	 do
-	    if(!strnicmp(sest[i].head,chp,sest[i].len)){
-	       nowm=areply?sest[i].wrepl:i;ll=lnl+sest[i].len;
-foundfrom:     buf[p]='\0';
-	       if(chp=strchr(buf+ll,'<'))	      /* extract the address */
-		  ll=chp-buf+1;
-	       chp=buf+(ll+=strspn(buf+ll," \t"));
-	       if((i=strcspn(chp,">(\n \t"))&&(!thelen||nowm>lastm)){
-		  thename=ll;thelen=i;
-		  lastm=strstr(chp,".UUCP")?nowm-maxindex(sest)-1:nowm;}
-	       break;}
-	 while(i--);
-	 if(lnl==p-1)
-	    break;}				    /* end of header reached */
-      lnl=p;}
-   if(p>=buflen-2)
-      buf=realloc(buf,buflen+=BSIZE);
+	else
+	 { i=maxindex(sest);
+	   do
+	      if(!strnicmp(sest[i].head,chp,sest[i].len))
+	       { nowm=areply?keepb&&sest[i].head==replyto?
+		  maxindex(sest)+1:sest[i].wrepl:i;
+		 ll=lnl+sest[i].len;
+foundfrom:	 buf[p]='\0';
+		 if(chp=strchr(buf+ll,'<'))	      /* extract the address */
+		    ll=chp-buf+1;
+		 if((i=strcspn(chp=pstrspn(buf+ll," \t"),">(\n \t"))&&
+		  (!*namep||nowm>lastm))
+		  { ((char*)tmemmove(namep=realloc(namep,i+1),chp,i))[i]='\0';
+		    lastm=strstr(chp,".UUCP")?nowm-maxindex(sest)-1:nowm;
+		  }
+		 break;
+		}
+	   while(i--);
+	 }
+	if(hlp=overrideh(buf+lnl))		/* replace or delete header? */
+	 { if(hlp->hlen<0)				   /* just delete it */
+	    { p=lnl;continue;
+	    }
+	   if(p+2>=buflen)		    /* trouble if BSIZE<STRLEN(OldP) */
+	      buf=realloc(buf,buflen+=BSIZE);
+	   tmemmove(buf+lnl+STRLEN(OldP),buf+lnl,p-lnl);
+	   tmemmove(buf+lnl,OldP,STRLEN(OldP));p+=STRLEN(OldP);
+	 }
+	lnl=p;continue;
+      }
+     if(p>=buflen-2)
+	buf=realloc(buf,buflen+=BSIZE);
 redigest:
-   i=getchar();
-   if(feof(stdin))
-      i='\n';}			/* make sure the header ends with 2 newlines */
- if(areply||!force){
-   putss(areply?"To: ":From);
-   if(thelen)					/* found any sender address? */
-      putssn(buf+thename,thelen);
-   else
-      putss(UNKNOWN);
-   if(areply){
-      putcs('\n');
-      if(subj.offset){					   /* any Subject: ? */
-	 putss(subject);chp=buf+subj.offset;
-	 if(strnicmp(chp+strspn(chp," "),Re,STRLEN(Re)))
-	    putss(re);			       /* no Re: , add one ourselves */
-	 nlputss(chp);}
-      if(refr.offset||msid.offset){	 /* any Message-ID: or References: ? */
-	 putss(references);
-	 if(refr.offset){
-	    chp=buf+refr.offset;
-	    putssn(chp,strchr(chp,'\n')-chp+!msid.offset);}
-	 if(msid.offset){
-	    nlputss(buf+msid.offset);putss("In-Reply-To:");
-	    nlputss(buf+msid.offset);}}
-      putcs('\n');
-      while(getchar(),!feof(stdin));return EX_OK;}
-   putcs(' ');putss(ctime(&t));}
-endofheader:
- putssn(buf,p);p=0;lnl=1;
- if(!bogus&&!split)
-   for(;;putcs(i))
-      Nextchar(i);
- for(;;){					       /* continue the quest */
-   do{						 /* read line until not From */
-      if(p==buflen-1)
-	 buf=realloc(buf,++buflen);
-      Nextchar(i=buf[p]);
-      if(++p==STRLEN(mboxseparator))
-	 if(!strncmp(mboxseparator,buf,STRLEN(mboxseparator))){
-	    if(every){
-	       flushseparator(i,p);goto splitit;}	 /* optionally flush */
-	    else if(split&&lnl)
-	       lnl=2;			   /* mark line as possible postmark */
-	    else if(bogus){					   /* disarm */
+     ch=getchar();
+     if(feof(stdin))
+	ch='\n';		/* make sure the header ends with 2 newlines */
+   }
+  if(areply||!force&&strncmp(buf,From,STRLEN(From)))
+   { if(!areply||!overrideh(To))
+      { putss(areply?(areply=2),To:From);
+	if(*namep)				/* found any sender address? */
+	   putss(namep);
+	else
+	   putss(UNKNOWN);}
+     if(areply)
+      { if(areply==2)
+	   putnl();
+	if(*subj.rexp&&!overrideh(subject))		   /* any Subject: ? */
+	 { putss(subject);chp=subj.rexp;
+	   if(strnicmp(pstrspn(chp," "),Re,STRLEN(Re)))
+	      putss(re);		       /* no Re: , add one ourselves */
+	   putss(chp);putnl();
+	 }
+	if(*refr.rexp||*msid.rexp)	 /* any Message-ID: or References: ? */
+	 { if(!overrideh(references))
+	    { putss(references);
+	      if(*refr.rexp)
+	       { putss(refr.rexp);
+		 if(*msid.rexp)
+		    putnl();
+	       }
+	      if(*msid.rexp)
+	       { putss(msid.rexp);putnl();
+	       }
+	    }
+	   if(*msid.rexp&&!overrideh(inreplyto))
+	    { putss(inreplyto);putss(msid.rexp);putnl();
+	    }
+	 }
+      }
+     else
+      { putcs(' ');putss(ctime(&t));
+      }
+   }
+  if(!areply)
+     putssn(buf,p-1);
+  for(hlp=hlist;hlp;hlp=hlp->next)
+   { ll=hlp->hlen;
+     if(hlp->hlen<0)
+	ll= -hlp->hlen;
+     if(hlp->hline[ll])
+      { putss(hlp->hline);putnl();		   /* inject our new headers */
+      }
+   }
+  putnl();
+  if(areply)
+   { if(!keepb)
+      { if(mystdout!=stdout)
+	   closemine();
+	opensink();					 /* discard the body */
+      }
+   }
+  p=0;lnl=1;					 /* clear buffer, important! */
+  if(!bogus&&!split)
+     for(;;putcs(i))
+	Nextchar(i);
+  for(;;)					       /* continue the quest */
+   {
+     do						 /* read line until not From */
+      { if(p==buflen-1)
+	   buf=realloc(buf,++buflen);
+	Nextchar(i=buf[p]);
+	if(++p==STRLEN(mboxseparator))
+	   if(!strncmp(mboxseparator,buf,STRLEN(mboxseparator)))
+	    { if(every)
+	       { flushseparator(i,p);goto splitit;	 /* optionally flush */
+	       }
+	      else if(split&&lnl)
+		 lnl=2;			   /* mark line as possible postmark */
+	      else if(bogus)					   /* disarm */
+	       {
 #ifndef MAILBOX_SEPARATOR
-	       putcs('>');break;}}
+		 putcs(ESCAP);break;
 #else
-	       Nextchar(i);*buf=' ';putssn(buf,p);*buf=i;p=1;continue;}}
+		 Nextchar(i);*buf=' ';putssn(buf,p);*buf=i;p=1;continue;
 #endif
-      if(lnl==1&&digest){
-	 thelen=maxindex(cdigest);
-	 do				      /* check for new digest header */
-	    if(p==cdigest[thelen].lnr&&!strncmp(buf,cdigest[thelen].hedr,p)){
-	       lnl=thelen=0;goto splitit;}	  /* pretend we started over */
-	 while(thelen--);}}
-   while(i!='\n'&&(lnl==2||p<dig_HDR_LEN));
-   if(lnl==2){
-      buf[p]='\0';		 /* perform more thorough check for postmark */
-      for(i=STRLEN(From)-1;buf[++i]==' ';);
-      if(ll=strcspn(buf+i,"\n \t")){
-	 i+=ll;
-	 if(ll=strspn(buf+i," ")&&(ll=buf[i+ll])!='\t'&&ll!='\n'){
-splitit:    if(fclose(mystdout)==EOF||errout==EOF){
-	       log(couldntw);log(", continuing...\n");split= -1;}
-	    if(!nowait)
-	       waitforit();
-	    startprog(argv);
-	    if(!lnl)					    /* digest split? */
-	       goto redigest;
-	    i='\n';}}}
-   lnl=p==1;putssn(buf,p);p=0;
-   if(i!='\n')
-      do Nextchar(i);
-      while(putcs(i),i!='\n');}
+	       }
+	    }
+	if((i=='\n'||p!=1)&&areply)
+	 { if(bogus)
+	      putcs(ESCAP);
+	   break;
+	 }
+	if(lnl==1&&digest)
+	 { ll=maxindex(cdigest);
+	   do				      /* check for new digest header */
+	      if(p==cdigest[ll].lnr&&!strncmp(buf,cdigest[ll].hedr,p))
+	       { *namep=lnl=0;goto splitit;	  /* pretend we started over */
+	       }
+	   while(ll--);
+	 }
+      }
+     while(i!='\n'&&(lnl==2||p<dig_HDR_LEN));
+     if(lnl==2)
+      { buf[p]='\0';		 /* perform more thorough check for postmark */
+	if((ll=strcspn(chp=pstrspn(buf+STRLEN(From)," ")," \t\n"))&&
+	 *(chp+=ll)==' '&&(ll= *(chp=pstrspn(chp," ")))!='\t'&&ll!='\n')
+	 {
+splitit:   if((fclose(mystdout)==EOF||errout==EOF)&&!quiet)
+	    { nlog(couldntw);log(", continuing...\n");split= -1;
+	    }
+	   if(!nowait)
+	      waitforit();
+	   startprog(argv);
+	   if(!lnl)					    /* digest split? */
+	      goto redigest;
+	   i='\n';
+	 }
+      }
+     lnl=p==1;putssn(buf,p);p=0;
+     if(i!='\n')
+	do Nextchar(i);
+	while(putcs(i),i!='\n');
+   }
 foundeof:
- putssn(buf,p);
- if(fclose(mystdout)==EOF||errout==EOF){
-   log(couldntw);return EX_IOERR;}
- child= -1;waitforit();return split<0?EX_IOERR:EX_OK;}	/* wait for everyone */
+  putssn(buf,p);closemine();child= -1;waitforit();	/* wait for everyone */
+  return split<0?EX_IOERR:EX_OK;
+}
 
-strnicmp(a,b,l)register const char*a,*b;register unsigned l;{int i,j;
- if(l)						 /* case insensitive strncmp */
-   do{
-      while(*a&&*a==*b&&--l)
-	 ++a,++b;
-      if(!l)
-	 break;
-      if((i= *a++)>='A'&&i<='Z')
-	 i+='a'-'A';
-      if((j= *b++)>='A'&&j<='Z')
-	 j+='a'-'A';
-      if(j!=i)
-	 return i>j?1:-1;}
-   while(i&&j&&--l);
- return 0;}
+log(a)const char*const a;
+{ fputs(a,stderr);
+}
 
-log(a)const char*const a;{
- fputs(a,stderr);}
+logqnl(a)const char*a;
+{ log(" \"");log(a);log("\"\n");
+}
 
-logqnl(a)const char*a;{
- log(" \"");log(a);log("\"\n");}
+putss(a)const char*a;
+{ while(*a)
+     putcs(*a++);
+}
 
-nlputss(a)const char*const a;{
- putssn(a,strchr(a,'\n')+1-a);}
+tputssn(a,l)const char*a;size_t l;
+{ while(l--)
+     putcs(*a++);
+}
 
-putss(a)const char*a;{
- while(*a)
-   putcs(*a++);}
-
-tputssn(a,l)const char*a;size_t l;{
- while(l--)
-   putcs(*a++);}
-
-startprog(argv)const char*const*const argv;{int poutfd[2];
- if(!nrtotal)
-   goto squelch;
- if(nrskip){
-   --nrskip;
+startprog(argv)const char*const*const argv;
+{ int poutfd[2];
+  if(!nrtotal)
+     goto squelch;
+  if(nrskip)
+   { --nrskip;
 squelch:
-   if(!(mystdout=fopen(DevNull,"a")))
-      goto nofild;
-   return;}
- if(nrtotal>0)
-   --nrtotal;
- dup(oldstdout);pipe(poutfd);
- if(!(child=fork())){
-   close(oldstdout);close(PWRO);fclose(stdin);dup(PRDO);close(PRDO);
-   shexec(argv);}
- close(STDOUT);close(PRDO);
- if(STDOUT!=dup(PWRO)||!(mystdout=fdopen(STDOUT,"a"))){
-nofild:
-   log("File table full\n");exit(EX_OSERR);}
- close(PWRO);
- if(-1==child){
-   log("Can't fork\n");exit(EX_OSERR);}}
+     opensink();return;
+   }
+  if(nrtotal>0)
+     --nrtotal;
+  dup(oldstdout);pipe(poutfd);
+  if(!(child=fork()))
+   { close(oldstdout);close(PWRO);fclose(stdin);dup(PRDO);close(PRDO);
+     shexec(argv);
+   }
+  close(STDOUT);close(PRDO);
+  if(STDOUT!=dup(PWRO)||!(mystdout=fdopen(STDOUT,"a")))
+     nofild();
+  close(PWRO);
+  if(-1==child)
+   { nlog("Can't fork\n");exit(EX_OSERR);
+   }
+}
 
-waitforit(){int i;pid_t j;
- while(child!=(j=wait(&i))||(i&127)==127)
-   if(-1==j)
-      return;}
+nofild()
+{ nlog("File table full\n");exit(EX_OSERR);
+}
+
+waitforit()
+{ int i;pid_t j;
+  while(child!=(j=wait(&i))||(i&127)==127)
+    if(-1==j)
+       return;
+}
+
+nlog(a)const char*const a;
+{ log(NAMEPREFIX);log(a);
+}
+
+closemine()
+{ if((fclose(mystdout)==EOF||errout==EOF)&&!quiet)
+   { nlog(couldntw);log("\n");;exit(EX_IOERR);
+   }
+}
+
+opensink()
+{ if(!(mystdout=fopen(DevNull,"a")))
+     nofild();
+}
+
+putnl()
+{ putcs('\n');
+}
+
+strnicmp(a,b,l)register const char*a,*b;register unsigned l;
+{ int i,j;
+  if(l)						 /* case insensitive strncmp */
+     do
+      { while(*a&&*a==*b&&--l)
+	   ++a,++b;
+	if(!l)
+	   break;
+	if((i= *a++)>='A'&&i<='Z')
+	   i+='a'-'A';
+	if((j= *b++)>='A'&&j<='Z')
+	   j+='a'-'A';
+	if(j!=i)
+	   return i>j?1:-1;
+      }
+     while(i&&j&&--l);
+  return 0;
+}

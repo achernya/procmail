@@ -1,7 +1,7 @@
 
-#$Id: autoconf,v 2.5 1991/07/03 18:49:25 berg Rel $
+#$Id: autoconf,v 2.9 1991/10/22 15:31:26 berg Rel $
 
-SHELL=/bin/sh || exec /bin/sh autoconf $1 # we're in a csh, feed myself to sh
+SHELL=/bin/sh || exec /bin/sh autoconf $* # we're in a csh, feed myself to sh
 
 # All possible entries in autoconf.h:
 
@@ -10,24 +10,36 @@ SHELL=/bin/sh || exec /bin/sh autoconf $1 # we're in a csh, feed myself to sh
 #	#define void char
 #	typedef int mode_t;
 #	typedef int pid_t;
+#	typedef int uid_t;
+#	typedef int gid_t;
 #	typedef unsigned size_t;
 #	typedef long time_t;
 #	#define NOmemmove
 #	#define NObcopy
 #	#define NOstrstr
+#	#define NOstrcspn
+#	#define NOstrpbrk
+#	#define strchr(s,c) index(s,c)
 #	#define setpwent()
 #	#define endpwent()
 #	#define strtol(str,ptr,base) ((long)atoi(str))
+#	#define SYSTEM_MAILBOX "/usr/spool/mail/$USER"
 
-# A conforming ANSI compiler and POSIX library should only produce two
-# entries in autoconf.h: setpwent() and endpwent()
+# A conforming ANSI compiler and POSIX library should only produce three
+# entries in autoconf.h: setpwent(), endpwent() and SYSTEM_MAILBOX
 # Anything else indicates failure of your installation to comply with either
 # the ANSI or POSIX standards (but procmail should be installable anyway).
 
 PATH=:$PATH
 export SHELL
-ACONF=autoconf.h
-trap "exit 1" 1 2 3 15
+ACONF=$3
+MAKE=$2
+if test -f $ACONF
+then
+ trap "exit 1" 1 2 3 15
+else
+ trap "rm -f $ACONF; exit 1" 1 2 3 15
+fi
 
 cat >grepfor <<HERE
 if fgrep "\$1" _autotst.rrr >/dev/null
@@ -53,17 +65,20 @@ main(){const char*p;const char*q;
 HERE
 
 echo 'Testing for const'
-make _autotst.$1 >_autotst.rrr 2>&1
+if ${MAKE} _autotst.$1 >_autotst.rrr 2>&1
+then
+ grepfor const '#define const'
+else
+ echo '#define const' >>$ACONF
+fi
 rm -f _autotst.$1
-
-grepfor const '#define const'
 
 cat >_autotst.c <<HERE
 main(){volatile int i;return 0;}
 HERE
- 
+
 echo 'Testing for volatile'
-if make _autotst.$1 >/dev/null 2>&1
+if ${MAKE} _autotst.$1 >/dev/null 2>&1
 then
 :
 else
@@ -76,7 +91,7 @@ main(){int i;i= -1;return i=-i;}
 HERE
 
 echo 'Testing for compiler age'
-make _autotst >_autotst.rrr 2>&1
+${MAKE} _autotst >_autotst.rrr 2>&1
 
 if _autotst
 then
@@ -84,7 +99,6 @@ then
  echo '#define void char' >>$ACONF
 fi
 rm -f _autotst _autotst.$1
-
 
 cat >_autotst.c <<HERE
 #include "includes.h"
@@ -94,11 +108,13 @@ main(){int i;char*p="t";
  i+=(pid_t)1;
  i+=(time_t)1;
  i+=(mode_t)1;
+ i+=(uid_t)1;
+ i+=(gid_t)1;
  return !vvoid;}
 HERE
 
-echo 'Testing for void*,size_t,pid_t,time_t,mode_t'
-make _autotst.$1 >_autotst.rrr 2>&1
+echo 'Testing for void*,size_t,pid_t,time_t,mode_t,uid_t,gid_t'
+${MAKE} _autotst.$1 >_autotst.rrr 2>&1
 rm -f _autotst.$1
 
 grepfor void '#define void char'
@@ -106,27 +122,70 @@ grepfor size_t 'typedef unsigned size_t;'
 grepfor pid_t 'typedef int pid_t;'
 grepfor time_t 'typedef long time_t;'
 grepfor mode_t 'typedef int mode_t;'
+grepfor uid_t 'typedef int uid_t;'
+grepfor gid_t 'typedef int gid_t;'
 
 cat >_autotst.c <<HERE
 #include "includes.h"
 main(){char a[2];
  setpwent();endpwent();memmove(a,"0",1);bcopy("0",a,1);strstr(a,"0");
- strtol("0",(char**)0,10);return 0;}
+ strcspn(a,"0");strtol("0",(char**)0,10);strchr("0",'0');strpbrk(a,"0");
+ return 0;}
 HERE
 
-echo 'Testing for memmove, strstr & strtol'
-make _autotst.$1 >/dev/null 2>&1
-make _autotst >_autotst.rrr 2>&1
-rm -f _autotst _autotst.$1
+echo 'Testing for memmove, strstr, strchr, strcspn & strtol'
+${MAKE} _autotst.$1 >/dev/null 2>&1
+${MAKE} _autotst >_autotst.rrr 2>&1
+rm -f _autotst _autotst.$1 _autotst.c
 
-grepfor memmove '#define NOmemmove' && grepfor bcopy '#define NObcopy'
 grepfor strstr '#define NOstrstr'
+grepfor strcspn '#define NOstrcspn'
+grepfor strpbrk '#define NOstrpbrk'
+grepfor strchr '#define strchr(s,c) index(s,c)'
 grepfor setpwent '#define setpwent()'
 grepfor endpwent '#define endpwent()'
 grepfor strtol '#define strtol(str,ptr,base) ((long)atoi(str))'
+grepfor memmove '#define NOmemmove' &&
+if fgrep bcopy _autotst.rrr >/dev/null
+then
+ echo '#define NObcopy' >>$ACONF
+else
+
+ cat >_autotst.c <<HERE
+#include "includes.h"
+#define M256	256
+#define F33	33
+main(){int j=0,i=M256-1;static char a[M256];
+ do a[i]=i;while(i--);
+ bcopy(a+F33,a,M256-F33);bcopy(a,a+F33,M256-F33);i=F33-1;
+ do j|=a[i]!=(char)(i+F33);while(i--);i=M256-1;
+ do j|=a[i]!=(char)i;while(--i!=F33-1);return!j;}
+HERE
+
+ echo 'Testing for bcopy handling overlaps'
+ ${MAKE} _autotst >/dev/null 2>&1
+
+ if _autotst
+ then
+   echo 'Sorry, incompetent bcopy'
+   echo '#define NObcopy' >>$ACONF
+ fi
+ rm -f _autotst _autotst.c
+fi
+
+if test -d /usr/spool/mail
+then
+ echo '#define SYSTEM_MAILBOX "/usr/spool/mail/$USER"' >>$ACONF
+elif test -d /usr/mail
+then
+ echo '#define SYSTEM_MAILBOX "/usr/mail/$USER"' >>$ACONF
+else
+ echo '#define SYSTEM_MAILBOX "$HOME/.mbox"' >>$ACONF
+ echo Could not find the system-mailbox directory, supplied substitute
+fi
 
 rm -f _autotst* grepfor
 
 echo -----------------------------autoconf.h-----------------------------------
-cat autoconf.h
+cat $ACONF
 echo --------------------------------------------------------------------------

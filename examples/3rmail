@@ -4,11 +4,11 @@
 # Use a relative path from your $HOME directory
 #
 # For this kind of chaotic procmailrc there is no uniform neat solution
-# to determine which lockfiles to use.	I'll give just one (suboptimal)
+# to determine which lockfiles to use.  I'll give just one (suboptimal)
 # solution here.  Use your imagination to extend it :-).
 #
 MAILDIR=$HOME/Mail
-cd $HOME			# this means all paths are relative to $HOME
+cd $HOME                        # this means all paths are relative to $HOME
 LOCKFILE=$HOME/.lockmail
 LOCKFILE2=$HOME/Mail/whatever
 if lockfile -! -r1 $LOCKFILE $LOCKFILE2

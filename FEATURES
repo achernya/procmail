@@ -1,37 +1,29 @@
 Feature summary for procmail:
 	+ It's small
-	+ Very easy to install
+	+ Very easy to install (rated PG6 :-)
 	+ Simple to maintain and configure because
 	  all you need is actually only ONE executable (procmail)
 	  and ONE configuration file (.procmailrc)
-	+ Uses *your* (i.e. easily configurable) favourite regular expression
-	  syntax
+	+ Is event driven (i.e. gets invoked automagically when mail arrives)
+	+ Does not use *any* temporary files
+	+ Uses standard egrep regular expressions
 	+ Allows for very-easy-to-use yes-no decisions on where the mail
 	  should go
 	+ Filters, delivers and forwards mail *reliably*
-	+ Provides a stable and guaranteed environment for any programs or
-	  shell scripts you may wish to start upon mail arrival
-	+ Is designed for reliability, once procmail gets hold of your mail
-	  you can consider it delivered
-	+ Is event driven (i.e. gets invoked automagically when mail arrives)
+	+ Provides a reliable hook (you might even say anchor :-) for any
+	  programs or shell scripts you may wish to start upon mail arrival
 	+ Performs heroically under even the worst conditions
 	  (file system full, out of swap space, process table full,
 	  file table full, missing support files, unavailable executables,
 	  denied permissions) and tries to deliver the mail somehow anyway
-	  (it usually succeeds were other programs would have given up)
-	+ procmail is the closest you can get to a program that outlives
-	  the swapper :-)
 	+ Absolutely undeliverable mail (after trying every trick in the book)
-	  will bounce back to the sender
-	+ Does not use *any* temporary files
-	+ Is explicitly designed to work under NFS as well
-	+ Performs more reliable mailbox locking than most other mailers
-	  (especially across NFS, DON'T use NFS mounted mailboxes WITHOUT
-	  installing procmail, you may use valuable mail one day)
+	  will bounce back to the sender (or not, your choice)
+	+ Is one of the few mailers to perform reliable mailbox locking across
+	  NFS as well (DON'T use NFS mounted mailboxes WITHOUT installing
+	  procmail, you may use valuable mail one day)
 	+ Supports four mailfolder standards: single file folders (standard
-	  and nonstandard VNIX format), directory folders (AMS -- Andrew Mail
-	  System) that contain one file per message, or the similar MH
-	  directory folders (numbered files)
+	  and nonstandard VNIX format), directory folders that contain one file
+	  per message, or the similar MH directory folders (numbered files)
 	+ Variable assignment and substitution is an extremely complete subset
 	  of the standard /bin/sh syntax
 	+ Provides a mail log file, which logs all mail arrival, shows
@@ -43,8 +35,8 @@ Feature summary for procmail:
 	  '\0'); i.e. binary mailings can be processed if the rest of the
 	  mailing system knew how to handle them too
 	+ It has a man page (boy, does *it* have a man page)
-	+ procmail can be used as a local delivery agent (substitute for
-	  /bin/mail)
+	+ procmail can be used as a local delivery agent (a completely
+	  integrated substitute for /bin/mail)
 	+ It runs on virtually all (old and future) operating systems which
 	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
 	  code)
@@ -57,6 +49,7 @@ Feature summary for formail:
 	+ Can split up mailboxes into the individual messages
 	+ Can split up digests into the individual messages
 	+ Can split up saved articles into the individual articles
+	+ Can do simple header munging
 
 Feature summary for lockfile:
 	+ Provides NFS-secure lockfiles to shell script programmers
