@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: retint.c,v 2.4 1991/06/19 17:45:35 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.6 1991/07/04 12:57:36 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -19,8 +19,8 @@ setdef(name,contents)const char*const name,*const contents;{
  strcat(strcat(strcpy(sgetcp=buf2,name),"="),contents);
  readparse(buf,sgetc,0);sputenv(buf);}
 
-char*backblock;		/* what is to be recovered in case of filter failure */
-long backlen;						       /* its length */
+char*lastexec,*backblock;
+long backlen;		       /* length of backblock, filter recovery block */
 pid_t pidfilt,pidchild;
 int pbackfd[2];				       /* the emergency backpipe :-) */
 
@@ -52,23 +52,25 @@ waitflagger(){				      /* wait for SIGQUIT from child */
  while(!flaggerd)
    suspend();}					       /* to prevent polling */
 
-grepin(expr,source,len,casesens)const char*const expr,*const source;long len;
- const int casesens;{pid_t pid;int poutfd[2];
- static const char*newargv[5]={0,"-e"};
+grepin(expr,source,len,casesens)const char*const expr,*const source;long len;{
+ int poutfd[2];static const char*newargv[5]={0,"-e"};
  newargv[3]=casesens?(char*)0:"-i";*newargv=tgetenv(grep);newargv[2]=expr;
- rpipe(poutfd);
- if(!(pid=sfork())){					       /* start grep */
+ rpipe(poutfd);inittmout(grep);
+ if(!(pidchild=sfork())){				       /* start grep */
    rclose(PWRO);rclose(rc);getstdin(PRDO);shexec(newargv);}
  rclose(PRDO);len=dump(PWRO,source,len);
- if(!forkerr(pid,*newargv)){
+ if(!forkerr(pidchild,*newargv)){
+    casesens=waitfor(pidchild)!=EX_OK;pidchild=0;
     if(len)
        writeerr(*newargv);
     else
-       return waitfor(pid)!=EX_OK;}			     /* did it grep? */
+       return casesens;}				     /* did it grep? */
  return EX_UNAVAILABLE;}
 
-waitfor(pid)const pid_t pid;{int i;	      /* wait for a specific process */
- while(pid!=wait(&i)||(i&127)==127);
+waitfor(pid)const pid_t pid;{int i;pid_t j;   /* wait for a specific process */
+ while(pid!=(j=wait(&i))||(i&127)==127)
+   if(-1==j)
+      return EX_UNAVAILABLE;
  return i>>8&255;}
 
 getstdin(pip)const int pip;{
@@ -213,8 +215,18 @@ terminate(){
    log("Mail bounced\n");
  unlock(&loclock);unlock(&globlock);exit(retval);}
 
-suspend(){
- sleep((unsigned)suspendv);}
+suspend(){long t;
+ sleep((unsigned)suspendv);
+ if(alrmtime)
+   if((t=alrmtime-time((time_t*)0))<=1)		  /* if less than 1s timeout */
+      ftimeout();				  /* activate it by hand now */
+   else			    /* set it manually again, to avoid problems with */
+      alarm((unsigned)t);}	/* badly implemented sleep library functions */
+
+inittmout(progname)const char*const progname;{
+ lastexec=cstr(lastexec,progname);
+ alrmtime=timeoutv?time((time_t*)0)+(unsigned)timeoutv:0;
+ alarm((unsigned)timeoutv);}
 
 skipspace(){
  while(testb(' ')||testb('\t'));}

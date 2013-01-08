@@ -1,7 +1,7 @@
 /************************************************************************
  *	procmail.c	an autonomous mail processor			*
  *									*
- *	Seems to be relatively bug free.				*
+ *	Seems to be perfect.						*
  *									*
  *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
@@ -11,14 +11,14 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: procmail.c,v 2.6 1991/06/19 17:41:41 berg Rel $";
+static char rcsid[]="$Id: procmail.c,v 2.9 1991/07/08 13:03:07 berg Rel $";
 #endif
 #include "config.h"
 #define MAIN
 #include "procmail.h"
 #include "shell.h"
 
-#define VERSION "procmail v2.03 1991/06/20 written by Stephen R.van den Berg\n\
+#define VERSION "procmail v2.10 1991/07/08 written by Stephen R.van den Berg\n\
 \t\t\t\tberg@messua.informatik.rwth-aachen.de\n\
 \t\t\t\tberg@physik.tu-muenchen.de\n"
 
@@ -33,18 +33,20 @@ static const char linebufs[]="LINEBUF",tokey[]=TOkey,eumask[]="UMASK",
  tosubstitute[]=TOsubstitute,lockfile[]="LOCKFILE",defaultf[]="DEFAULT",
  maildir[]="MAILDIR",couldnread[]="Couldn't read",logfile[]="LOGFILE",
  orgmail[]="ORGMAIL",user[]="USER",tmp[]=Tmp,home[]="HOME",sfolder[]=FOLDER,
- sendmail[]="SENDMAIL",host[]="HOST";
+ sendmail[]="SENDMAIL",host[]="HOST",Log[]="LOG",From[]=SFROM;
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
- {"NORESRETRY",DEFnoresretry}};
+ {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout}};
 long lastdump;
 int retval=EX_CANTCREAT,sh,pwait,lcking,locknext,verbose,linebuf=DEFlinebuf,
  rc= -1;
 volatile int flaggerd=2,nextexit;
+volatile time_t alrmtime;
 pid_t thepid;
 
-main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];int i;
+main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];
  char*themail,*thebody,*chp,*startchar,*chp2;long tobesent,filled;
+ int i,lastcond=0;
  if((chp=(char*)argv[argc=1])&&*chp=='-'&&*++chp&&!chp[1])
    switch(*chp){		     /* these options are mutually exclusive */
       case VERSIONOPT:log(VERSION);return EX_OK;
@@ -72,7 +74,7 @@ main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];int i;
  setdef(lockext,DEFlockext);setdef(msgprefix,DEFmsgprefix);
  chdir(getenv(maildir));nextrcfile();thebody=themail=malloc(1);filled=0;
  signal(SIGTERM,sterminate);signal(SIGINT,sterminate);
- signal(SIGHUP,sterminate);signal(SIGQUIT,flagger);
+ signal(SIGHUP,sterminate);signal(SIGQUIT,flagger);signal(SIGALRM,ftimeout);
 changedmail:
  themail=readdyn(themail,&filled);			 /* read in the mail */
 onlyhead:
@@ -101,23 +103,25 @@ do{					     /* main rcfile interpreter loop */
    while(chp=(char*)argv[argc]){       /* interpret command line specs first */
       argc++;strcpy(buf,chp);
       if(chp=strchr(buf,'=')){
-	 strcpy(sgetcp=buf2,++chp);readparse(chp,sgetc,0);goto argenv;}}
+	 strcpy(sgetcp=buf2,++chp);readparse(chp,sgetc,2);goto argenv;}}
    if(rc<0)						 /* open new rc file */
       while(*buf='\0',0>bopen(strcat(
 	 strchr(dirsep,*rcfile)?buf:cat(tgetenv(home),MCDIRSEP),rcfile))){
 	 log(couldnread);logqnl(buf);
 	 if(!nextrcfile())		      /* not available? try the next */
 	    goto nomore_rc;}
-   unlock(&loclock);	/* unlock any local lockfile after every parsed line */
+   unlock(&loclock);alarm((unsigned)(alrmtime=0));	      /* reset alarm */
    do skipspace();					  /* skip whitespace */
    while(testb('\n'));
    if(testb(':')){				       /* check for a recipe */
-      readparse(buf,getb,2);i=sh=1;*buf2='\0';
+      readparse(buf,getb,2);sh= -1;*buf2='\0';
       if(0>=sscanf(buf,"%d%[^\n]",&sh,buf2))		 /* nr of conditions */
 	 strcpy(buf2,buf);
       *buf= *flags='\0';
-      if(0>=sscanf(buf2,RECFLAGS,flags,buf))		   /* read the flags */
-	 strcpy(buf,buf2);
+      if(0>=sscanf(buf2,RECFLAGS,flags,buf)){		   /* read the flags */
+	 strcpy(buf,buf2);}
+      if(sh<0)		  /* assume the appropriate default nr of conditions */
+	 sh=!strchr(flags,'A');
       if(tolock)		 /* clear temporary buffer for lockfile name */
 	 free(tolock);
       tolock=0;*buf2='\0';
@@ -131,6 +135,7 @@ do{					     /* main rcfile interpreter loop */
 	    tobesent=filled;
 	 else{
 	    startchar=thebody;tobesent=filled-tobesent;}
+      i=strchr(flags,'A')?lastcond:1;			  /* init test value */
       while(sh--){				    /* any conditions (left) */
 	 getbl(buf2);
 	 if(!strncmp(buf2,tokey,STRLEN(tokey)))		     /* magic TOkey? */
@@ -144,6 +149,8 @@ do{					     /* main rcfile interpreter loop */
 	       !!strchr(flags,'D'))^*buf=='!';
 	    if(verbose){
 	       log(i?"M":"No m");log("atch on");logqnl(buf);}}}
+      if(!strchr(flags,'A'))		   /* save the outcome for posterity */
+	 lastcond=i;
       startchar=themail;tobesent=filled;	    /* body, header or both? */
       if(strchr(flags,'h')){
 	 if(!strchr(flags,'b'))
@@ -164,12 +171,12 @@ do{					     /* main rcfile interpreter loop */
 	       strcpy(buf,buf2);	 /* copy literally, shell will parse */
 	    else{
 	       sgetcp=buf2;readparse(buf,sgetc,0);}	/* parse it yourself */
-	    chp=buf;*buf2='\0';
+forward:    chp=buf;*buf2='\0';
 	    while(i= *chp)     /* find the implicit lockfile name ('>>name') */
 	      if(chp++,i=='>'&&*chp=='>'){
 		 while((i= *++chp)==' '||i=='\t');
 		 sscanf(chp,EOFName,buf2);break;}
-	    lcllock();
+	    lcllock();inittmout(buf);
 	    if(strchr(flags,'f')){
 	       if(startchar==themail&&tobesent!=filled){      /* if only 'h' */
 		  long dfilled=0;
@@ -184,7 +191,7 @@ do{					     /* main rcfile interpreter loop */
 	       if(pipthrough(buf,startchar,tobesent))
 		  continue;
 	       filled=startchar-themail;goto changedmail;}
-forward:    if(!pipin(buf,startchar,tobesent)&&!strchr(flags,'c'))
+	    if(!pipin(buf,startchar,tobesent)&&!strchr(flags,'c'))
 	       goto mailed;}}
       else{		   /* dump the mail into a mailbox file or directory */
 	 readparse(buf,getb,0);chp2=chp=strchr(buf,'\0')+1;
@@ -196,9 +203,10 @@ forward:    if(!pipin(buf,startchar,tobesent)&&!strchr(flags,'c'))
 	    skipped(chp2);			     /* report any leftovers */
 	 if(i){
 	    strcpy(buf2,buf);lcllock();strcpy(buf2,buf);
-	    if(!dump(deliver(buf2),startchar,tobesent)&&!strchr(flags,'c'))
-	       goto mailed;
-	    writeerr(buf);}}}
+	    if(dump(deliver(buf2),startchar,tobesent))
+	       writeerr(buf);
+	    else if(!strchr(flags,'c'))
+	       goto mailed;}}}
    else if(testb('#'))					   /* no comment :-) */
       getbl(buf);
    else{				    /* then it must be an assignment */
@@ -232,6 +240,8 @@ argenv:
 	       retval=EX_OSFILE;	  /* bad news, but can't tell anyone */
 	    else
 	       writeerr(chp);}
+      else if(!strcmp(buf,Log))
+	 log(chp);
       else if(!strcmp(buf,lockfile))
 	 lockit(chp,&globlock);
       else if(!strcmp(buf,eumask)){
@@ -259,19 +269,17 @@ nomore_rc:
 mailed:
  retval=EX_OK;				  /* we're home free, mail delivered */
 mailerr:
- unlock(&loclock);			/* any local lock file still around? */
- for(;themail<thebody;){
-   chp=buf-1;
-   while(themail<thebody&&chp<buf+linebuf-1&&(*++chp= *themail++)!='\n');
-   if(chp<buf)
-      chp++;
-   *chp='\0';
-   if(0<sscanf(buf,SFROM_S,buf2)){	      /* find case sensitive "From " */
-      log(SFROM);goto foundsorf;}
-   else if(0<sscanf(buf,SSUBJECT_S,buf2)){  /* case insensitive "Subject:" ? */
-      log(SSUBJECT);
-foundsorf:
-      log(buf2);log(newline);}}				  /* log its arrival */
+ unlock(&loclock);*thebody='\0';       /* Terminate the header, just in case */
+ if(!strncmp(From,chp=themail,STRLEN(From))){  /* Check for a "From " header */
+   if(chp=strchr(themail,'\n'))
+      *chp++='\0';
+   else
+      chp=thebody;
+   log(themail);log(newline);} /* preserve mailbox format (arbitrary length) */
+ while(chp<thebody){
+   if(0<sscanf(chp,SSUBJECT_S,buf2)){	    /* case insensitive "Subject:" ? */
+      log(SSUBJECT);log(buf2);log(newline);}		  /* log the Subject */
+   chp=findnl(chp,thebody);}
  log(sfolder);i=strlen(strncpy(buf,lastfolder,MAXfoldlen))+STRLEN(sfolder);
  buf[MAXfoldlen]='\0';
  while(chp=strchr(buf,'\t'))
@@ -281,12 +289,19 @@ foundsorf:
  while((i+=TABWIDTH)<LENoffset);
  ultstr(7,lastdump,buf);log(buf);log(newline);terminate();}
 
-dirmail(){struct stat stbuf;		/* directory name is expected in buf */
- strcpy(buf2,strcat(buf,MCDIRSEP));
+dirmail(){char*chp;struct stat stbuf;	/* buf should contain directory name */
+ if((chp=strchr(buf,'\0')-1)-1>=buf&&chp[-1]==*MCDIRSEP&&*chp=='.'){
+   *chp='\0';strcpy(buf2,buf);}				   /* it ended in /. */
+ else{
+   chp=0;strcpy(buf2,strcat(buf,MCDIRSEP));}
  if(unique(buf2,strchr(buf2,'\0'),0666)){
+   if(chp){unsigned long i=0;
+      do ultstr(0,++i,chp);		       /* find first empty MH folder */
+      while(link(buf2,buf));
+      unlink(buf2);goto opn;}
    stat(buf2,&stbuf);
    ultoan((unsigned long)stbuf.st_ino,	      /* filename with i-node number */
       strchr(strcat(buf,tgetenv(msgprefix)),'\0'));
    if(!myrename(buf2,buf))	       /* rename it, we need the same i-node */
-       return opena(buf);}
+opn:  return opena(buf);}
  return -1;}

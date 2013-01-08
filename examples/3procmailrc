@@ -19,14 +19,16 @@ LOCKFILE=$MAILDIR/whatever	# This will remove the global lockfile
 
 				# The next recipe will
 				# filter out all messages from "at"
-				# jobs and will put them in a terse format in
+				# jobs and will put them in a terse format
+				# (only the date and the body) in
 				# a file called $MAILDIR/atjunk
 :2fh
 ^From root
 ^Subject: Output from "at" job
-|echo "From at job";echo;egrep "^Date:"
-:b
-^From at job
+|egrep "^Date:"
+				# The next recipe will only be used if
+				# the previous one matched
+:A
 atjunk
 
 
@@ -43,5 +45,11 @@ MAILDIR=$HOME/News	# This will change the current directory
 :b:
 ^Subject:.*rubbish
 |sort >>dustbin
+
+			# The next recipe will use the play directory as a MH
+			# folder (of course you need MH to read the mail then)
+:
+^Subject:.*games
+games/.
 
 # Anything not delivered by now will go to $HOME/Mail/mbox

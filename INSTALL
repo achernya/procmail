@@ -1,12 +1,12 @@
-To install procmail, lockfile and formail: edit Makefile accordingly (if need
-be, config.h as well) and type 'make install'.
+To install procmail, lockfile and formail: edit Makefile accordingly (if you
+use MMDF at your site, edit config.h as well) and type 'make install'.
 
 'make install' will:
       - execute autoconf (a shell script that repeatedly calls the C compiler
 	to determine if certain features/symbols are supported), which will
 	create a file named autoconf.h
-      - compile the *.c files, create the three binaries: procmail, lockfile,
-	formail
+      - compile the *.c files, create the three stripped binaries:
+	procmail, lockfile and formail
       - copy these binaries to $(BINDIR)
       - copy the man pages to $(MANDIR)
 
@@ -15,7 +15,7 @@ Minimal requirements:
 
 procmail must be installed.
 lockfile needs only to be installed if you plan to read several mailboxes
-	with one of the standard mailers.
+	with one of the standard mailers that don't support lockfiles.
 formail needs only to be installed if mail sometimes arrives in nonstandard
 	mailbox format (or if you want to generate auto replies, split up
 	mailboxes/digests etc., see the man page of formail for more info).
@@ -24,7 +24,11 @@ formail needs only to be installed if mail sometimes arrives in nonstandard
 If things don't compile automagically, I suggest you take a look at:
 autoconf, autoconf.h, config.h, includes.h
 
-The program is supposed to be fully ANSI and K&R compliant.
+For autoconf to work as intended, your compiler should either be fully ANSI
+compliant, or you should NOT turn off all warnings; enabling all warnings
+shouldn't hurt.  In most cases the default options in the Makefile will do.
+
+The sources are supposed to be fully ANSI and K&R compliant.
 
 If you run procmail by hand and pipe in some sample mail, then make
 sure that if you kill procmail, you use "kill pid" and NOT "kill -9 pid".
@@ -58,3 +62,29 @@ For more info about the program, see the man page.
 	You're not supposed to start procmail from the command line.
 	Be sure to have a .forward and a .procmailrc file in your home
 	directory (see the examples subdirectory or the man page).
+
+3. When I compile everything the compiler complains about invalid or illegal
+   pointer combinations, but it produces the executables anyway.
+   Should I be concerned?
+
+	Ignore these warnings, they simply indicate that either your compiler
+	or your system include files are not ANSI/POSIX compliant.
+	The compiler will produce correct code regardless of these warnings.
+
+4. The compiler seems to issue warnings about "loop not entered at top",
+   is that a problem?
+
+	No, no problem at all, it just means I wrote the code :-)
+	That's just about the only uncommon coding technique (not formatting
+	style, that's another topic) I use (don't think I don't try to avoid
+	those jumps in loops, it's just that sometimes they are the best way
+	to code it).
+
+5. The compiler complains about unmodifiable lvalues or assignments to const
+   variable.  Now what?
+
+	Well, if the compiler produces the executables anyway everything
+	probably is all right.  If it doesn't, you might try inserting a
+	"#define const" in the autoconf.h file by hand.  However in any case,
+	your compiler is broken; I would recommend submitting this as a
+	compiler bug to your vendor.

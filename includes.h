@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 2.3 1991/06/18 11:39:23 berg Rel $*/
+/*$Id: includes.h,v 2.4 1991/07/03 18:49:25 berg Rel $*/
 
 #include "autoconf.h"
 	/* not all the "library identifiers" specified here need to be
@@ -7,11 +7,11 @@
 
 #include <unistd.h>		/* open() read() write() close() dup() pipe()
 				   fork() getuid() getpid() execve()
-				   execvp() */
+				   execvp() sleep() */
 #include <stdio.h>		/* sscanf() setbuf() fclose() stdin stdout
 				   stderr fopen() fread() fwrite() fgetc()
 				   getc() putc() fputs() FILE EOF */
-#include <stddef.h>		/* ptrdiff_t size_t */
+#include <stddef.h>		/* ptrdiff_t size_t sigatomic_t */
 #include <stdlib.h>		/* getenv() malloc() realloc() free()
 				   strtol() */
 #include <time.h>		/* time() ctime() time_t */
@@ -21,7 +21,8 @@
 #include <sys/utsname.h>	/* uname() utsname */
 #include <sys/types.h>		/* pid_t mode_t */
 #include <sys/stat.h>		/* stat() S_ISDIR() struct stat */
-#include <signal.h>		/* signal() kill() */
+#include <signal.h>		/* signal() kill() alarm() SIG_IGN SIGHUP
+				   SIGINT SIGQUIT SIGALRM SIGTERM */
 #include <string.h>		/* strcpy() strncpy() strcat() strlen()
 				   strspn() strcspn() strchr() strcmp()
 				   strncmp() strpbrk() strstr() memmove() */

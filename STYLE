@@ -12,9 +12,19 @@ Yes, I do have my reasons for formatting it this way:
    the program
 5. I hate it when I have to scroll back the screen those 5 lines just to see
    the top of the loop (and then back down to look at the end again, etc.)
+6. This is not a multi-programmer project (if it were, I agree, every one
+   should use a more conventional style), and therefore a good place to show
+   the world some alternatives
 
 And, now don't start flaming me about "bad practice", I don't consider this
-formatting method bad practice (it's properly indented).
+formatting method bad practice.  The only way it distinguishes itself from
+normal formatting methods is by the distribution of whitespace (and that is
+not even so "bad" since it is properly indented).  This uncommon distribution
+of whitespace does not make the source harder to read; it just seems that way,
+because you advance less lines in the same time while reading and trying to
+understand the code.  If the code were more conventionally formatted you
+would probably advance through the code just as fast, except it would seem
+to be faster because you scroll more often.
 
 I consider "bad practice" to be unportable or non-ANSI code, which my code is
 certainly not.

@@ -2,21 +2,21 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: lockfile.1,v 2.0 1991/06/10 14:40:49 berg Rel $
+.Id $Id: lockfile.1,v 2.2 1991/07/03 13:54:04 berg Rel $
 .de Sh
 .br
 .ne 9
-.SH \\$1
+.SH "\\$1"
 ..
 .de Ss
 .br
 .ne 9
-.SS \\$1
+.SS "\\$1"
 ..
 .de Tp
 .br
 .ne 9
-.TP \\$1
+.TP "\\$1"
 ..
 .TH LOCKFILE 1 \*(Dt BuGless
 .SH NAME
@@ -36,7 +36,7 @@ lockfile \- conditional semaphore-file creator
 |
 .I filename
 \&.\|.\|.
-.Sh "DESCRIPTION"
+.Sh DESCRIPTION
 .B lockfile
 can be used to create one or more
 .I semaphore
@@ -89,18 +89,18 @@ in
 .BR binmail (1),
 .BR sendmail (8),
 .BR procmail (1)
-.Sh "DIAGNOSTICS"
-.Tp 23
+.Sh DIAGNOSTICS
+.Tp 2.3i
 Forcing lock on "x"
 Specified lockfile is going to be removed by force because of a timeout
 (compare
 .BR LOCKTIMEOUT
 in
 .BR procmail (1)).
-.Sh "BUGS"
+.Sh BUGS
 .LP
 lockfile is only a simple program and can't process concatenated options.
-.Sh "NOTES"
+.Sh NOTES
 .LP
 Multiple
 .B \-!
@@ -117,7 +117,7 @@ It can, however, be reset by specifying
 after every file on the command line.
 .LP
 lockfile performs the locking in an NFS-secure way.
-.Sh "AUTHOR"
+.Sh AUTHOR
 .LP
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .RS

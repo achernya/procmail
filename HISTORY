@@ -136,4 +136,26 @@
 	    Added MANSUFFIX macro to Makefile
 	    Avoided namespace conflict ("failurel") in lockfile.c for
 	       braindamaged compilers
-	    Renamed ultostr to avoided library conflict on some machines
+	    Renamed ultostr to avoid library conflict on some machines
+1991/07/04: v2.10
+	    Fixed bugs (regression bugs introduced in v1.99):
+	       Misleading error message when a ':c' recipe was used on a
+		  simple mailbox
+	       Inability to change numeric variables from their defaults
+	    Fixed slight descrepancy between /bin/sh parsing and procmail while
+	       assigning something in backquotes
+	    Added two more recognized headers to formail for splitting digests
+	    Added MMDF mailbox format support to procmail and formail
+	    Added MH mailbox format support to procmail
+	    Extended the FAQ section in INSTALL
+	    Improved the 'void' test in autoconf
+	    Added three new features to procmail: 'A'-recipe option, "LOG"
+	       keyword, "TIMEOUT" keyword
+	    Changes to the man pages:
+	       Made them more portable!  (yes, I was surprised myself :-)
+	       Documented the new features
+	       Reformulated some things more clearly
+	    Changes to the example files:
+	       A better example for splitting up digests
+	       Extended the 'advanced' examples by an elaborate ':A' option
+		  example

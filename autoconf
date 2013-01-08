@@ -1,10 +1,10 @@
 
-#$Id: autoconf,v 2.4 1991/06/20 09:54:14 berg Rel $
+#$Id: autoconf,v 2.5 1991/07/03 18:49:25 berg Rel $
 
 SHELL=/bin/sh || exec /bin/sh autoconf $1 # we're in a csh, feed myself to sh
 
 # All possible entries in autoconf.h:
-#
+
 #	#define const
 #	#define volatile
 #	#define void char
@@ -15,7 +15,14 @@ SHELL=/bin/sh || exec /bin/sh autoconf $1 # we're in a csh, feed myself to sh
 #	#define NOmemmove
 #	#define NObcopy
 #	#define NOstrstr
+#	#define setpwent()
+#	#define endpwent()
 #	#define strtol(str,ptr,base) ((long)atoi(str))
+
+# A conforming ANSI compiler and POSIX library should only produce two
+# entries in autoconf.h: setpwent() and endpwent()
+# Anything else indicates failure of your installation to comply with either
+# the ANSI or POSIX standards (but procmail should be installable anyway).
 
 PATH=:$PATH
 export SHELL
@@ -81,13 +88,13 @@ rm -f _autotst _autotst.$1
 
 cat >_autotst.c <<HERE
 #include "includes.h"
-main(){int i;
- void*p;
+main(){int i;char*p="t";
+ void*vvoid;vvoid=p;
  i=(size_t)1;
  i+=(pid_t)1;
  i+=(time_t)1;
  i+=(mode_t)1;
- return 0;}
+ return !vvoid;}
 HERE
 
 echo 'Testing for void*,size_t,pid_t,time_t,mode_t'

@@ -1,7 +1,7 @@
 Makefile	We all know what that is.
 README		Important, read it.
 INSTALL		A description of what has to be done to install procmail.
-HISTORY		Recent and ancient changes (or bugs) documented.
+HISTORY		Recent and ancient changes, features (or bugs) documented.
 FEATURES	A summary of all the things procmail is particularly good at.
 STYLE		A short explanation of why the source looks so "awkward"
 lockfile.c	main program for lockfile

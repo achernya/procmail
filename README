@@ -14,8 +14,8 @@ me instead.
 
 -------------------------- SYSTEM REQUIREMENTS -------------------------------
 
-A ".forward" file (or equivalent) mechanism for forwarding mail, *grep or
-equivalent.
+A ".forward" file (or equivalent) mechanism for forwarding mail (should work
+with (among others?) sendmail, smail and MMDF), *grep or equivalent.
 
 The most important system calls that need to be supported (among others):
 fork(),read(),write(),dup(),wait(),pipe(),getpwent()
@@ -24,7 +24,7 @@ For a more complete list of all library references see "includes.h"
 
 ------------------------------ DESCRIPTION -----------------------------------
 
-The procmail mail processing program. (v2.03 1991/06/20)
+The procmail mail processing program. (v2.10 1991/07/08)
 
 Can be used to create mail-servers, mailing lists, sort your incoming mail
 into separate folders/files (real convenient when subscribing to one or more
@@ -59,7 +59,7 @@ it's not priority one, but if you were sending me mail anyway, don't hesitate
 to point them out to me; I like correct English just as much as you do).
 
 Please note that this program essentially is supposed to be static, that
-means no extra features (honouring the *NIX spirit) are supposed to be
+means no extra features (honouring the VNIX spirit) are supposed to be
 added (though any usefull suggestions will be appreciated and evaluated if
 time permits).
 

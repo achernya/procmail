@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 2.0 1991/06/10 14:35:35 berg Rel $*/
+/*$Id: procmail.h,v 2.2 1991/07/08 14:29:31 berg Rel $*/
 
 #include "includes.h"
 
@@ -6,6 +6,13 @@ typedef unsigned char uchar;
 
 #ifndef console
 #define console devnull
+#endif
+
+#ifdef MAILBOX_SEPARATOR
+#define mboxseparator(fd)	rwrite(fd,MAILBOX_SEPARATOR,\
+ STRLEN(MAILBOX_SEPARATOR))
+#else
+#define mboxseparator(fd)
 #endif
 
 #define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
@@ -26,6 +33,7 @@ struct varval{const char*const name;long val;};
 #define locktimeout	(strenvvar[1].val)
 #define suspendv	(strenvvar[2].val)
 #define noresretry	(strenvvar[3].val)
+#define timeoutv	(strenvvar[4].val)
 #define MAXvarvals	maxindex(strenvvar)
 
 #ifndef MAIN
@@ -37,6 +45,7 @@ extern struct varval strenvvar[];
 extern long lastdump;
 extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc;
 extern volatile flaggerd,nextexit;
+extern volatile time_t alrmtime;
 extern pid_t thepid;
 #endif
 
@@ -46,8 +55,16 @@ void*memmove();
 
 void*tmalloc(),*trealloc();
 pid_t sfork();
-void sterminate(),stermchild(),flagger(),errgrandchild();
+void sterminate(),stermchild(),flagger(),ftimeout();
 long dump(),pipin(),renvint();
 char*readdyn(),*fromprog(),*cat(),*findnl(),*tstrdup(),*cstr();
 const char*tgetenv(),*hostname();
 int sgetc(),getb();
+
+/*
+ *	External variables that are checked/changed by the signal handlers:
+ *	volatile time_t alrmtime;
+ *	pid_t pidfilt,pidchild;
+ *	volatile int nextexit,flaggerd;
+ *	int lcking;
+ */

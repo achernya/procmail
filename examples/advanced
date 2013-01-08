@@ -12,7 +12,6 @@ sparc and sun3 architectures):
 or alternatively:
 
 "|IFS=' ';exec /home/berg/bin.`/usr/bin/arch`/procmail"
-
 ------------------------------------------------------------------------------
 To use procmail as a local delivery agent (replacement for /bin/mail)
 use the following lines for in sendmail.rc:
@@ -49,3 +48,31 @@ or for this
 and this
 |$HELLO \
 there		# lines can be continued
+###############################################################################
+			# The following will demonstrate advanced use of the
+			# 'A' option.
+:c		# Specify the 'c' otherwise we never arrive at the next recipe
+^From Myfriend
+every_message_from_my_friend		# Mailbox for everything he/she writes
+
+:Ac			# Note the 'c' again
+! my_other_friend      # Forward everything Myfriend writes to my_other_friend
+
+:1Ac
+^Subject:.*jokes
+! my_third_friend	# Forward everything Myfriend writes about jokes
+			# to my_third_friend 
+
+:2A
+^Subject:.*parties
+!beach
+! my_third_friend	# Forward everything Myfriend writes about parties,
+			# except beach parties, to my_third_friend
+
+:A			# Provide a mail sink, in order to fake procmail into
+/dev/null		# believing that the mail was absorbed/delivered,
+			# even if the mail was about beach parties :-).
+		# This is not the best solution though, better would be to
+		# rearrange these last five recipes so that the current
+		# number one or two is last, the current number five can be
+		# omitted then.

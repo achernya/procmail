@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: nonint.c,v 2.2 1991/06/19 17:41:41 berg Rel $";
+static char rcsid[]="$Id: nonint.c,v 2.3 1991/07/08 10:47:56 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -65,15 +65,15 @@ pid_t sfork(){pid_t i;int r;		/* this fork can survive a temporary */
    suspend();}
  lcking=0;return i;}
 
-extern char*backblock;				/* see retint.c for comment */
+extern char*lastexec,*backblock;		/* see retint.c for comment */
 extern long backlen;
-pid_t pidfilt,pidchild;
+extern pid_t pidfilt,pidchild;
 extern pbackfd[2];
 
 void sterminate(){static const char*const msg[]={newline,0,
  "memory\n","fork\n","file descriptor\n"};
  signal(SIGTERM,SIG_IGN);signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);
- if(pidchild>0)		    /* don't kill what is not ours, we might be root */
+ if((long)pidchild>0)	    /* don't kill what is not ours, we might be root */
    kill(pidchild,SIGTERM);
  if(!nextexit){
    nextexit=1;log("Terminating prematurely");
@@ -85,7 +85,7 @@ void sterminate(){static const char*const msg[]={newline,0,
 void stermchild(){
  signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);signal(SIGQUIT,SIG_IGN);
  signal(SIGTERM,SIG_IGN);
- if(pidfilt>0)		    /* don't kill what is not ours, we might be root */
+ if((long)pidfilt>0)	    /* don't kill what is not ours, we might be root */
    kill(pidfilt,SIGTERM);
  kill(thepid,SIGQUIT);log("Rescue of unfiltered data ");
  if(dump(PWRB,backblock,backlen)) /* pump back the data through the backpipe */
@@ -95,7 +95,14 @@ void stermchild(){
  exit(EX_UNAVAILABLE);}
 
 void flagger(){				       /* hey, we received a SIGQUIT */
- signal(SIGQUIT,flagger);flaggerd=1;}
+ flaggerd=1;signal(SIGQUIT,flagger);}
+
+void ftimeout(){
+ alarm(0);alrmtime=0;
+ if((long)pidchild>0)	    /* don't kill what is not ours, we might be root */
+   if(!kill(pidchild,SIGTERM)){
+      log("Timeout, terminating");logqnl(lastexec);}
+ signal(SIGALRM,ftimeout);}
 
 long dump(s,source,len)const int s;const char*source;long len;{int i;
  if(s>=0){
@@ -106,27 +113,31 @@ long dump(s,source,len)const int s;const char*source;long len;{int i;
        len-=i;source+=i;}
     if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n')))
        lastdump++,rwrite(s,newline,1); /* message always ends with a newline */
+    mboxseparator(s);			 /* and an optional custom separator */
 writefin:
     rclose(s);return len-i;}
  return len?len:-1;}	   /* return an error even if nothing was to be sent */
 
-long pipin(line,source,len)char*const line;const char*source;long len;{
- pid_t pid;int poutfd[2];
+long pipin(line,source,len)char*const line;char*source;long len;{
+ int poutfd[2];
  rpipe(poutfd);
- if(!(pid=sfork())){					    /* spawn program */
+ if(!(pidchild=sfork())){				    /* spawn program */
    rclose(PWRO);rclose(rc);getstdin(PRDO);callnewprog(line);}
- rclose(PRDO);forkerr(pid,line);
+ rclose(PRDO);
+ if(forkerr(pidchild,line))
+   return 1;
  if(len=dump(PWRO,source,len))			    /* dump mail in the pipe */
    writeerr(line);		       /* pipe was shut in our face, get mad */
- if(pwait&&waitfor(pid)!=EX_OK){	    /* optionally check the exitcode */
+ if(pwait&&waitfor(pidchild)!=EX_OK){	    /* optionally check the exitcode */
    progerr(line);len=1;}
- if(!sh){char*p;
-   for(p=line;;)	    /* change back the \0's into blanks for printing */
-      if(!*p++)
-	 if(*p!=TMNATE)
-	    p[-1]=' ';
+ pidchild=0;
+ if(!sh)
+   for(source=line;;)	    /* change back the \0's into blanks for printing */
+      if(!*source++)
+	 if(*source!=TMNATE)
+	    source[-1]=' ';
 	 else
-	    break;}
+	    break;
  lastfolder=cstr(lastfolder,line);return len;}
 
 char*readdyn(bf,filled)char*bf;long*const filled;{int i;long oldsize;
@@ -149,19 +160,20 @@ jumpback:;}
  return realloc(bf,*filled+1);}			/* minimize the buffer space */
 
 char*fromprog(name,dest)char*const name;char*dest;{int pinfd[2];long nls;
- rpipe(pinfd);
+ rpipe(pinfd);inittmout(name);
  if(!(pidchild=fork())){				    /* spawn program */
    rclose(STDIN);opena(devnull);rclose(PRDI);rclose(rc);rclose(STDOUT);
    rdup(PWRI);rclose(PWRI);callnewprog(name);}
  rclose(PWRI);nls=0;
- if(!forkerr(pidchild,name))
+ if(!forkerr(pidchild,name)){
     while(0<rread(PRDI,dest,1))				    /* read its lips */
        if(*dest=='\n')				   /* carefull with newlines */
-	  nls++;			/* trailing ones should be discarded */
+	  nls++;		    /* trailing newlines should be discarded */
        else{
 	  if(nls)
 	     for(dest[nls]= *dest;*dest++='\n',--nls;);	     /* fill them in */
 	  dest++;}
+    waitfor(pidchild);}
  pidchild=0;rclose(PRDI);*dest='\0';return dest;}
 
 char*cat(a,b)const char*const a,*const b;{
@@ -185,4 +197,4 @@ char*cstr(a,b)const char*const a,*const b;{	/* dynamic buffer management */
  return tstrdup(b);}
 
 long renvint(i,env)long i;const char*const env;{
- sscanf(tgetenv(env),"%d",&i);return i;}       /* parse it like a decimal nr */
+ sscanf(env,"%ld",&i);return i;}	       /* parse it like a decimal nr */

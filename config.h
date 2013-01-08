@@ -1,10 +1,15 @@
-/*$Id: config.h,v 2.0 1991/06/10 14:35:35 berg Rel $*/
+/*$Id: config.h,v 2.1 1991/07/08 10:47:56 berg Rel $*/
 
 /*#define console	"/dev/console"	/* uncomment if you want procmail to
 					   use the console (or any other
 	terminal) to print any error messages that could not be dumped in the
 	"logfile".  (Only recommended for debugging purposes, if you have
 	trouble creating a "logfile") */
+
+/*#define MAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment if your mail
+						   system uses nonstandard
+	mail separators (non sendmail or smail compatible mailers like MMDF),
+	if yours is even different, uncomment and change the value of course */
 
 /************************************************************************
  * Only edit below this line if you *think* you know what you are doing *
@@ -29,10 +34,11 @@
 #define DEFlockext	".lock"
 #define DEFshellflags	"-c"
 #define DEFlocktimeout	3600			     /* defaults to one hour */
+#define DEFtimeout	(DEFlocktimeout-60)	   /* 60 seconds to clean up */
 #define DEFnoresretry	2      /* default nr of retries if no resources left */
 
-#define NRRECFLAGS	(9+1)
-#define RECFLAGS	" %9[HBDIhbfcws] %[^\n]" /* 'I' and 's' are obsolete */
+#define NRRECFLAGS	(10+1)
+#define RECFLAGS	" %10[HBDAhbfcwIs] %[^\n]"   /* 'I','s' are obsolete */
 #define BinSh		"/bin/sh"
 #define Tmp		"/tmp"
 #define DevNull		"/dev/null"
@@ -52,7 +58,6 @@
 
 #define MINlinebuf	128    /* minimal LINEBUF length (don't change this) */
 #define SFROM		"From "
-#define SFROM_S		"From%*[ ]%74[^\n]"
 #define SSUBJECT	" Subject:"
 #define SSUBJECT_S	\
 		"%*1[Ss]%*1[Uu]%*1[Bb]%*1[Jj]%*1[Ee]%*1[Cc]%*1[Tt]:%70[^\n]"

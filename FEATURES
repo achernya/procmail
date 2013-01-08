@@ -1,5 +1,6 @@
 Feature summary for procmail:
-	+ Easy to install
+	+ It's small
+	+ Very easy to install
 	+ Simple to maintain and configure because
 	  all you need is actually only ONE executable (procmail)
 	  and ONE configuration file (.procmailrc)
@@ -27,11 +28,12 @@ Feature summary for procmail:
 	+ Performs more reliable mailbox locking than most other mailers
 	  (especially across NFS, DON'T use NFS mounted mailboxes WITHOUT
 	  installing procmail, you may use valuable mail one day)
-	+ Supports both mailfolder standards (single file folders (standard
-	  *NIX format) as well as directory folders (AMS -- Andrew Mail System)
-	  that contain one file per message)
-	+ Variable assignment and substitution is a subset of the standard
-	  /bin/sh syntax
+	+ Supports four mailfolder standards: single file folders (standard
+	  and nonstandard VNIX format), directory folders (AMS -- Andrew Mail
+	  System) that contain one file per message, or the similar MH
+	  directory folders (numbered files)
+	+ Variable assignment and substitution is an extremely complete subset
+	  of the standard /bin/sh syntax
 	+ Provides a mail log file, which logs all mail arrival, shows
 	  in summary whence it came from, what it was about, where it went
 	  (what folder) and how long (in bytes) it was
@@ -41,7 +43,12 @@ Feature summary for procmail:
 	  '\0'); i.e. binary mailings can be processed if the rest of the
 	  mailing system knew how to handle them too
 	+ It has a man page (boy, does *it* have a man page)
-	+ It can be used as a local delivery agent (substitute for /bin/mail)
+	+ procmail can be used as a local delivery agent (substitute for
+	  /bin/mail)
+	+ It runs on virtually all (old and future) operating systems which
+	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
+	  code)
+	+ Works with (among others?) sendmail, smail and MMDF
 
 Feature summary for formail:
 	+ Can generate auto-reply headers

@@ -1,15 +1,15 @@
 /************************************************************************
  *	lockfile.c	a conditional semaphore-file creator		*
  *									*
- *	Is relatively bug free.						*
+ *	Seems to be perfect.						*
  *									*
  *	Created by S.R.van den Berg, The Netherlands			*
  *	This file can be freely copied for any use.			*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: lockfile.c,v 2.3 1991/06/19 17:41:41 berg Rel $";
+static char rcsid[]="$Id: lockfile.c,v 2.4 1991/07/04 17:03:11 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/06/19 17:41:41 $";
+static char rcsdate[]="$Date: 1991/07/04 17:03:11 $";
 #include "config.h"		       /* overkill, I know, only need DIRSEP */
 #include "includes.h"
 

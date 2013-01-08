@@ -11,10 +11,10 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: formail.c,v 2.6 1991/06/19 17:47:00 berg Rel $";
+static char rcsid[]="$Id: formail.c,v 2.7 1991/07/03 18:49:25 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/06/19 17:47:00 $";
-#include "config.h"			/* I know, overkill, only need BinSh */
+static char rcsdate[]="$Date: 1991/07/03 18:49:25 $";
+#include "config.h"	    /* overkill, only need BinSh & MAILBOX_SEPARATOR */
 #include "includes.h"
 
 #define BSIZE	4096
@@ -33,9 +33,9 @@ static const char From[]=FROM,replyto[]="Reply-To:",Fromm[]="From:",
  returnpath[]="Return-Path",sender[]="Sender:",outofmem[]="Out of memory\n",
  subject[]="Subject:",re[]=" Re:",couldntw[]="Couldn't write to stdout",
  references[]="References:",messageid[]="Message-ID:",Date[]="Date:",
- article[]="Article ";
+ article[]="Article ",Path[]="Path:",Received[]="Received:";
 const char binsh[]=BinSh;
-static struct {const char*const head;const int len,wrepl;}sest[]={
+static const struct {const char*head;int len,wrepl;}sest[]={
  {sender,STRLEN(sender),0},{replyto,STRLEN(replyto),4},
  {Fromm,STRLEN(Fromm),2},{returnpath,STRLEN(returnpath),1}};
 static struct {const char*const headr;const int lenr;size_t offset;}rex[]={
@@ -44,9 +44,9 @@ static struct {const char*const headr;const int lenr;size_t offset;}rex[]={
 #define subj	rex[0]
 #define refr	rex[1]
 #define msid	rex[2]
-static struct {const char*const hedr;const int lnr;}cdigest[]={
+static const struct {const char*hedr;int lnr;}cdigest[]={
  {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)},
- {article,STRLEN(article)}};
+ {article,STRLEN(article)},{Path,STRLEN(Path)},{Received,STRLEN(Received)}};
 #define mxl(a,b)	mx(STRLEN(a),STRLEN(b))
 #define dig_HDR_LEN	mx(mxl(From,Fromm),mxl(Date,subject))
 static errout,oldstdout;
@@ -55,12 +55,15 @@ static FILE*mystdout;
 static size_t nrskip,nrtotal= -1;
 
 #ifdef	NOstrstr
-char*strstr(whole,part)const char*whole,*const part;{size_t len;
- if(!(len=strlen(part)))
-   return(char*)whole;
- while(*whole&&strncmp(whole,part,len))
-   ++whole;
- return *whole?(char*)whole:(char*)0;}
+char*strstr(whole,part)const char*whole,*const part;{register const char*w,*p;
+ do{
+   w=whole;p=part;
+   do
+      if(!*p)
+	 return(char*)whole;
+   while(*w++==*p++);}
+ while(*whole++);
+ return(char*)0;}
 #endif
 
 void*tmalloc(len)const size_t len;{void*p;
@@ -90,10 +93,10 @@ main(lastm,argv)const char*const argv[];{time_t t;
 	 case 't':trust=1;continue;    /* trust the sender for valid headers */
 	 case 'r':areply=1;continue;			 /* generate a reply */
 	 case 'f':force=1;continue;		  /* accept arbitrary format */
-	 case 'e':every=1;continue;		      /* split on every From */
+	 case 'e':every=1;bogus=0;continue;	      /* split on every From */
 	 case 'd':digest=1;continue;			 /* split up digests */
 	 case 'n':nowait=1;continue;	      /* don't wait for the programs */
-	 case 's':split=1;bogus=0;
+	 case 's':split=1;
 	    if(!(*argv++)[i])
 	       goto parsedoptions;
 	    goto usg;
@@ -111,6 +114,15 @@ usg:	       log("Usage: formail [+nnn] [-nnn] [-bfrtned] \
 	 case '\0':;}
       break;}}
 parsedoptions:
+#ifndef MAILBOX_SEPARATOR
+#define mboxseparator		From
+#define flushseparator()
+#else
+#define mboxseparator		MAILBOX_SEPARATOR
+#define flushseparator()	(p=0)
+ if(split){
+   bogus=0;every=1;}
+#endif
  mystdout=stdout;
  if(split){
    oldstdout=dup(STDOUT);fclose(stdout);startprog(argv);}
@@ -186,12 +198,12 @@ endofheader:
       if(p==buflen-1)
 	 buf=realloc(buf,++buflen);
       Nextchar(i=buf[p]);
-      if(++p==STRLEN(From))
-	 if(!strncmp(From,buf,STRLEN(From))){
-	    if(bogus){
+      if(++p==STRLEN(mboxseparator))
+	 if(!strncmp(mboxseparator,buf,STRLEN(mboxseparator))){
+	    if(bogus&&!lnl){
 	       putcs('>');break;}				   /* disarm */
-	    else if(every)
-	       goto splitit;
+	    else if(every){
+	       flushseparator();goto splitit;}		 /* optionally flush */
 	    else if(split&&lnl)
 	       lnl=2;}			   /* mark line as possible postmark */
       if(lnl==1&&digest){
@@ -278,8 +290,10 @@ squelch:
 nofild:
    log("File table full\n");exit(EX_OSERR);}
  close(PWRO);
- if(0>child){
+ if(-1==child){
    log("Can't fork\n");exit(EX_OSERR);}}
 
-waitforit(){int i;
- while(child!=wait(&i)||(i&127)==127);}
+waitforit(){int i;pid_t j;
+ while(child!=(j=wait(&i))||(i&127)==127)
+   if(-1==j)
+      return;}

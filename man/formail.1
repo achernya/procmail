@@ -2,21 +2,21 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: formail.1,v 2.1 1991/06/18 11:30:15 berg Rel $
+.Id $Id: formail.1,v 2.3 1991/07/03 13:54:04 berg Rel $
 .de Sh
 .br
 .ne 9
-.SH \\$1
+.SH "\\$1"
 ..
 .de Ss
 .br
 .ne 9
-.SS \\$1
+.SS "\\$1"
 ..
 .de Tp
 .br
 .ne 9
-.TP \\$1
+.TP "\\$1"
 ..
 .TH FORMAIL 1 \*(Dt BuGless
 .SH NAME
@@ -37,7 +37,7 @@ formail \- mail (re)formatter
 .I argument
 \&.\|.\|.
 ]
-.Sh "DESCRIPTION"
+.Sh DESCRIPTION
 .LP
 .B formail
 is a filter that can be used to force mail into mailbox format, perform real
@@ -52,8 +52,8 @@ If formail is started without any command line options, it will force any
 mail coming from stdin into mailbox format and will escape
 .B all
 bogus `From ' lines.
-.Sh "OPTIONS"
-.Tp 5
+.Sh OPTIONS
+.Tp 0.5i
 .B \-b
 Don't escape any bogus mailbox headers (i.e. lines starting with `From ').
 .Tp
@@ -97,13 +97,25 @@ messages while splitting.
 Output at most
 .I total
 messages while splitting.
-.Sh "EXAMPLES"
+.Sh EXAMPLES
+.LP
+To use it as a general formatter in front of procmail include the following
+procmail recipe at the top of your .procmailrc file:
+.RS
+:0
+.br
+formail
+.RE
 .LP
 To split up a digest one usually uses:
 .RS
-formail +1 -d -s procmail
+formail +1 -ds cat >>the_mailbox_of_your_choice
 .RE
-.Sh "MISCELLANEOUS"
+or
+.RS
+formail +1 -ds procmail
+.RE
+.Sh MISCELLANEOUS
 .LP
 The regular expression that is used to find `real' postmarks is:
 .RS
@@ -115,8 +127,8 @@ The regular expression that is used to find `real' postmarks is:
 .BR sendmail (8),
 .BR procmail (1),
 .BR sh (1)
-.Sh "DIAGNOSTICS"
-.Tp 23
+.Sh DIAGNOSTICS
+.Tp 2.3i
 Couldn't write to stdout
 The program that formail was trying to pipe into didn't accept all the data
 formail sent to it.
@@ -129,12 +141,12 @@ Too many processes on this machine.
 .Tp
 Failed to execute "x"
 Program not in path, or not executable.
-.Sh "BUGS"
+.Sh BUGS
 .LP
 formail does not do full RFC 822 parsing while generating a `From ' or
 a `To: ' line, hence it can be fooled by some real tricky escaped/quoted
 strings with `<', `>' or `(' characters in them.
-.Sh "AUTHOR"
+.Sh AUTHOR
 .LP
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .RS

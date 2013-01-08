@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: goodies.c,v 2.3 1991/06/19 17:41:41 berg Rel $";
+static char rcsid[]="$Id: goodies.c,v 2.4 1991/07/08 14:29:31 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -21,6 +21,10 @@ static char rcsid[]="$Id: goodies.c,v 2.3 1991/06/19 17:41:41 berg Rel $";
 #define DOUBLE_QUOTED	2	/* quotes, backslashes and $subtitutions    */
 #define SINGLE_QUOTED	3
 
+/* sarg==0 : normal parsing, split up arguments like in /bin/sh
+ * sarg==1 : environment assignment parsing, parse up till first whitespace
+ * sarg==2 : normal parsing, split up arguments by single spaces
+ */
 readparse(p,fgetc,sarg)register char*p;int(*const fgetc)();
  const int sarg;{static i;int got;char*startb;
  for(got=NOTHING_YET;;){		    /* buf2 is used as scratch space */
@@ -75,10 +79,10 @@ forcebquote:   case EOF:case '`':*p='\0';
 		     sgetcp=p=tstrdup(startb);readparse(startb,sgetc,0);
 		     free(p);sgetcp=save;} /* chopped up, drop source buffer */
 		  startb=fromprog(p=startb,startb);	/* read from program */
-		  if(got!=DOUBLE_QUOTED){
+		  if(!sarg&&got!=DOUBLE_QUOTED){
 		     i=0;startb=p;goto simplsplit;}	      /* split it up */
-		  if(i=='"')		  /* was there a missing closing ` ? */
-		     got=NORMAL_TEXT;			 /* yes, terminate " */
+		  if(i=='"'||got<=SKIPPING_SPACE)     /* missing closing ` ? */
+		     got=NORMAL_TEXT;			     /* or sarg!=0 ? */
 		  p=startb;goto loop;
 	       case '\n':i=';';}	       /* newlines separate commands */
 escaped:    *p++=i;}
@@ -116,12 +120,15 @@ escaped:    *p++=i;}
 	    if(i==EOF)
 	       i='\0';
 	    *startb='\0';}
-	 else if(i=='$'){					   /* $$=pid */
-	    ultstr(0,(unsigned long)thepid,p);i='\0';goto eofstr;}
+	 else if(i=='$'){					  /* $$ =pid */
+	    ultstr(0,(unsigned long)thepid,p);goto ieofstr;}
+	 else if(i=='-'){				   /* $- =lastfolder */
+	    strcpy(p,lastfolder);
+ieofstr:    i='\0';goto eofstr;}
 	 else{
 	    *p++='$';goto newchar;}		       /* not a substitution */
 	 startb=(char*)tgetenv(buf2);
-	 if(got!=DOUBLE_QUOTED)
+	 if(!sarg&&got!=DOUBLE_QUOTED)
 simplsplit: for(;;startb++){		  /* simply split it up in arguments */
 	       switch(*startb){
 		  case ' ':case '\t':case '\n':
@@ -131,6 +138,8 @@ simplsplit: for(;;startb++){		  /* simply split it up in arguments */
 		  case '\0':goto eeofstr;}
 	       *p++= *startb;got=NORMAL_TEXT;}
 	 else{
+	    if(got<=SKIPPING_SPACE)		/* can only occur if sarg!=0 */
+	       got=NORMAL_TEXT;
 	    strcpy(p,startb);				   /* simply copy it */
 eofstr:	    p=strchr(p,'\0');}
 eeofstr: if(i)				     /* already read next character? */
