@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.87 1999/02/19 07:24:38 guenther Exp $";
+ "$Id: misc.c,v 1.89.2.1 1999/04/06 04:05:16 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -41,7 +41,7 @@ struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
 #define MAXvarvals	 maxindex(strenvvar)
 #define MAXvarstrs	 maxindex(strenstr)
 
-const char lastfolder[]="LASTFOLDER",maildir[]="MAILDIR";
+const char lastfolder[]="LASTFOLDER",maildir[]="MAILDIR",slinebuf[]="LINEBUF";
 int didchd;
 char*globlock;
 static time_t oldtime;
@@ -216,7 +216,8 @@ void sterminate P((void))
 }
 
 void Terminate P((void))
-{ ignoreterm();
+{ const char*chp;
+  ignoreterm();
   if(retvl2!=EXIT_SUCCESS)
      fakedelivery=0,retval=retvl2;
   if(getpid()==thepid)
@@ -230,7 +231,9 @@ void Terminate P((void))
 	lstfolder=tgetenv(lastfolder);
      logabstract(lstfolder);
 #ifndef NO_COMSAT
-     ;{ int s;struct sockaddr_in addr;char*chp,*chad;	     /* @ seperator? */
+     if(strlen(chp=tgetenv(lgname))+2<=linebuf)	  /* first pass length check */
+      { int s;struct sockaddr_in addr;char*chad;	     /* @ seperator? */
+	cat(chp,"@");			     /* start setting up the message */
 	if(chad=strchr(chp=(char*)scomsat,SERV_ADDRsep))
 	   *chad++='\0';	      /* split it up in service and hostname */
 	else if(!renvint(-1L,chp))		/* or is it a false boolean? */
@@ -269,7 +272,6 @@ void Terminate P((void))
 	 }
 	else
 	   addr.sin_port=htons((short)s);		    /* network order */
-	cat(tgetenv(lgname),"@");		 /* should always fit in buf */
 	if(lasttell>=0)					   /* was it a file? */
 	   ultstr(0,(unsigned long)lasttell,buf2),catlim(buf2);	      /* yep */
 	catlim(COMSATxtrsep);				 /* custom seperator */
@@ -430,7 +432,7 @@ int asenvcpy(src)char*src;
      *	really change the uid now, since it would not be safe to
      *	evaluate the extra command line arguments otherwise
      */
-   { restrict=1;setids();strcpy(buf,src);src=buf+(chp-src);
+   { erestrict=1;setids();strcpy(buf,src);src=buf+(chp-src);
      strcpy((char*)(sgetcp=buf2),++src);
      if(!readparse(src,sgetc,2))
       { chp=sputenv(buf);src[-1]='\0';
@@ -441,14 +443,22 @@ int asenvcpy(src)char*src;
   return 0;
 }
 
+void mallocbuffers(linebuf)size_t linebuf;
+{ if(buf)
+   { free(buf);
+     free(buf2);
+   }
+  buf=malloc(linebuf);buf2=malloc(linebuf);
+}
+
 void asenv(chp)const char*const chp;
-{ static const char slinebuf[]="LINEBUF",logfile[]="LOGFILE",Log[]="LOG",
-   sdelivered[]="DELIVERED",includerc[]="INCLUDERC",eumask[]="UMASK",
-   dropprivs[]="DROPPRIVS",shift[]="SHIFT";
+{ static const char logfile[]="LOGFILE",Log[]="LOG",sdelivered[]="DELIVERED",
+   includerc[]="INCLUDERC",eumask[]="UMASK",dropprivs[]="DROPPRIVS",
+   shift[]="SHIFT";
   if(!strcmp(buf,slinebuf))
    { if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
 	linebuf=MINlinebuf+XTRAlinebuf;		       /* check minimum size */
-     free(buf);free(buf2);buf=malloc(linebuf);buf2=malloc(linebuf);
+     mallocbuffers(linebuf);
    }
   else if(!strcmp(buf,maildir))
      if(chdir(chp))
@@ -911,8 +921,8 @@ jinregs:		regsp=regs;		/* start over and look again */
 				    score+=weight<0?MIN32:MAX32;
 				 break;			    /* matches early */
 			       }
-			      ;{ double nweight;
-				 if((nweight=weight*weight)<oweight&&oweight<1)
+			      ;{ volatile double nweight=weight*weight;
+				 if(nweight<oweight&&oweight<1)
 				    break;
 				 oweight=nweight;
 			       }

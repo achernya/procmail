@@ -11,7 +11,7 @@ Discusses:
 
 NOTE: This file refers to the procmail binary being located in
 /usr/bin.  Some systems may place procmail in other locations such as
-/usr/local/bin.  Talk with your sysadmin if you are not sure.
+/usr/local/bin.	 Talk with your sysadmin if you are not sure.
 
 				---
 

@@ -436,3 +436,21 @@
 	    Mailstat returns grand totals as well now
 	    Update FAQ and docs to reflect default placing of procmail
 	       in /usr/bin instead of /usr/local/bin
+1999/03/31: v3.13
+	    Mailstat was too loose in its awk syntax
+	    Changes to formail:
+	       - Formail was ignoring the exitcode of all but the last
+		 invocation (or last several, if -n was in effect)
+	    Changes to procmail:
+	       - Variable expansion of builtin numeric variables in
+		 conditions could overwrite the condition (broke SmartList)
+	       - weights<1 didn't work if floats changed accuracy when stored
+	    Worked around a bug in the Dunix 4.0e compiler (pointer addition
+	       not commutative)
+1999/04/05: v3.13.1 (fixes backported from 3.14-beta)
+	    Changes to procmail:
+	       - Eliminated the conflict with the C9x restrict keyword
+	       - Some zero-length extractions using \/ could core dump
+	       - Missed a couple possible overflows
+	    Changes to mailstat:
+	       - Work around the detab done on checkin to CVS
