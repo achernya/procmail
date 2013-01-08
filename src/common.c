@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: common.c,v 1.26 1999/11/02 03:51:00 guenther Exp $";
+ "$Id: common.c,v 1.28 2001/06/23 08:18:39 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -57,18 +57,6 @@ int strcspn(whole,sub)const char*const whole,*const sub;
 }
 #endif
 
-void ultstr(minwidth,val,dest)int minwidth;unsigned long val;char*dest;
-{ int i;unsigned long j;
-  j=val;i=0;					   /* a beauty, isn't it :-) */
-  do i++;					   /* determine needed width */
-  while(j/=10);
-  while(--minwidth>=i)				 /* fill up any excess width */
-     *dest++=' ';
-  *(dest+=i)='\0';
-  do *--dest='0'+val%10;			  /* display value backwards */
-  while(val/=10);
-}
-
 int waitfor(pid)const pid_t pid;	      /* wait for a specific process */
 { int i;pid_t j;
   while(pid!=(j=wait(&i))||WIFSTOPPED(i))
@@ -79,7 +67,8 @@ int waitfor(pid)const pid_t pid;	      /* wait for a specific process */
   return lexitcode=WIFEXITED(i)?WEXITSTATUS(i):-WTERMSIG(i);
 }
 
-int strnIcmp(a,b,l)register const char*a,*b;register size_t l;
+#ifdef NOstrncasecmp
+int strncasecmp(a,b,l)register const char*a,*b;register size_t l;
 { unsigned i,j;
   if(l)						 /* case insensitive strncmp */
      do
@@ -97,3 +86,4 @@ int strnIcmp(a,b,l)register const char*a,*b;register size_t l;
      while(i&&j&&--l);
   return 0;
 }
+#endif

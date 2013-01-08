@@ -8,9 +8,10 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: sublib.c,v 1.19.2.2 2001/07/15 09:27:34 guenther Exp $";
+ "$Id: sublib.c,v 1.27 2001/06/27 17:07:25 guenther Exp $";
 #endif
 #include "includes.h"
+#include "acommon.h"
 #include "sublib.h"
 
 #ifdef NOmemmove
@@ -137,7 +138,7 @@ void bbzero(s,n)void *s;size_t n;
 #endif
 
 #ifdef NOstrlcat
-size_t sstrlcat(dst,src,size)char *dst;const char*src;size_t size;
+size_t strlcat(dst,src,size)char *dst;const char*src;size_t size;
 { const char*start=dst;
   if(size>0)
    { size--;					/* reserve space for the NUL */
@@ -149,16 +150,18 @@ size_t sstrlcat(dst,src,size)char *dst;const char*src;size_t size;
    }
   return dst-start+strlen(src);
 }
+#endif
 
-size_t sstrlcpy(dst,src,size)char *dst;const char*src;size_t size;
-{ const char*start=dst;
-  if(size>0)
-   { size--;					/* reserve space for the NUL */
-     while(size>0&&*src)			     /* copy over characters */
-	size--,*dst++= *src++;
-     *dst='\0';					    /* hasta la vista, baby! */
-   }
-  return dst-start+strlen(src);
+#ifdef NOstrerror
+#define ERRSTR "Error number "
+char *strerror(int err)
+{ static char errbuf[STRLEN(ERRSTR)+sizeNUM(int)+1]=ERRSTR;
+#ifndef NOsys_errlist
+  if(err>=0&&err<sys_nerr)
+     return sys_errlist[err];
+#endif
+  ultstr(0,(unsigned int)err,errbuf+STRLEN(ERRSTR));
+  return errbuf;
 }
 #endif
 			    /* strtol replacement which lacks range checking */
@@ -209,12 +212,14 @@ fault:
   return sign?-result:result;
 }
 #else /* NOstrtol */
+#ifndef NOstrerror
 #ifndef NOstrlcat
 #ifndef NEEDbbzero
 #ifndef SLOWstrstr
 #ifndef NOstrpbrk
 #ifndef NOmemmove
 int sublib_dummy_var;		      /* to prevent insanity in some linkers */
+#endif
 #endif
 #endif
 #endif

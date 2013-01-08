@@ -4,15 +4,15 @@
  *	Seems to be relatively bug free.				*
  *									*
  *	Copyright (c) 1990-2000, S.R. van den Berg, The Netherlands	*
- *	Copyright (c) 1999-2000, Philip Guenther, The United States	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
  *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formail.c,v 1.97.2.5 2001/07/15 09:27:16 guenther Exp $";
+ "$Id: formail.c,v 1.101 2001/02/20 10:14:06 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 2001/07/15 09:27:16 $";
+static /*const*/char rcsdate[]="$Date: 2001/02/20 10:14:06 $";
 #include "includes.h"
 #include <ctype.h>		/* iscntrl() */
 #include "formail.h"
@@ -198,9 +198,9 @@ static int digheadr P((void))
   i=maxindex(cdigest);chp=fp->fld_text;j=fp->id_len;
   while(chp[j-2]==' '||chp[j-2]=='\t')	     /* whitespace before the colon? */
      j--;
-  while((cdigest[i].lnr!=j||strnIcmp(cdigest[i].hedr,chp,j-1))&&i--);
-  return i>=0||j>STRLEN(old_)&&!strnIcmp(old_,chp,STRLEN(old_))||
-   j>STRLEN(x_)&&!strnIcmp(x_,chp,STRLEN(x_));
+  while((cdigest[i].lnr!=j||strncasecmp(cdigest[i].hedr,chp,j-1))&&i--);
+  return i>=0||j>STRLEN(old_)&&!strncasecmp(old_,chp,STRLEN(old_))||
+   j>STRLEN(x_)&&!strncasecmp(x_,chp,STRLEN(x_));
 }
 
 static int artheadr P((void))	     /* could it be the start of an article? */
@@ -215,7 +215,7 @@ static char*getsender(namep,fldp,headreply)char*namep;struct field*fldp;
  const int headreply;
 { char*chp;int i,nowm;size_t j;static int lastm;
   chp=fldp->fld_text;j=fldp->id_len;i=maxindex(sest);
-  while((sest[i].len!=j||strnIcmp(sest[i].head,chp,j))&&i--);
+  while((sest[i].len!=j||strncasecmp(sest[i].head,chp,j))&&i--);
   if(i>=0&&(i!=maxindex(sest)||fldp==rdheader))		  /* found anything? */
    { char*saddr;char*tmp;			     /* determine the weight */
      nowm=areply&&headreply?headreply==1?sest[i].wrepl:sest[i].wrrepl:i;chp+=j;
@@ -304,7 +304,7 @@ pnewname:  lastm=nowm;saddr=strcpy(malloc(strlen(saddr)+1),saddr);
 }
 			     /* lifted out of main() to reduce main()'s size */
 static void elimdups(namep,idcache,maxlen,split)const char*const namep;
- FILE*idcache;const off_t maxlen;const int split;
+ FILE*idcache;const long maxlen;const int split;
 { int dupid=0;char*key,*oldnewl;
   key=(char*)namep;		  /* not to worry, no change will be noticed */
   if(!areply)
@@ -313,7 +313,7 @@ static void elimdups(namep,idcache,maxlen,split)const char*const namep;
 	*(oldnewl=(key=msid->rexp)+msid->rexl-1)='\0';
    }						/* wipe out trailing newline */
   if(key)
-   { off_t insoffs=maxlen;
+   { long insoffs=maxlen;
      while(*key==' ')				     /* strip leading spaces */
 	key++;
      do
@@ -350,7 +350,7 @@ noluck:
      fseek(idcache,insoffs,SEEK_SET);fwrite(key,1,strlen(key)+1,idcache);
      putc('\0',idcache);			   /* mark new end of buffer */
 dupfound:
-     fseek(idcache,(off_t)0,SEEK_SET);		 /* rewind, for any next run */
+     fseek(idcache,(long)0,SEEK_SET);		 /* rewind, for any next run */
      if(!areply)
 	*oldnewl='\n';				      /* restore the newline */
    }
@@ -366,7 +366,7 @@ int main(lastm,argv)int lastm;const char*const argv[];
 { int i,split=0,force=0,bogus=1,every=0,headreply=0,digest=0,nowait=0,keepb=0,
    minfields=(char*)progid-(char*)progid,conctenate=0,babyl=0,babylstart,
    berkeley=0,forgetclen;
-  off_t maxlen,ctlength;FILE*idcache=0;pid_t thepid;
+  long maxlen,ctlength;FILE*idcache=0;pid_t thepid;
   size_t j,lnl,escaplen;char*chp,*namep,*escap=ESCAP;
   struct field*fldp,*fp2,**afldp,*fdate,*fcntlength,*fsubject,*fFrom_;
   if(lastm)			       /* sanity check, any argument at all? */
@@ -453,7 +453,7 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 		       if(i>0)
 			  break;
 		       if(i!=-STRLEN(Resent_)||-i!=lnl|| /* the only partial */
-			strnIcmp(chp,Resent_,STRLEN(Resent_)+1))    /* field */
+			strncasecmp(chp,Resent_,STRLEN(Resent_)+1)) /* field */
 			  goto invfield;       /* allowed with -a is Resent- */
 		       headreply|=2;
 		       goto nextarg;		    /* don't add to the list */
@@ -627,7 +627,7 @@ startover:
 	   concatenate(fldp);		    /* save fields for later perusal */
 	namep=getsender(namep,fldp,headreply);
 	i=maxindex(rex);chp=fldp->fld_text;j=fldp->id_len;
-	while((rex[i].lenr!=j||strnIcmp(rex[i].headr,chp,j))&&i--);
+	while((rex[i].lenr!=j||strncasecmp(rex[i].headr,chp,j))&&i--);
 	chp+=j;
 	if(i>=0&&(j=fldp->Tot_len-j)>1)			  /* found anything? */
 	 { tmemmove(rex[i].rexp=realloc(rex[i].rexp,(rex[i].rexl=j)+1),chp,j);
@@ -659,7 +659,7 @@ startover:
 	loadchar('\n');addbuf();		       /* add it to rdheader */
 	if(subj->rexl)				      /* any Subject: found? */
 	 { loadbuf(subject,STRLEN(subject));	  /* sure, check for leading */
-	   if(strnIcmp(skpspace(chp=subj->rexp),Re,STRLEN(Re)))	      /* Re: */
+	   if(strncasecmp(skpspace(chp=subj->rexp),Re,STRLEN(Re)))    /* Re: */
 	      loadbuf(re,STRLEN(re));	       /* no Re: , add one ourselves */
 	   loadsaved(subj);addbuf();
 	 }
@@ -703,15 +703,16 @@ startover:
 	if(!findf(fldp,&rdheader))	       /* only add what didn't exist */
 	   if(fldp->id_len+1>=fldp->Tot_len&&		  /* field name only */
 	      (fldp->id_len==STRLEN(messageid)&&
-	       !strnIcmp(fldp->fld_text,messageid,STRLEN(messageid))||
+	       !strncasecmp(fldp->fld_text,messageid,STRLEN(messageid))||
 	       fldp->id_len==STRLEN(res_messageid)&&
-	       !strnIcmp(fldp->fld_text,res_messageid,STRLEN(res_messageid))))
+	       !strncasecmp(fldp->fld_text,res_messageid,STRLEN(res_messageid))
+	      ))
 	    { char*p;const char*name;unsigned long h1,h2,h3;
 	      static unsigned long h4; /* conjure up a `unique' msg-id field */
 	      h1=time((time_t*)0);h2=thepid;h3=rhash;
 	      p=chp=malloc(fldp->id_len+2+((sizeof h1*8+5)/6+1)*4+
 	       strlen(name=hostname())+2);     /* allocate worst case length */
-	      memcpy(p,fldp->fld_text,fldp->id_len);*(p+=fldp->id_len)=' ';
+	      strncpy(p,fldp->fld_text,fldp->id_len);*(p+=fldp->id_len)=' ';
 	      *++p='<';*(p=ultoan(h3,p+1))='.';*(p=ultoan(h4,p+1))='.';
 	      *(p=ultoan(h2,p+1))='.';*(p=ultoan(h1,p+1))='@';strcpy(p+1,name);
 	      *(p=strchr(p,'\0'))='>';*++p='\n';addfield(&nheader,chp,p-chp+1);

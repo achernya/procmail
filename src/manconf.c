@@ -1,17 +1,15 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 1.66.2.5 2001/07/15 09:27:24 guenther Exp $*/
+/*$Id: manconf.c,v 1.72 2001/06/28 22:43:09 guenther Exp $*/
 
 #include "../patchlevel.h"
 #include "procmail.h"
-#include "lastdirsep.h"
 
 #define pn(name,val)	pnr(name,(long)(val))
 
 static char pm_version[]=VERSION,ffileno[]=DEFfileno;
 static int lines;
-const char dirsep[]=DIRSEP,pmrc[]=PROCMAILRC;
-char pmrc2[]=PROCMAILRC;			     /* need a writable copy */
+const char dirsep[]=DIRSEP;
 static const char*const keepenv[]=KEEPENV,*const prestenv[]=PRESTENV,
  *const trusted_ids[]=TRUSTED_IDS,*const etcrc=ETCRC,
  *const krnllocks[]={
@@ -223,11 +221,24 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   ps("console","sender");
   ps("aconsole",".");
 #endif
+#ifdef LMTP
+  ps("LMTPusage","\1.br\1.B procmail\1.RB [ \
+ \2-@TEMPFAILOPT@@OVERRIDEOPT@@BERKELEYOPT@ ]\1.RB [ \"\2-@ARGUMENTOPT@ \
+ \2fIargument\2fP\" ]\1.B \2-@LMTPOPT@\1");
+  ps("LMTPOPTdesc","\1.TP\1.B \2-@LMTPOPT@\1This turns on LMTP mode, wherein\
+ procmail acts as an RFC2033 LMTP server.\1Delivery takes place in the same \
+ manner and under the same restrictions as\1the delivery mode enabled \
+ with\1.BR \2-@DELIVEROPT@ .\1This option is incompatible with\1.B \
+ \2-@PRESERVOPT@\1and\1.BR \2-@FROMWHOPT@ .\1");
+  pc("LMTPOPT",LMTPOPT);
+#else
+  ps("LMTPOPTdesc","");ps("LMTPusage","");
+#endif
   pname("INIT_UMASK",0);printf("0%lo/g\n",(unsigned long)INIT_UMASK);lines--;
   pn("DEFlinebuf",DEFlinebuf);
   ps("BOGUSprefix",BOGUSprefix);
   ps("FAKE_FIELD",FAKE_FIELD);
-  ps("PROCMAILRC",pmrc);
+  ps("PROCMAILRC",PROCMAILRC);
   pn("RETRYunique",RETRYunique);
   pn("DEFsuspend",DEFsuspend);
   pn("DEFlocksleep",DEFlocksleep);
@@ -240,8 +251,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   ps("FROMMkey",FROMMkey);
   ps("FROMMsubstitute",FROMMsubstitute);
   ps("DEFshellmetas",DEFshellmetas);
-  *lastdirsep(pmrc2)='\0';
-  ps("DEFmaildir",pmrc2);
+  ps("DEFmaildir",DEFmaildir);
   ps("DEFdefault",DEFdefault);
   ps("DEFmsgprefix",DEFmsgprefix);
   ps("DEFsendmail",DEFsendmail);

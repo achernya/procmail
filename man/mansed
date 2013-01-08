@@ -1,6 +1,6 @@
 #! /bin/sh
 :
-#$Id: mansed,v 1.29.4.1 2000/05/09 06:36:35 guenther Exp $
+#$Id: mansed,v 1.30 2000/09/28 01:23:07 guenther Exp $
 
 if test -z "$IFS"
 then IFS=" \

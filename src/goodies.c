@@ -1,12 +1,14 @@
 /************************************************************************
  *	Collection of library-worthy routines				*
  *									*
- *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1998, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1998-2001, Philip Guenther, The United States	*
+ *					of America			*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: goodies.c,v 1.64.2.6 2001/07/15 09:27:17 guenther Exp $";
+ "$Id: goodies.c,v 1.73 2001/06/27 06:41:28 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -15,17 +17,19 @@ static /*const*/char rcsid[]=
 #include "misc.h"
 #include "pipes.h"
 #include "common.h"
+#include "acommon.h"
 #include "cstdio.h"
+#include "variables.h"
 #include "goodies.h"
 
-long Stdfilled;
 const char test[]="test";
 const char*Tmnate,*All_args;
 
-static const char*evalenv P((void))	/* expects the variable name in buf2 */
-{ int j;
-  return skiprc?(const char*)0:		      /* speed this up when skipping */
-	  (unsigned)(j=(*buf2)-'0')>9?getenv(buf2):
+static const char*evalenv(skipping)	/* expects the variable name in buf2 */
+ int skipping;
+{ int j=buf2[0]-'0';
+  return skipping?(const char*)0:	      /* speed this up when skipping */
+	  (unsigned)j>9?getenv(buf2):
 	  !j?argv0:
 	   j<=crestarg?restargv[j-1]:(const char*)0;
 }
@@ -37,19 +41,20 @@ static const char*evalenv P((void))	/* expects the variable name in buf2 */
 #define SINGLE_QUOTED	3
 
 #define fgetc() (*fpgetc)()	   /* some compilers previously choked on it */
-#define CHECKINC() (fencepost<p?(skiprc|=1,overflow=1,p=fencepost):0)
+#define CHECKINC() (fencepost<p?(skipping|=1,p=fencepost):0)
 
 /* sarg==0 : normal parsing, split up arguments like in /bin/sh
  * sarg==1 : environment assignment parsing, parse up till first whitespace
  * sarg==2 : normal parsing, split up arguments by existing whitespace
  */
-int readparse(p,fpgetc,sarg)register char*p;int(*const fpgetc)();
- const int sarg;
-{ static int i,skipbracelev,bracegot;int got,bracelev,qbracelev,overflow;
+int readparse(p,fpgetc,sarg,skipping)register char*p;int(*const fpgetc)();
+ const int sarg;int skipping;
+{ static int i,skipbracelev,bracegot;int got,bracelev,qbracelev;
   charNUM(num,long),*startb,*const fencepost=buf+linebuf,
      *const fencepost2=buf2+linebuf;
   static char*skipback;static const char*oldstartb;
-  overflow=bracelev=qbracelev=0;All_args=0;
+  bracelev=qbracelev=0;All_args=0;
+  if(skipping)skipping=2;	  /* bottom bit is whether overflow occurred */
   for(got=NOTHING_YET;;)		    /* buf2 is used as scratch space */
 loop:
    { i=fgetc();
@@ -62,11 +67,10 @@ early_eof:    nlog(unexpeof);
 ready:	   if(got!=SKIPPING_SPACE||sarg)  /* not terminated yet or sarg==2 ? */
 	      *p++='\0';
 	   Tmnate=p;
-	   if(overflow)
-	    { skiprc&=~1;
-	      nlog(exceededlb);setoverflow();
+	   if(skipping&1)
+	    { nlog(exceededlb);setoverflow();
 	    }
-	   return overflow;
+	   return skipping&1;
 	case '\\':
 	   if(got==SINGLE_QUOTED)
 	      break;
@@ -101,7 +105,7 @@ noesc:	      *p++='\\';		/* nothing to escape, just echo both */
 		    if(got!=DOUBLE_QUOTED)     /* missing closing backquote? */
 		       break;
 forcebquote:	 case EOF:case '`':
-		    if(skiprc)
+		    if(skipping)
 		       *(p=startb)='\0';
 		    else
 		     { int osh=sh;
@@ -109,7 +113,7 @@ forcebquote:	 case EOF:case '`':
 		       if(!(sh=!!strpbrk(startb,shellmetas)))
 			{ const char*save=sgetcp,*sAll_args;
 			  sgetcp=p=tstrdup(startb);sAll_args=All_args;
-			  if(readparse(startb,sgetc,0)		/* overflow? */
+			  if(readparse(startb,sgetc,0,0)	/* overflow? */
 #ifndef GOT_bin_test
 			   ||!strcmp(test,startb)      /* oops, `test' found */
 #endif
@@ -170,7 +174,7 @@ escaped:      CHECKINC();*p++=i;
 	      got==DOUBLE_QUOTED&&bracelev>qbracelev)
 	    { bracelev--;
 	      if(skipback&&bracelev==skipbracelev)
-	       { skiprc-=2;p=skipback;skipback=0;startb=(char*)oldstartb;
+	       { skipping-=2;p=skipback;skipback=0;startb=(char*)oldstartb;
 		 got=bracegot;
 		 goto closebrace;
 	       }
@@ -192,35 +196,35 @@ escaped:      CHECKINC();*p++=i;
 	      case '@':
 		 if(got!=DOUBLE_QUOTED)
 		    goto normchar;
-		 if(!skiprc)	      /* don't do it while skipping (braces) */
+		 if(!skipping)	      /* don't do it while skipping (braces) */
 		    All_args=p;
 		 continue;
 	      case '{':						  /* ${name} */
 		 while(EOF!=(i=fgetc())&&alphanum(i))
 		  { if(startb>=fencepost2)
-		       startb=buf2+2,skiprc|=1,overflow=1;
+		       startb=buf2+2,skipping|=1;
 		    *startb++=i;
 		  }
 		 *startb='\0';
 		 if(numeric(*buf2)&&buf2[1])
 		    goto badsub;
-		 startb=(char*)evalenv();
+		 startb=(char*)evalenv(skipping);
 		 switch(i)
 		  { default:
 		       goto badsub;
 		    case ':':
 		       switch(i=fgetc())
-			{ default:
-badsub:			     nlog("Bad substitution of");logqnl(buf2);
-			     continue;
-			  case '-':
+			{ case '-':
 			     if(startb&&*startb)
 				goto noalt;
 			     goto doalt;
 			  case '+':
 			     if(startb&&*startb)
 				goto doalt;
-			     startb=0;
+			     goto noalt;
+			  default:
+badsub:			     nlog("Bad substitution of");logqnl(buf2);
+			     continue;
 			}
 		    case '+':
 		       if(startb)
@@ -228,15 +232,20 @@ badsub:			     nlog("Bad substitution of");logqnl(buf2);
 		       goto noalt;
 		    case '-':
 		       if(startb)
-noalt:			  if(!skiprc)
-			   { skiprc+=2;skipback=p;skipbracelev=bracelev;
+noalt:			  if(!skipping)
+			   { skipping+=2;skipback=p;skipbracelev=bracelev;
 			     oldstartb=startb;bracegot=got;
 			   }
 doalt:		       bracelev++;
 		       continue;
+#if 0
+		    case '%':	  /* this is where processing of ${var%%pat} */
+		    case '#':			/* and friends would/will go */
+#endif
 		    case '}':
 closebrace:	       if(!startb)
 			  startb=(char*)empty;
+		       break;
 		  }
 		 goto ibreak;					  /* $$ =pid */
 	      case '$':ultstr(0,(unsigned long)thepid,startb=num);
@@ -264,14 +273,14 @@ ibreak:		 i='\0';
 		 if(alphanum(i))				    /* $name */
 		  { do
 		     { if(startb>=fencepost2)
-			  startb=buf2+2,skiprc|=1,overflow=1;
+			  startb=buf2+2,skipping|=1;
 		       *startb++=i;
 		     }
 		    while(EOF!=(i=fgetc())&&alphanum(i));
 		    if(i==EOF)
 			i='\0';
 finsb:		    *startb='\0';
-		    if(!(startb=(char*)evalenv()))
+		    if(!(startb=(char*)evalenv(skipping)))
 		       startb=(char*)empty;
 		    if(quoted)
 		     { *p++='(';CHECKINC();	/* protect leading character */
@@ -300,12 +309,12 @@ simplsplit: { char*q;
 	      if(q=simplesplit(p,startb,fencepost,&got))     /* simply split */
 		 p=q;				       /* it up in arguments */
 	      else
-		 skiprc|=1,overflow=1,p=fencepost;
+		 skipping|=1,p=fencepost;
 	    }
 	   else
 copyit:	    { strncpy(p,startb,fencepost-p+2);		   /* simply copy it */
 	      if(fencepost[1]!='\0')		      /* did we truncate it? */
-		 skiprc|=1,overflow=1,*fencepost='\0';
+		 skipping|=1,*fencepost='\0';
 	      if(got<=SKIPPING_SPACE)		/* can only occur if sarg!=0 */
 		 got=NORMAL_TEXT;
 	      p=strchr(p,'\0');
@@ -345,7 +354,7 @@ nodelim:
 
 char*simplesplit(to,from,fencepost,gotp)char*to;const char*from,*fencepost;
  int*gotp;
-{ register int got=*gotp;
+{ register int got= *gotp;
   for(;to<=fencepost;from++)
    { switch(*from)
       { case ' ':case '\t':case '\n':
@@ -363,6 +372,30 @@ ret:
   return to;
 }
 
+void concatenate(p)register char*p;
+{ while(p!=Tmnate)			  /* concatenate all other arguments */
+   { while(*p)
+	p++;
+     *p++=' ';
+   }
+  *p=p[-1]='\0';
+}
+
+void metaparse(p)const char*p;				    /* result in buf */
+{ if(sh=!!strpbrk(p,shellmetas))
+     strcpy(buf,p);			 /* copy literally, shell will parse */
+  else
+   { sgetcp=p=tstrdup(p);
+     if(readparse(buf,sgetc,0,0)			/* parse it yourself */
+#ifndef GOT_bin_test
+	||!strcmp(test,buf)
+#endif
+	)
+	strcpy(buf,p),sh=1;		   /* oops, overflow or `test' found */
+     free((char*)p);
+   }
+}
+
 void ltstr(minwidth,val,dest)const int minwidth;const long val;char*dest;
 { if(val<0)
    { *dest=' ';ultstr(minwidth-1,-val,dest+1);
@@ -373,7 +406,8 @@ void ltstr(minwidth,val,dest)const int minwidth;const long val;char*dest;
      ultstr(minwidth,val,dest);				/* business as usual */
 }
 
-double stod(str,ptr)const char*str;const char**const ptr;
+#ifdef NOstrtod
+double strtod(str,ptr)const char*str;char**const ptr;
 { int sign,any;unsigned i;char*chp;double acc,fracc;
   fracc=1;acc=any=sign=0;
   switch(*(chp=skpspace(str)))					 /* the sign */
@@ -388,89 +422,7 @@ double stod(str,ptr)const char*str;const char**const ptr;
 	   acc+=fracc*i,any=1;
    }
   if(ptr)
-     *ptr=any?chp-1:str;
+     *ptr=any?chp-1:(char**)str;
   return sign?-acc:acc;
 }
-
-static struct dynstring*myenv;
-static char**lastenv;
-			      /* smart putenv, the way it was supposed to be */
-const char*sputenv(a)const char*const a;
-{ static int alloced;size_t eq,i;int remove;const char*split;char**preenv;
-  struct dynstring*curr,**last;
-  yell("Assigning",a);remove=0;
-  if(!(split=strchr(a,'=')))			   /* assignment or removal? */
-     remove=1,split=strchr(a,'\0');
-  eq=split-a;							    /* is it */
-  for(curr= *(last= &myenv);curr;curr= *(last= &curr->enext))  /* one I made */
-     if(!strncmp(a,curr->ename,eq)&&((char*)curr->ename)[eq]=='=')
-      { split=curr->ename;*last=curr->enext;free(curr);		 /* earlier? */
-	for(preenv=environ;*preenv!=split;preenv++);
-	goto wipenv;
-      }
-  for(preenv=environ;*preenv;preenv++)		    /* is it in the standard */
-     if(!strncmp(a,*preenv,eq)&&(*preenv)[eq]=='=')	     /* environment? */
-wipenv:
-      { while(*preenv=preenv[1])   /* wipe this entry out of the environment */
-	   preenv++;
-	break;
-      }
-  i=(preenv-environ+2)*sizeof*environ;
-  if(alloced)		   /* have we ever alloced the environ array before? */
-     environ=realloc(environ,i);
-  else
-     alloced=1,environ=tmemmove(malloc(i),environ,i-sizeof*environ);
-  if(!remove)		  /* if not remove, then add it to both environments */
-   { for(preenv=environ;*preenv;preenv++);
-     preenv[1]=0;*(lastenv=preenv)=(char*)(split=newdynstring(&myenv,a));
-     return split+eq+1;
-   }
-  return empty;
-}
-	   /* between calling primeStdout() and retStdout() *no* environment */
-void primeStdout(varname)const char*const varname;   /* changes are allowed! */
-{ if(!Stdout)
-     sputenv(varname);
-  Stdout=(char*)myenv;
-  Stdfilled=ioffsetof(struct dynstring,ename[0])+strlen(varname);
-}
-
-void retStdout(newmyenv,fail,unset)		/* see note on primeStdout() */
- char*const newmyenv;const int fail,unset;
-{ char*var,*p;
-  if(fail&&unset)				     /* on second thought... */
-   { myenv=((struct dynstring*)newmyenv)->enext;	 /* pull it back out */
-     free(newmyenv);*lastenv=Stdout=0;
-     return;
-   }
-  else if(!fail&&newmyenv[Stdfilled-1]=='\n')  /* strip one trailing newline */
-     Stdfilled--;
-  retbStdout(newmyenv);
-  var=newmyenv+ioffsetof(struct dynstring,ename[0]);	    /* setup to copy */
-  p=strchr(var,'=');			       /* the variable name into buf */
-  tmemmove(buf,var,p-var);			     /* so that we can check */
-  buf[p-var]='\0';						/* for magic */
-  if(fail)
-     asenvtext(p+1);	  /* we always have to update the pointers for these */
-  else
-     asenv(p+1);					 /* invoke any magic */
-}
-
-void retbStdout(newmyenv)char*const newmyenv;	/* see note on primeStdout() */
-{ newmyenv[Stdfilled]='\0';*lastenv=(myenv=(struct dynstring*)newmyenv)->ename;
-  Stdout=0;
-}
-
-		 /* Append a space and then `value' to the last variable set */
-void appendlastvar(value)const char*const value;
-{ size_t len;char*p;
-  Stdout=(char*)value;primeStdout(empty);
-  len=Stdfilled+strlen(Stdout+Stdfilled);	     /* Skip over the header */
-  p=realloc(Stdout,(Stdfilled=len+1+strlen(value))+1);
-  p[len]=' ';strcpy(p+len+1,buf);retbStdout(p);	  /* WARNING: no magic here! */
-}
-
-const char*eputenv(src,dst)const char*const src;char*const dst;
-{ sgetcp=src;
-  return readparse(dst,sgetc,2)?0:sputenv(buf);
-}
+#endif

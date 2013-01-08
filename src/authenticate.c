@@ -13,7 +13,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: authenticate.c,v 1.5.4.2 2001/07/15 09:27:07 guenther Exp $";
+ "$Id: authenticate.c,v 1.10 2001/06/27 17:07:19 guenther Exp $";
 #endif
 
 #ifdef PROCMAIL

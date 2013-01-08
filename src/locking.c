@@ -1,12 +1,14 @@
 /************************************************************************
  *	Whatever is needed for (un)locking files in various ways	*
  *									*
- *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1997, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1998-2001, Philip Guenther, The United States	*
+ *						of America		*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: locking.c,v 1.54.2.2 2001/07/15 09:27:21 guenther Exp $";
+ "$Id: locking.c,v 1.62 2001/06/23 08:18:46 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -18,17 +20,19 @@ static /*const*/char rcsid[]=
 #include "locking.h"
 #include "lastdirsep.h"
 
-void lockit(name,lockp)char*name;char**const lockp;
+char*globlock;
+
+int lockit(name,lockp)char*name;char**const lockp;
 { int permanent=nfsTRY,triedforce=0,locktype=doLOCK;struct stat stbuf;time_t t;
   zombiecollect();
   if(*lockp)
    { if(!strcmp(name,*lockp))	/* compare the previous lockfile to this one */
-      { free(name);return;	 /* they're equal, save yourself some effort */
+      { free(name);return 1;	 /* they're equal, save yourself some effort */
       }
      unlock(lockp);		       /* unlock any previous lockfile FIRST */
    }				  /* to prevent deadlocks (I hate deadlocks) */
   if(!*name)
-   { free(name);return;
+   { free(name);return 1;
    }
   if(!strcmp(name,defdeflock))	       /* is it the system mailbox lockfile? */
    { locktype=doCHECK|doLOCK;
@@ -36,7 +40,7 @@ void lockit(name,lockp)char*name;char**const lockp;
 #ifndef fdlock
 	if(!accspooldir)
 	 { yell("Bypassed locking",name);
-	   free(name);return;
+	   free(name);return 0;
 	 }
 #endif
 	;
@@ -95,29 +99,34 @@ term: { free(name);			     /* drop the preallocated buffer */
 	break;
       }
    }
-  if(rcstate==rc_NORMAL)			   /* we already set our ids */
+  if(!privileged)				   /* we already set our ids */
      setegid(gid);		      /* we put back our regular permissions */
   lcking&=~lck_DELAYSIG;
   if(nextexit)
      elog(whilstwfor),elog("lockfile"),logqnl(name),Terminate();
+  return !!*lockp;
 }
 
-void lcllock P((void))				    /* lock a local lockfile */
+int lcllock(noext,withext)			    /* lock a local lockfile */
+ const char*const noext,*const withext;
 { char*lckfile;			    /* locking /dev/null or | would be silly */
-  if(tolock||strcmp(buf2,devnull)&&strcmp(buf2,"|"))
-   { if(tolock)
-	lckfile=tstrdup(tolock);
+  if(noext||(strcmp(withext,devnull)&&strcmp(withext,"|")))
+   { if(noext)
+	lckfile=tstrdup(noext);
      else
-      { int len=strlen(buf2);
-	strcpy(strcpy(lckfile=malloc(len+strlen(lockext)+1),buf2)+len,lockext);
+      { size_t len=strlen(withext);
+	lckfile=malloc(len+strlen(lockext)+1);
+	strcpy(strcpy(lckfile,withext)+len,lockext);
       }
      if(globlock&&!strcmp(lckfile,globlock))	 /* same as global lockfile? */
       { nlog("Deadlock attempted on");logqnl(lckfile);
 	free(lckfile);
+	return 0;
       }
      else
-	lockit(lckfile,&loclock);
+	return lockit(lckfile,&loclock);
    }
+  return 1;
 }
 
 void unlock(lockp)char**const lockp;
@@ -128,7 +137,7 @@ void unlock(lockp)char**const lockp;
      yell("Unlocking",*lockp);
      if(unlink(*lockp))
 	nlog("Couldn't unlock"),logqnl(*lockp);
-     if(rcstate==rc_NORMAL)			   /* we already set our ids */
+     if(!privileged)				   /* we already set our ids */
 	setegid(gid);		      /* we put back our regular permissions */
      if(!nextexit)			   /* if not inside a signal handler */
 	free(*lockp);

@@ -10,19 +10,20 @@
  *									*
  *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
- *						of America		*
+ *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: lockfile.c,v 1.43.2.2 2001/07/15 09:27:20 guenther Exp $";
+ "$Id: lockfile.c,v 1.48 2001/02/20 10:14:07 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 2001/07/15 09:27:20 $";
+static /*const*/char rcsdate[]="$Date: 2001/02/20 10:14:07 $";
 #include "includes.h"
 #include "sublib.h"
 #include "exopen.h"
 #include "mcommon.h"
 #include "authenticate.h"
+#include "lastdirsep.h"
 #include "../patchlevel.h"
 
 static volatile int exitflag;
@@ -38,12 +39,11 @@ static void failure P((void))				      /* signal trap */
 }
 				    /* see locking.c for comment on xcreat() */
 static int xcreat(name,tim)const char*const name;time_t*const tim;
-{ char*p,*q;int j= -1;size_t i;struct stat stbuf;
-  for(q=(char*)name;p=strpbrk(q,dirsep);q=p+1);
-  i=q-name;
+{ char*p;int j= -1;size_t i;struct stat stbuf;
+  i=lastdirsep(name)-name;
   if(!(p=malloc(i+UNIQnamelen)))
      return exitflag=1;
-  memcpy(p,name,i);
+  strncpy(p,name,i);
   if(unique(p,p+i,0,LOCKperm,0,doCHECK|doLOCK))
      stat(p,&stbuf),*tim=stbuf.st_mtime,j=myrename(p,name);
   free(p);
@@ -101,6 +101,9 @@ again:
 		       goto checkrdec;
 		  }
 	      case VERSIONOPT:elog("lockfile");elog(VERSION);
+		    elog("\nYour system mailbox's lockfile:\t");
+		    elog(auth_mailboxname(auth_finduid(getuid(),0)));
+		    elog(lockext);elog("\n");
 		  goto xusg;
 	      case HELPOPT1:case HELPOPT2:elog(usage);
 		 elog(

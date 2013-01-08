@@ -2,7 +2,7 @@ For installation instructions see the INSTALL file.
 ----------------------
 Procmail & formail mail processing package.
 Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands.
-Copyright (c) 1999-2001, Philip Guenther, The United States of America
+Copyright (c) 1997-2001, Philip Guenther, The United States of America
 
 Some legal stuff:
 
@@ -36,7 +36,7 @@ see "src/includes.h".
 
 ------------------------------ DESCRIPTION -----------------------------------
 
-The procmail mail processing program. (v3.15.2 2001/07/18)
+The procmail mail processing program. (v3.20 2001/06/28)
 
 Can be used to create mail-servers, mailing lists, sort your incoming mail
 into separate folders/files (real convenient when subscribing to one or more
@@ -110,7 +110,7 @@ feedback procmail would not have looked the same:
 	Alan K. Stebbens	For his endless creativity and suggestions.
 	 <aks@sgi.com>
 	Philip Guenther		Sometimes faster at repairing bugs than I can
-	 <guenther@sendmail.com>  write them :-)  He's also the current main
+	 <guenther@sendmail.com> write them :-) He's also the current main
 				coordinator of procmail/SmartList development.
 	Era Eriksson		For maintaining the FAQ.  He's also the
 	 <era@iki.fi>		current coordinator of the procmail volunteer
@@ -180,6 +180,10 @@ The current list of mirror sites include:
 	ftp://ftp.win.ne.jp/pub/network/mail/procmail/
 	http://www.ring.gr.jp/archives/net/mail/procmail/
 	ftp://ftp.ring.gr.jp/pub/net/mail/procmail/
+	ftp://ftp.ayamura.org/pub/procmail/
 	ftp://sunsite.cnlab-switch.ch/mirror/procmail/
 	ftp://ftp.gigabell.net/pub/procmail/
+	ftp://ftp.linja.net/pub/mirrors/procmail/
+	ftp://ftp.stealth.net/pub/mirrors/ftp.procmail.org/pub/procmail/
+	ftp://ftp.mirror.ac.uk/sites/ftp.procmail.org/pub/procmail/
 ----------------------

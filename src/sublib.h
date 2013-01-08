@@ -1,4 +1,4 @@
-/*$Id: sublib.h,v 1.10.2.1 2001/07/15 09:27:35 guenther Exp $*/
+/*$Id: sublib.h,v 1.12 2001/06/27 17:07:26 guenther Exp $*/
 
 #ifdef NOmemmove
 void
@@ -22,8 +22,12 @@ void
 
 #ifdef NOstrlcat
 size_t
- sstrlcat Q((char *dst,const char*src,size_t size)),
- sstrlcpy Q((char *dst,const char*src,size_t size));
+ strlcat Q((char *dst,const char*src,size_t size));
+#endif
+
+#ifdef NOstrerror
+char
+ *strerror P((int err));
 #endif
 
 #ifdef NOstrtol

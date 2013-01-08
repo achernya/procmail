@@ -1,4 +1,4 @@
-#$Id: Makefile,v 1.73.4.1 2000/01/20 16:59:15 guenther Exp $
+#$Id: Makefile,v 1.75 2001/06/23 08:18:31 guenther Exp $
 
 # BASENAME should point to where the whole lot will be installed
 # change BASENAME to your home directory if need be
@@ -104,6 +104,7 @@ BSHELL	= /bin/sh
 INSTALL = cp
 DEVNULL = /dev/null
 STRIP	= strip
+MKDIRS	= new/mkinstalldirs
 
 SUBDIRS = src man
 BINSS	= procmail lockfile formail mailstat

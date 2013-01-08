@@ -1,14 +1,19 @@
-/*$Id: misc.h,v 1.44.2.3 2001/07/15 09:27:26 guenther Exp $*/
+/*$Id: misc.h,v 1.54 2001/06/21 09:43:48 guenther Exp $*/
 
-struct dyna_long{int filled,tspace;union{int i;off_t o;long l;}*vals;};
+struct dyna_array{int filled,tspace;char*vals;};
 struct dynstring{struct dynstring*enext;char ename[255];};
 
-#define app_valo(sp,val)	(*(off_t*)app_val_(&sp)=(val))
-#define app_vall(sp,val)	(*(long *)app_val_(&sp)=(val))
-#define app_vali(sp,val)	(*(int	*)app_val_(&sp)=(val))
-#define acc_valo(sp,off)	sp.vals[off].o		/* this is an lvalue */
-#define acc_vall(sp,off)	sp.vals[off].l			    /* ditto */
-#define acc_vali(sp,off)	sp.vals[off].i			    /* ditto */
+#define app_val_type(sp,type)	(type*)app_val_(&sp,sizeof(type))
+#define app_valo(sp,val)	(*app_val_type(sp,off_t)=(val))
+#define app_vall(sp,val)	(*app_val_type(sp,long)=(val))
+#define app_vali(sp,val)	(*app_val_type(sp,int)=(val))
+#define app_valp(sp,val)	(*app_val_type(sp,const char*)=(val))
+
+#define acc_val_(sp,type,off)	((type*)sp.vals)[off]
+#define acc_valo(sp,off)	acc_val_(sp,off_t,off)	/* these are lvalues */
+#define acc_vall(sp,off)	acc_val_(sp,long,off)
+#define acc_vali(sp,off)	acc_val_(sp,int,off)
+#define acc_valp(sp,off)	acc_val_(sp,const char*,off)
 
 void
  elog P((const char*const newt)),
@@ -32,43 +37,21 @@ void
  offguard P((void)),
  Terminate P((void)) __attribute__((noreturn)),
  suspend P((void)),
- *app_val_ P((struct dyna_long*const sp)),
- setmaildir P((const char*const newdir)),
- setoverflow P((void)),
- srequeue P((void)),
- slose P((void)),
- sbounce P((void)),
- setdef P((const char*const name,const char*const contents)),
- metaparse P((const char*p)),
- setlastfolder P((const char*const folder)),
- mallocbuffers Q((size_t lineb,int setenv)),
- asenv P((const char*const chp)),
- asenvtext P((const char*const chp)),
- concatenate P((char*p)),
- squeeze P((char*target)),
- initdefenv P((void)),
- rcst_nosgid P((void));
+ *app_val_ P((struct dyna_array*const sp,int size)),
+ setupsigs P((void));
 int
  forkerr Q((const pid_t pid,const char*const a)),
+ buildpath P((const char*name,const char*const path,const char*const file)),
  nextrcfile P((void)),
- asenvcpy P((char*src)),
- alphanum P((const unsigned c)),
  enoughprivs Q((const auth_identity*const passinvk,const uid_t euid,
   const gid_t egid,const uid_t uid,const gid_t gid)),
  conditions P((char flags[],const int prevcond,const int lastsucc,
-  const int lastcond,int nrcond));
+  const int lastcond,const int skipping,int nrcond));
 char
  *tstrdup P((const char*const a)),
- *pmrc2buf P((void)),
  *cstr P((char*const a,const char*const b)),
- *gobenv P((char*chp,char*end)),
  *egrepin P((char*expr,const char*source,const long len,int casesens));
 const char
- *tgetenv P((const char*const a)),
  *newdynstring P((struct dynstring**const adrp,const char*const chp));
-long
- renvint P((const long i,const char*const env));
 
-extern const char lastfolder[],maildir[];
-extern int didchd;
-extern char*globlock;
+extern int fakedelivery;

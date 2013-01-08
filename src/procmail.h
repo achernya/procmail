@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 1.44.2.3 2001/07/15 09:27:31 guenther Exp $*/
+/*$Id: procmail.h,v 1.55 2001/06/21 17:48:12 guenther Exp $*/
 
 #include "includes.h"
 
@@ -52,8 +52,8 @@
 #endif
 #endif
 
-#define rc_NOSGID	1		      /* you can forget any sgidness */
-#define rc_NORMAL	2
+#define priv_DONTNEED	1			  /* don't need root to sgid */
+#define priv_START	2			       /* we might have root */
 
 #define MCDIRSEP	(dirsep+STRLEN(dirsep)-1)      /* most common DIRSEP */
 #define MCDIRSEP_	(dirsep+STRLEN(DIRSEP)-1)
@@ -87,22 +87,18 @@ extern struct varstr{const char*const sname,*sval;}strenstr[];
 #define flagsendmail	(strenstr[7].sval)
 /* #define PM_version	(strenstr[8].sval) */
 
-int
- eqFrom_ P((const char*const a));
-const char
- *skipFrom_ P((const char*startchar,long*tobesentp));
 
-extern char*buf,*buf2,*loclock,*tolock,*Stdout,*themail,*thebody;
+extern char*buf,*buf2,*loclock,*thebody;
 extern const char shell[],lockfile[],newline[],binsh[],unexpeof[],*const*gargv,
  *const*restargv,*sgetcp,pmrc[],*rcfile,dirsep[],devnull[],empty[],lgname[],
  executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],host[],
- *defdeflock,*argv0,exceededlb[],slogstr[],conflicting[],orgmail[],
- insufprivs[],errwwriting[];
+ *defdeflock,*argv0,exceededlb[],curdir[],slogstr[],conflicting[],orgmail[],
+ insufprivs[],errwwriting[],Version[];
 extern long filled,lastscore;
-extern int sh,pwait,retval,retvl2,rcstate,rc,ignwerr,lexitcode,
- asgnlastf,accspooldir,crestarg,skiprc,savstdout,berkeley,mailfilter,erestrict,
- ifdepth;
-extern struct dyna_long ifstack;
+extern int sh,pwait,retval,retvl2,rc,privileged,ignwerr,
+ lexitcode,accspooldir,crestarg,savstdout,berkeley,mailfilter,erestrict,
+ Deliverymode,ifdepth;
+extern struct dyna_array ifstack;
 extern size_t linebuf;
 extern volatile int nextexit,lcking;
 extern pid_t thepid;
@@ -113,7 +109,7 @@ extern gid_t gid,sgid;
  *	External variables that are checked/changed by the signal handlers:
  *	volatile time_t alrmtime;
  *	pid_t pidfilt,pidchild;
- *	volatile int nextexit,lcking;
+ *	volatile nextexit,lcking;
  *	size_t linebuf;
  *	static volatile int mailread;	in mailfold.c
  */

@@ -8,28 +8,31 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.90.2.6 2001/07/16 04:27:12 guenther Exp $";
+ "$Id: mailfold.c,v 1.103 2001/06/26 08:43:52 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
 #include "sublib.h"
 #include "robust.h"
-#include "shell.h"
 #include "misc.h"
+#include "memblk.h"
 #include "pipes.h"
 #include "common.h"
 #include "exopen.h"
 #include "goodies.h"
+#include "variables.h"
 #include "locking.h"
 #include "lastdirsep.h"
 #include "foldinfo.h"
+#include "from.h"
+#include "shell.h"
 #include "mailfold.h"
 
 int logopened,rawnonl;
 off_t lasttell;
 static long lastdump;
 static volatile int mailread;	/* if the mail is completely read in already */
-static struct dyna_long confield;		  /* escapes, concatenations */
+static struct dyna_array confield;		  /* escapes, concatenations */
 static const char*realstart,*restbody;
 static const char from_expr[]=FROM_EXPR;
 
@@ -50,7 +53,7 @@ static long getchunk(s,fromw,len)const int s;const char*fromw;const long len;
   if(fromw<thebody)			   /* are we writing the header now? */
      ffrom=fifrom(fromw,realstart,thebody);		      /* scan header */
   if(!ffrom&&(endp=fromw+len)>restbody)	       /* nothing yet? but in range? */
-   { if((endp+=STRLEN(from_expr)-1)>(ffrom=themail+filled))	/* add slack */
+   { if((endp+=STRLEN(from_expr)-1)>(ffrom=themail.p+filled))	/* add slack */
 	endp=(char*)ffrom;		  /* make sure we stay within bounds */
      ffrom=fifrom(fromw,restbody,endp);			  /* scan body block */
    }
@@ -82,7 +85,10 @@ long dump(s,type,source,len)const int s,type;const char*source;
    { if(ft_lock(type)&&(lseek(s,(off_t)0,SEEK_END),fdlock(s)))
 	nlog("Kernel-lock failed\n");
      lastdump=len;doesc=0;
-     part=ft_delim(type)&&!rawnonl?getchunk(s,source,len):len;
+     if(ft_delim(type)&&!rawnonl)
+	part=getchunk(s,source,len);			/* must escape From_ */
+     else
+	part=len;
      lasttell=lseek(s,(off_t)0,SEEK_END);
      if(!rawnonl)
       { smboxseparator(s);			       /* optional separator */
@@ -107,7 +113,8 @@ jin:	while(part&&(i=rwrite(s,source,BLKSIZ<part?BLKSIZ:(int)part)))
       }
      while(len);
      if(!rawnonl)
-      { if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n')))
+      { if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n'))&&
+	 ft_forceblank(type))
 	   lastdump++,rwrite(s,newline,1);     /* message always ends with a */
 	emboxseparator(s);	 /* newline and an optional custom separator */
       }
@@ -156,11 +163,10 @@ exlb: { nlog(exceededlb);setoverflow();
      goto opn;
    }
   else if(type==ft_MAILDIR)
-   { if(!unique(buf,chp,linebuf,NORMperm,
-      verbose,0))
+   { if(!unique(buf,chp,linebuf,NORMperm,verbose,doMAILDIR))
 	goto ret;
      unlink(buf);			 /* found a name, remove file in tmp */
-     memcpy(chp-MAILDIRLEN-1,maildirnew,MAILDIRLEN);	/* but link directly */
+     strncpy(chp-MAILDIRLEN-1,maildirnew,MAILDIRLEN);	/* but link directly */
    }								 /* into new */
   else								   /* ft_DIR */
    { size_t mpl=strlen(msgprefix);
@@ -190,7 +196,7 @@ int writefolder(boxname,linkfolder,source,len,ignwerr,dolock)
 { char*chp,*chp2;mode_t mode;int fd,type;
   if(*boxname=='|'&&(!linkfolder||linkfolder==Tmnate))
    { setlastfolder(boxname);
-     fd=rdup(savstdout);
+     fd=rdup(Deliverymode==2?STDOUT:savstdout);
      type=ft_PIPE;
      goto dumpc;
    }
@@ -232,7 +238,7 @@ dumpf:	 { switch(errno)
 	      default:writeerr(buf);
 	    }
 	   if(lasttell>=0&&!truncate(boxname,lasttell)&&(logopened||verbose))
-	      nlog("Truncated file to former size\n");	     /* undo garbage */
+	      nlog("Truncated file to former size\n");	    /* undo garbage */
 ret0:	   return 0;
 	 }
 	return 1;
@@ -243,7 +249,7 @@ retf:	if(linkfolder)
 	   free(linkfolder);
 	goto ret0;
      case ft_MAILDIR:
-	if(source==themail)			      /* skip leading From_? */
+	if(source==themail.p)			      /* skip leading From_? */
 	   source=skipFrom_(source,&len);
 	strcpy(buf2,buf);
 	chp2=buf2+(chp-buf)-MAILDIRLEN;
@@ -251,7 +257,7 @@ retf:	if(linkfolder)
 	;{ int retries=MAILDIRretries;
 	   for(;;)
 	    { struct stat stbuf;
-	      if(0>(fd=unique(buf,chp,linebuf,NORMperm,verbose,doFD)))
+	      if(0>(fd=unique(buf,chp,linebuf,NORMperm,verbose,doFD|doMAILDIR)))
 		 goto nfail;
 	      if(dump(fd,ft_MAILDIR,source,len)&&!ignwerr)
 		 goto failed;
@@ -275,7 +281,7 @@ retf:	if(linkfolder)
 	break;
      case ft_MH:
 #if 0
-	if(source==themail)
+	if(source==themail.p)
 	   source=skipFrom_(source,&len);
 #endif
      default:						     /* case ft_DIR: */
@@ -328,12 +334,12 @@ void logabstract(lstfolder)const char*const lstfolder;
    { char*chp,*chp2;int i;static const char sfolder[]=FOLDER;
      if(mailread)			  /* is the mail completely read in? */
       { i= *thebody;*thebody='\0';     /* terminate the header, just in case */
-	if(eqFrom_(chp=themail))		       /* any "From " header */
-	 { if(chp=strchr(themail,'\n'))
+	if(eqFrom_(chp=themail.p))		       /* any "From " header */
+	 { if(chp=strchr(themail.p,'\n'))
 	      *chp='\0';
 	   else
 	      chp=thebody;			  /* preserve mailbox format */
-	   elog(themail);elog(newline);*chp='\n';	     /* (any length) */
+	   elog(themail.p);elog(newline);*chp='\n';	     /* (any length) */
 	 }
 	*thebody=i;			   /* eliminate the terminator again */
 	if(!nextexit&&				/* don't reenter malloc/free */
@@ -346,8 +352,8 @@ void logabstract(lstfolder)const char*const lstfolder;
 	   elog(" ");elog(buf);elog(newline);
 	 }
       }
-     elog(sfolder);strlcpy(buf,lstfolder,MAXfoldlen);detab(buf);elog(buf);
-     i=strlen(buf)+STRLEN(sfolder);i-=i%TABWIDTH;		/* last dump */
+     elog(sfolder);i=strlen(strncpy(buf,lstfolder,MAXfoldlen))+STRLEN(sfolder);
+     buf[MAXfoldlen]='\0';detab(buf);elog(buf);i-=i%TABWIDTH;	/* last dump */
      do elog(TABCHAR);
      while((i+=TABWIDTH)<LENoffset);
      ultstr(7,lastdump,buf);elog(buf);elog(newline);
@@ -361,35 +367,54 @@ void concon(ch)const int ch;   /* flip between concatenated and split fields */
   if(concnd!=ch)				   /* is this run redundant? */
    { concnd=ch;			      /* no, but note this one for next time */
      for(i=confield.filled;i;)		   /* step through the saved offsets */
-	themail[acc_vall(confield,--i)]=ch;	       /* and flip every one */
+	themail.p[acc_vall(confield,--i)]=ch;	       /* and flip every one */
    }
 }
 
 void readmail(rhead,tobesent)const long tobesent;
 { char*chp,*pastend;static size_t contlengthoffset;
   ;{ long dfilled;
-     if(rhead)					/* only read in a new header */
-      { dfilled=mailread=0;chp=readdyn(malloc(1),&dfilled);filled-=tobesent;
-	if(tobesent<dfilled)		   /* adjust buffer size (grow only) */
-	 { char*oldp=themail;
-	   thebody=(themail=realloc(themail,dfilled+filled))+(thebody-oldp);
+     if(rhead==2)		  /* already read, just examine what we have */
+	dfilled=mailread=0;
+     else if(rhead)				/* only read in a new header */
+      { memblk new;
+	dfilled=mailread=0;makeblock(&new,0);readdyn(&new,&dfilled,0);
+	if(tobesent>dfilled&&isprivate)		     /* put it in place here */
+	 { tmemmove(themail.p+dfilled,thebody,filled-=tobesent);
+	   tmemmove(themail.p,new.p,dfilled);
+	   resizeblock(&themail,filled+=dfilled,1);
+	   freeblock(&new);
 	 }
-	tmemmove(themail+dfilled,thebody,filled);tmemmove(themail,chp,dfilled);
-	free(chp);themail=realloc(themail,1+(filled+=dfilled));
+	else			   /* too big or must share -- switch blocks */
+	 { resizeblock(&new,filled-tobesent+dfilled,0);
+	   tmemmove(new.p+dfilled,thebody,filled-=tobesent);
+	   freeblock(&themail);
+	   themail=new;private(1);
+	   filled+=dfilled;
+	 }
       }
      else
       { if(!mailread||!filled)
 	   rhead=1;	 /* yup, we read in a new header as well as new mail */
-	mailread=0;dfilled=thebody-themail;themail=readdyn(themail,&filled);
+	mailread=0;dfilled=thebody-themail.p;
+	if(!isprivate)
+	 { memblk new;
+	   makeblock(&new,filled);
+	   if(filled)
+	      tmemmove(new.p,themail.p,filled);
+	   freeblock(&themail);
+	   themail=new;private(1);
+	 }
+	readdyn(&themail,&filled,filled+tobesent);
       }
-     *(pastend=filled+(thebody=themail))='\0';		   /* terminate mail */
+     pastend=filled+(thebody=themail.p);
      while(thebody<pastend&&*thebody++=='\n');	     /* skip leading garbage */
      realstart=thebody;
      if(rhead)			      /* did we read in a new header anyway? */
       { confield.filled=0;concnd='\n';
 	while(thebody=strchr(thebody,'\n'))
 	   switch(*++thebody)			    /* mark continued fields */
-	    { case '\t':case ' ':app_vall(confield,(long)(thebody-1-themail));
+	    { case '\t':case ' ':app_vall(confield,(long)(thebody-1-themail.p));
 	      default:
 		 continue;		   /* empty line marks end of header */
 	      case '\n':thebody++;
@@ -399,18 +424,19 @@ void readmail(rhead,tobesent)const long tobesent;
 eofheader:
 	contlengthoffset=0;		      /* traditional Berkeley format */
 	if(!berkeley&&				  /* ignores Content-Length: */
-	   (chp=egrepin("^Content-Length:",themail,(long)(thebody-themail),0)))
-	   contlengthoffset=chp-themail;
+	   (chp=egrepin("^Content-Length:",themail.p,
+			(long)(thebody-themail.p),0)))
+	   contlengthoffset=chp-themail.p;
       }
      else			       /* no new header read, keep it simple */
-	thebody=themail+dfilled; /* that means we know where the body starts */
+	thebody=themail.p+dfilled; /* that means we know where the body starts */
    }		      /* to make sure that the first From_ line is uninjured */
-  if((chp=thebody)>themail)
+  if((chp=thebody)>themail.p)
      chp--;
   if(contlengthoffset)
    { unsigned places;long cntlen,actcntlen;charNUM(num,cntlen);
-     chp=themail+contlengthoffset;cntlen=filled-(thebody-themail);
-     if(filled>1&&themail[filled-2]=='\n')		 /* no phantom '\n'? */
+     chp=themail.p+contlengthoffset;cntlen=filled-(thebody-themail.p);
+     if(filled>1&&themail.p[filled-2]=='\n')		 /* no phantom '\n'? */
 	cntlen--;		     /* make sure it points to the last '\n' */
      for(actcntlen=places=0;;)
       { switch(*chp)
@@ -428,30 +454,8 @@ eofheader:
 	cntlen=0;
      ultstr(places,cntlen,num);			       /* our preferred size */
      if(!num[places])		       /* does it fit in the existing space? */
-	tmemmove(themail+contlengthoffset,num,places),actcntlen=cntlen;
+	tmemmove(themail.p+contlengthoffset,num,places),actcntlen=cntlen;
      chp=thebody+actcntlen;		  /* skip the actual no we specified */
    }
   restbody=chp;mailread=1;
-}
-			  /* tries to locate the timestamp on the From_ line */
-char*findtstamp(start,end)const char*start,*end;
-{ end-=25;
-  if(*start==' '&&(++start==end||*start==' '&&++start==end))
-     return (char*)start-1;
-  start=skpspace(start);start+=strcspn(start," \t\n");	/* jump over address */
-  if(skpspace(start)>=end)			       /* enough space left? */
-     return (char*)start;	 /* no, too small for a timestamp, stop here */
-  while(!(end[13]==':'&&end[16]==':')&&--end>start);	  /* search for :..: */
-  ;{ int spc=0;						 /* found it perhaps */
-     while(end-->start)		      /* now skip over the space to the left */
-      { switch(*end)
-	 { case ' ':case '\t':spc=1;
-	      continue;
-	 }
-	if(!spc)
-	   continue;
-	break;
-      }
-     return (char*)end+1;	   /* this should be right after the address */
-   }
 }

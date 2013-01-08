@@ -1,8 +1,7 @@
 #! /bin/sh
 :
 # Copyright (c) 1990-1997, S.R. van den Berg, The Netherlands
-# Copyright (c) 1999-2001, Philip Guenther, The United States of America
-#$Id: autoconf,v 1.122.2.5 2001/07/16 06:58:19 guenther Exp $
+#$Id: autoconf,v 1.134 2001/06/21 09:28:03 guenther Exp $
 
 # All possible entries in autoconf.h:
 
@@ -1492,7 +1491,7 @@ do
 done
 
 echo "#define defPATH \"PATH=\$HOME/bin:$lpath\"" >>$ACONF
-echo "#define defSPATH \"PATH=$lpath\"" >>$ACONF
+echo "#define defSPATH \"SPATH=$lpath\"" >>$ACONF
 
 sed -n -e 's/^ v\([^ ]*\) .*$/#define PM_VERSION "\1"/p' \
  ../patchlevel.h >>$ACONF

@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.88.2.4 2001/07/15 09:26:57 guenther Exp $*/
+/*$Id: config.h,v 1.99 2001/06/28 22:54:31 guenther Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -52,6 +52,12 @@
 	is group writable or contained in a group writable home directory
 	if the group involved is the user's default group. */
 
+/*#define LMTP					/* uncomment this if you
+						   want to use procmail
+	as an LMTP (rfc2033) server, presumably for invocation by an MTA.
+	The file examples/local_procmail_lmtp.m4 contains info on how to
+	set this up with sendmail. */
+
 /* This file previously allowed you to define SYSTEM_MBOX.  This has
    changed.  If you want mail delivery to custom mail-spool-files, edit the
    src/authenticate.c file and change the content of:  auth_mailboxname()
@@ -95,11 +101,13 @@
 	and Bcc: header fields.	 If it can't do this, many standard recipes
 	will not work. */
 
+#define DEFmaildir	"$HOME"	     /* default value for the MAILDIR variable;
+					this must be an absolute path */
+
 #define PROCMAILRC	"$HOME/.procmailrc"	/* default rcfile for every
 						   recipient;  if this file
 	is not found, maildelivery will proceed as normal to the default
-	system mailbox.	 This must be an absolute path or bad things will
-	happen. */
+	system mailbox.	 This also must be an absolute path */
 
 #define ETCRC	"/etc/procmailrc"	/* optional global procmailrc startup
 					   file (will only be read if procmail
@@ -145,9 +153,19 @@
 #define DEFlinebuf	512
 #define BLKSIZ		1024
 #define STDBUF		128
+#undef USE_MMAP				       /* don't bother on these guys */
 #endif /* SMALLHEAP */
+#undef USE_MMAP					 /* UNTIL PROBLEMS ARE FIXED */
+#ifdef USE_MMAP
+#ifndef INEFFICIENTrealloc
+#define INEFFICIENTrealloc			  /* don't pussy-foot around */
+#endif
+#define MAXinMEM	(1024*1024)		 /* when to switch to mmap() */
+#define MMAP_DIR	"/var/spool/procmail/"		     /* where to put */
+#endif								/* the files */
 #define MINlogbuf	81			       /* fit an entire line */
 #define MAXlogbuf	1000		       /* in case someone abuses LOG */
+#define MAILERDAEMON	"MAILER-DAEMON"	      /* From_ address to replace <> */
 #define FAKE_FIELD	">From "
 #define RETRYunique	8	   /* # of tries at making a unique filename */
 #define BOGUSprefix	"BOGUS."	     /* prepended to bogus mailboxes */
@@ -207,7 +225,7 @@ MMGR)\
 #define MAILDIRcur	"/cur"
 #define MAILDIRnew	"/new"
 #define MAILDIRLEN	STRLEN(MAILDIRnew)
-#define MAILDIRretries	5	   /* retries on obtaining a unique filename */
+#define MAILDIRretries	3	   /* retries on obtaining a unique filename */
 
 #define EOFName		" \t\n#`'\");"
 
@@ -226,11 +244,13 @@ MMGR)\
 #define ALTBERKELEYOPT	'y'			/* same effect as -Y, kludge */
 #define ARGUMENTOPT	'a'					   /* set $1 */
 #define DELIVEROPT	'd'		  /* deliver mail to named recipient */
+#define LMTPOPT		'z'			/* talk LTMP on stdin/stdout */
 #define PM_USAGE	\
  "Usage: procmail [-vptoY] [-f fromwhom] [parameter=value | rcfile] ...\
-\n   Or: procmail [-toY] [-f fromwhom] [-a argument] -d recipient ...\
+\n   Or: procmail [-toY] [-f fromwhom] [-a argument] ... -d recipient ...\
 \n\
    Or: procmail [-ptY] [-f fromwhom] -m [parameter=value] ... rcfile [arg] ...\
+\n   Or: procmail [-toY] [-a argument] ... -z\
 \n"
 #define PM_HELP		\
  "\t-v\t\tdisplay the version number and exit\
@@ -239,8 +259,9 @@ MMGR)\
 \n\t-f fromwhom\t(re)generate the leading 'From ' line\
 \n\t-o\t\toverride the leading 'From ' line if necessary\
 \n\t-Y\t\tBerkeley format mailbox, disregard Content-Length:\
-\n\t-a argument\twill set $1\
+\n\t-a argument\twill set $1, $2, etc\
 \n\t-d recipient\texplicit delivery mode\
+\n\t-z\t\tact as an LMTP server\
 \n\t-m\t\tact as a general purpose mail filter\n"
 #define PM_QREFERENCE	\
  "Recipe flag quick reference:\

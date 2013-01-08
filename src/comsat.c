@@ -9,7 +9,7 @@
 
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: comsat.c,v 1.5.2.1 2001/07/15 09:27:10 guenther Exp $";
+ "$Id: comsat.c,v 1.4 2001/06/27 17:07:20 guenther Exp $";
 #endif
 
 #include "procmail.h"
@@ -19,9 +19,10 @@ static /*const*/char rcsid[]=
 #include "sublib.h"			       /* for strtol() and strlcat() */
 #include "robust.h"					     /* for rclose() */
 #include "shell.h"					   /* for tmemmove() */
-#include "common.h"					     /* for ultstr() */
+#include "acommon.h"					     /* for ultstr() */
 #include "mailfold.h"					     /* for lasttell */
 #include "misc.h"
+#include "variables.h"
 #include "network.h"
 #include "comsat.h"
 
@@ -115,7 +116,7 @@ int setcomsat(chp)const char*chp;
   return newvalid;
 }
 
-void sendcomsat(folder)const char*folder;
+void sendcomsat P((const char*folder))
 { int s;const char*p;
   if(!csvalid||!buf)		  /* is comat on and set to a valid address? */
      return;

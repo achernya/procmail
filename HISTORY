@@ -419,7 +419,7 @@
 	       - Open or reopen rcfiles as the user to prevent peeking when
 		 not in privileged mailfilter mode
 	       - Don't use $HOME/.procmailrc if it's group-writable or in a
-		 group-writable directory, unless if the user's default group
+		 group-writable directory, unless it's the user's default group
 		 and GROUP_PER_USER is set in config.h
 	       - hardlink in a an NFS-resistant manner
 	    Worked around a compiler bug old HP compilers (pointer-unsigned),
@@ -520,7 +520,7 @@
 	       - v3.14 changed '!' actions too much: revert to v3.13 behavior
 		 but continue to split SENDMAILFLAGS
 	       - Contents of skipped nested blocks could affect 'E', 'e', 'a',
-		 and 'A' flags
+		 and 'A' flags when they shouldn't have
 	       - Prevent peeking into buffers on "Out of memory" errors
 	       - Unquoted $\var expansions could alter the interpretation of
 		 the following whitespace
@@ -528,7 +528,7 @@
 	       - Optimize SWITCHRC = $_
 	       - Use a secure PATH when processing /etc/procmailrc
 	       - Prevent attempts to exercise a Linux kernel security hole
-	       - Use 2^31-1 as the maximum score even when sizeof(long)>4
+	       - Use 2^31-1 as the maximum score, even if LONG_MAX is larger
 	    Changes to formail:
 	       - Allow -n with -D and -s again -- corruption couldn't happen
 		 after all
@@ -545,22 +545,7 @@
 	       tempfile names
 	    Called nice() when shouldn't have
 	    Workaround SunOS 4.x compiler again
-2001/01/08: v3.15.1 (fixes backported from 3.20pre)
-	    Changes to procmail:
-	       - A race to create the mailspool would bounce one of the
-		 messages due to an internal error
-	       - LC_ in KEEPENV would preserve only the first LC_foo variable
-	       - Strip runtime linker variables (LD_*) from environment on
-		 all platforms
-	       - Drop duplicate and malformed environment entries
-	       - Worked around AIX 4.3.3 xlc compiler (incorrect file-scope
-		 variable initialization)
-	    Changes to autoconf:
-	       - Check for enum support
-	       - Warn people that non-ISO/ANSI C compilers might not be
-		 supported in the future
-	    Fixed a man page formatting problem
-2001/07/18: v3.15.2 (fixes backported from 3.20 and 3.21)
+2001/06/28: v3.20
 	    Changes to procmail:
 	       - SECURITY: don't do unsafe things from signal handlers:
 		  - ignore TRAP when terminating because of a signal
@@ -568,22 +553,51 @@
 		  - save the absolute path form of $LASTFOLDER for the comsat
 		    message when it is set
 		  - only use the log buffer if it's safe
+	       - Support LMTP for delivery mode (not enabled by default)
+	       - Preliminary support for using mmap() for `large' messages
+		 (this doesn't work yet)
+	       - SWITCHRC=zero-length-file didn't always abort the current
+		 rcfile
+	       - A race to create the mailspool would bounce one of the
+		 messages due to an internal error
+	       - LC_ in KEEPENV would preserve only the first LC_foo variable
+	       - Strip runtime linker variables (LD_*) from environment on
+		 all platforms
+	       - Drop duplicate and malformed environment entries
+	       - Multiple -a options will now set $2, $3, etc
 	       - Command line assignments to INCLUDERC and SWITCHRC no longer
 		 have any effect
+	       - Worked around AIX 4.3.3 xlc compiler (incorrect file-scope
+		 variable initialization)
+	       - When delivering to a maildir, don't force the message to end
+		 with an empty line
 	       - Be more paranoid about leaking information between recipients
+	       - Unset LOCKFILE if we can't actually lock it
+	       - Set MAILDIR to '.' if the chdir fails
 	       - LASTFOLDER was sometimes set by '?' conditions
 	       - Buffer the log more efficiently
+	       - Use the `standard' format for maildir filenames and retry
+		 on name collision
 	       - Rename by linking to prevent lossage
-	       - Avoid dangling pointers when variable capture actions fail
-	       - Catch overly long command line variable assignments
 	    Changes to autoconf:
+	       - Check for enum support
+	       - Warn people that non-ISO/ANSI C compilers might not be
+		 supported in the future
 	       - IRIX compiler (7.3.1) failed the const check from warnings
 	    Changes to lockfile:
+	       - Include the system mailbox lockfile path in the -v output
 	       - Resist attempts to use a setuid lockfile command
-	       - Fix infinite loop on -l, -r, or -s flag with no value
+	       - Fix infinite loop on -l, -r, or -s flag with no value.
 	    Documented formail's treatment of >From_ lines as continuations
 	       of the From_ line and warned of problems caused by non-RFC822
 	       field names like 'Old-From '
 	    Clarified procmail's treatment of $@ and $#
-	    Increase our paranoia: start to use strlcpy()/strlcat()
+	    Fixed a man page formatting problem
+	    Use long, not off_t, with fseek()/ftell()
+	    Increase our paranoia: start to use strlcat()
+	    The default MAILDIR is now configurable separately from the
+	       default rcfile location
+	    Include an RPM spec file in the examples directory for automated
+	       builds
+	    Include and use mkinstalldirs
 	    Called nice() when shouldn't have (this time for sure!)

@@ -8,13 +8,15 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: foldinfo.c,v 1.1.2.3 2001/07/15 09:27:15 guenther Exp $";
+ "$Id: foldinfo.c,v 1.10 2001/06/27 17:07:21 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "misc.h"
 #include "lastdirsep.h"
 #include "robust.h"
 #include "exopen.h"
+#include "goodies.h"
+#include "locking.h"
 #include "foldinfo.h"
 
 static const char
@@ -99,7 +101,7 @@ static int mkmaildir(buffer,chp,paranoid)char*const buffer,*const chp;
  const int paranoid;
 { mode_t mode;int i;
   if(paranoid)
-     memcpy(buf2,buffer,i=chp-buffer+1),buf2[i-1]= *MCDIRSEP_,buf2[i]='\0';
+     strncpy(buf2,buffer,i=chp-buffer+1),buf2[i-1]= *MCDIRSEP_,buf2[i]='\0';
   return
    (strcpy(chp,maildirnew),mode=trymkdir(buffer,paranoid,i),S_ISDIR(mode))&&
    (strcpy(chp,maildircur),mode=trymkdir(buffer,paranoid,i),S_ISDIR(mode))&&
@@ -143,7 +145,7 @@ int foldertype(type,forcedir,modep,paranoid)int type,forcedir;
   if(type==ft_DIR&&!forcedir)		  /* we've already checked this case */
      goto done;
   if(paranoid)
-     memcpy(buf2,buf,i=lastdirsep(buf)-buf),buf2[i]='\0';
+     strncpy(buf2,buf,i=lastdirsep(buf)-buf),buf2[i]='\0';
   mode=trymkdir(buf,paranoid!=0,i);
   if(!S_ISDIR(mode)||(type==ft_MAILDIR&&
    (forcedir=1,!mkmaildir(buf,chp,paranoid!=0))))
@@ -168,7 +170,7 @@ ret:
 			     /* lifted out of main() to reduce main()'s size */
 int screenmailbox(chp,egid,Deliverymode)
  char*chp;const gid_t egid;const int Deliverymode;
-{ char ch;struct stat stbuf;int basetype;
+{ char ch;struct stat stbuf;int basetype,type;
   /*
    *	  do we need sgidness to access the mail-spool directory/files?
    */
@@ -188,8 +190,8 @@ int screenmailbox(chp,egid,Deliverymode)
 	     (S_IWGRP|S_IXGRP|S_IWOTH|S_IXOTH)
 	  <<1|						 /* note it in bit 1 */
 	  uid==stbuf.st_uid);	   /* we own the spool dir, note it in bit 0 */
-     if(CAN_toggle_sgid||accspooldir)
-	rcst_nosgid();			     /* we don't *need* setgid privs */
+     if((CAN_toggle_sgid||accspooldir)&&privileged)
+	privileged=priv_DONTNEED;	     /* we don't need root to setgid */
      if(uid!=stbuf.st_uid&&		 /* we don't own the spool directory */
 	(stbuf.st_mode&S_ISGID||!wwsdir))	  /* it's not world writable */
       { if(stbuf.st_gid==egid)			 /* but we have setgid privs */
@@ -213,7 +215,7 @@ keepgid:			   /* keep the gid from the parent directory */
   */
   chp=strchr(buf,'\0')-1;
   for(;;)				     /* what type of folder is this? */
-   { int type=foldertype(basetype,0,0,&stbuf);
+   { type=foldertype(basetype,0,0,&stbuf);
      if(type==ft_NOTYET)
       { if(errno!=EACCES||(setids(),lstat(buf,&stbuf)))
 	   goto nobox;
@@ -248,7 +250,7 @@ keepgid:			   /* keep the gid from the parent directory */
 		 suspend();		 /* close eyes, and hope it improves */
 	      else			/* can't deliver to this contraption */
 	       { int i=lastdirsep(buf)-buf;
-		 memcpy(buf2,buf,i);buf2[i]='\0';
+		 strncpy(buf2,buf,i);buf2[i]='\0';
 		 if(rnmbogus(buf,&stbuf,i,1))
 		    goto fishy;
 		 goto nobox;
@@ -299,7 +301,7 @@ fishy:
      if(!isgrpwrite&&!lstat(defdeflock,&stbuf)&&stbuf.st_uid!=uid&&
       stbuf.st_uid!=ROOT_uid)
       { int i=lastdirsep(buf)-buf;
-	memcpy(buf2,buf,i);buf2[i]='\0';      /* try & rename bogus lockfile */
+	strncpy(buf2,buf,i);buf2[i]='\0';     /* try & rename bogus lockfile */
 	rnmbogus(defdeflock,&stbuf,i,0);		   /* out of the way */
       }
      *chp='\0';

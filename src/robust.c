@@ -2,11 +2,13 @@
  *	The fault-tolerant system-interface				*
  *									*
  *	Copyright (c) 1990-1997, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
+ *						of America		*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: robust.c,v 1.27.2.2 2001/07/15 09:27:32 guenther Exp $";
+ "$Id: robust.c,v 1.33 2001/06/23 08:18:50 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -25,7 +27,7 @@ void nomemerr(len)const size_t len;
   nextexit=2;nlog(outofmem);elog("\n");
   syslog(LOG_NOTICE,"%s as I tried to allocate %ld bytes\n",outofmem,
    (long)len);
-  if(rcstate==rc_NORMAL&&buf&&buf2)
+  if(!privileged&&buf&&buf2)
    { buf[linebuf-1]=buf2[linebuf-1]='\0';elog("buffer 0:");logqnl(buf);
      elog("buffer 1:");logqnl(buf2);
    }
@@ -57,18 +59,6 @@ ret:  { lcking&=~(lck_MEMORY|lck_ALLOCLIB);
   nomemerr(len);
 }
 
-void*fmalloc(len)const size_t len;			 /* 'fragile' malloc */
-{ void*p;
-  lcking|=lck_ALLOCLIB;p=malloc(len);lcking&=~lck_ALLOCLIB;
-  return p;
-}
-
-void*frealloc(old,len)void*const old;const size_t len;	/* 'fragile' realloc */
-{ void*p;
-  lcking|=lck_ALLOCLIB;p=realloc(old,len);lcking&=~lck_ALLOCLIB;
-  return p;
-}
-
 void*trealloc(old,len)void*const old;const size_t len;
 { void*p;int i;
   lcking|=lck_ALLOCLIB;
@@ -83,6 +73,18 @@ ret:  { lcking&=~(lck_MEMORY|lck_ALLOCLIB);
       }
    }
   nomemerr(len);
+}
+
+void*fmalloc(len)const size_t len;			 /* 'fragile' malloc */
+{ void*p;
+  lcking|=lck_ALLOCLIB;p=malloc(len);lcking&=~lck_ALLOCLIB;
+  return p;
+}
+
+void*frealloc(old,len)void*const old;const size_t len;	/* 'fragile' realloc */
+{ void*p;
+  lcking|=lck_ALLOCLIB;p=realloc(old,len);lcking&=~lck_ALLOCLIB;
+  return p;
 }
 
 void tfree(p)void*const p;

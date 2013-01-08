@@ -2,26 +2,35 @@
  *	Custom standard-io library					*
  *									*
  *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
- *	Copyright (c) 1999-2000, Philip Guenther, The United States	*
- *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: cstdio.c,v 1.45.2.3 2000/06/21 20:34:54 guenther Exp $";
+ "$Id: cstdio.c,v 1.52 2000/11/22 01:29:56 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
-#include "cstdio.h"
 #include "misc.h"
+#include "lmtp.h"
+#include "variables.h"
+#include "shell.h"
+#include "cstdio.h"
 
 static uchar rcbuf[STDBUF],*rcbufp,*rcbufend;	  /* buffer for custom stdio */
 static off_t blasttell;
-static struct dyna_long inced;				  /* includerc stack */
+static struct dyna_array inced;				  /* includerc stack */
 struct dynstring*incnamed;
 
 static void refill(offset)const int offset;		/* refill the buffer */
-{ rcbufp=rcbuf+(rcbuf==(rcbufend=rcbuf+rread(rc,rcbuf,STDBUF))?1:offset);
+{ int ret=rread(rc,rcbuf,STDBUF);
+  if(ret>0)
+   { rcbufend=rcbuf+ret;
+     rcbufp=rcbuf+offset;				 /* restore position */
+   }
+  else
+   { rcbufend=rcbuf;
+     rcbufp=rcbuf+1;					   /* looks like EOF */
+   }
 }
 
 void pushrc(name)const char*const name;		      /* open include rcfile */
@@ -45,7 +54,7 @@ rerr:	   readerr(name);
 void changerc(name)const char*const name;		    /* change rcfile */
 { if(!*name||!strcmp(name,devnull))
 pr:{ ifstack.filled=ifdepth;	   /* lose all the braces to avoid a warning */
-     poprc();		 /* drop the current rcfile and restore the previous */
+     rclose(rc);rcbufp=rcbufend+1;		    /* make it look like EOF */
      return;
    }
   if(!strcmp(name,incnamed->ename))		    /* just restart this one */
@@ -95,7 +104,6 @@ int poprc P((void))
 { closeonerc();					     /* close it in any case */
   if(ifstack.filled>ifdepth)		     /* force the matching of braces */
      ifstack.filled=ifdepth,nlog("Missing closing brace\n");
-  skiprc=0;
   if(!inced.filled)				  /* include stack is empty? */
      return 0;	      /* restore rc, seekpos, prime rcbuf and restore rcbufp */
   rc=acc_vali(inced,--inced.filled);
@@ -202,3 +210,95 @@ int getlline(target,end)char*target,*end;
 	   return overflow;
       }
 }
+
+#ifdef LMTP
+static int origfd= -1;
+
+/* flush the input buffer and switch to a new input fd */
+void pushfd(fd)int fd;
+{ origfd=rc;rc=fd;
+  rcbufend=rcbufp;
+}
+
+/* restore the original input fd */
+static int popfd P((void))
+{ rclose(rc);rc=origfd;
+  if(0>origfd)
+     return 0;
+  origfd= -1;
+  return 1;
+}
+
+/*
+ * Are we at the end of an input read?	If so, we'll need to flush our
+ * output buffer to prevent a possible deadlock from the pipelining
+ */
+int endoread P((void))
+{ return rcbufp>=rcbufend;
+}
+
+/*
+ * refill the LMTP input buffer, switching back to the original input
+ * stream if needed
+ */
+void refillL P((void))
+{ int retcode;
+  refill(0);
+  if(rcbufp>=rcbufend)				     /* we must have run out */
+   { if(popfd())				      /* try the original fd */
+      { refill(0);					  /* fill the buffer */
+	if(rcbufp<rcbufend)		   /* looks good, clean up the child */
+	 { if((retcode=waitfor(childserverpid))==EXIT_SUCCESS)
+	      return;	     /* successfully switched and the child was fine */
+	   syslog(LOG_WARNING,"LMTP child failed: exit code %d",retcode);
+	   exit(EX_SOFTWARE);	       /* give up, give up, wherever you are */
+	 }
+      }
+     exit(EX_NOINPUT);				     /* we ran out of input! */
+   }
+}
+
+/* Like getb(), except for the LMTP input stream */
+int getL P((void))
+{ if(rcbufp==rcbufend)
+     refillL();
+  return (int)*rcbufp++;
+}
+
+/* read a bunch of characters from the LMTP input stream */
+int readL(p,len)char*p;const int len;
+{ size_t min;
+  if(rcbufp==rcbufend)
+     refillL();
+  min=rcbufend-rcbufp;
+  if(min>len)
+     min=len;
+  tmemmove(p,rcbufp,min);
+  rcbufp+=min;
+  return min;
+}
+
+/*
+ * read exactly len bytes from the LMTP input stream
+ * return 1 on success, 0 on EOF, and -1 on read error
+ */
+int readLe(p,len)char*p;int len;
+{ long got=rcbufend-rcbufp;
+  if(got>0)				      /* first, copy from the buffer */
+   { if(got>len)			       /* is that more than we need? */
+	got=len;
+     tmemmove(p,rcbufp,got);
+     rcbufp+=got;
+     p+=got;len-=got;
+   }
+  while(len)					   /* read the rest directly */
+   { if(0>(got=rread(rc,p,len)))
+	return -1;
+     if(!got&&!popfd())
+	return 0;
+     p+=got;len-=got;
+   }
+  return 1;
+}
+
+#endif
