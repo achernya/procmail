@@ -7,7 +7,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: common.c,v 2.9 1992/01/09 17:23:14 berg Rel $";
+static char rcsid[]="$Id: common.c,v 2.11 1992/03/19 14:00:28 berg Rel $";
 #endif
 #include "includes.h"
 
@@ -38,27 +38,27 @@ jidesc:;
   return To/*old*/;
 #else
 { bcopy(From,To,count);return To;
-#endif
+#endif /* NObcopy */
 }
-#endif
+#endif /* NOmemmove */
 
 #include "shell.h"
 
-shexec(argv)const char*const*argv;
-{ int i;const char**newargv,**p;
+shexec(argv)char*const*argv;
+{ int i;char**newargv;const char**p;
 #ifdef SIGXCPU
   signal(SIGXCPU,SIG_DFL);signal(SIGXFSZ,SIG_DFL);
 #endif
   signal(SIGPIPE,SIG_DFL);execvp(*argv,argv);	/* or is it a shell script ? */
   for(p=(const char**)argv,i=1;i++,*p++;);	      /* count the arguments */
   newargv=malloc(i*sizeof*p);
-  for(*(p=newargv)=binsh;*++p= *argv++;);
+  for(*(p=(const char**)newargv)=binsh;*++p= *argv++;);
   execve(*newargv,newargv,environ);	      /* no shell script? -> trouble */
   log("Failed to execute");logqnl(*argv);exit(EX_UNAVAILABLE);
 }
 
 char*pstrspn(whole,sub)const char*whole,*const sub;
-{ while(strchr(sub,*whole))
+{ while(*whole&&strchr(sub,*whole))
      whole++;
   return(char*)whole;
 }
@@ -67,7 +67,7 @@ char*pstrspn(whole,sub)const char*whole,*const sub;
 strcspn(whole,sub)const char*const whole,*const sub;
 { const register char*p;
   p=whole;
-  while(!strchr(sub,*p))
+  while(*p&&!strchr(sub,*p))
      p++;
   return p-whole;
 }

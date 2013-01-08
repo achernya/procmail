@@ -42,6 +42,6 @@ UMASK=666	# this is probably inevitable since procmail (in this case)
 		# could be running under the local-sender's uid or the
 		# daemon or mailer-uid (in the remote-sender's case)
 
-DEFAULT=/tmp/${listreq}s		# first-choice
-ORGMAIL=/var/tmp/${listreq}s		# a last-last-resort-file in case the
-			# filesystem for /tmp/mylist-request should be full
+DEFAULT=/usr/tmp/${listreq}s		# first-choice
+ORGMAIL=/tmp/${listreq}s		# a last-last-resort-file in case the
+			# filesystem for /usr/tmp/mylist-request should be full

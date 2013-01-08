@@ -1,6 +1,6 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 2.10 1992/01/31 12:07:40 berg Rel $*/
+/*$Id: manconf.c,v 2.16 1992/04/29 15:55:09 berg Rel $*/
 
 #include "../config.h"
 #include "../procmail.h"
@@ -8,6 +8,8 @@
 #define pn(name,val)	pnr(name,(long)(val))
 
 const char devnull[]=DevNull;
+const char*const keepenv[]=KEEPENV,*const prestenv[]=PRESTENV,
+ *const trusted_ids[]=TRUSTED_IDS;
 
 main()
 {
@@ -19,16 +21,25 @@ main()
   ps("FW_content",
    "* - | ? \"IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
 #endif
-#ifndef DONT_DISCARD_IFS
-  ps("IFS_DISCARDING","For security reasons, procmail will unset the IFS\
- environment variable upon startup, even if the environment is supposed to\
- be preserved.");
+#ifdef NO_USER_TO_LOWERCASE_HACK
+  ps("UPPERCASE_USERNAMES","\1.PP\1If the standard\1.BR getpwnam() (3)\1\
+is case sensitive, and some users have login names with uppercase letters in\
+ them, procmail will be unable to deliver mail to them, unless started with\
+ their uid.");
 #else
-  ps("IFS_DISCARDING","Be sure to set the environment variable IFS to a\
- known value when using /bin/sh from within procmail.");
+  ps("UPPERCASE_USERNAMES","");
 #endif
+  plist("PRESTENV","\1.PP\1Other preset environment variables are "
+   ,prestenv,".\1",""," and ");
+  plist("KEEPENV",", except for the values of ",keepenv,"",""," and ");
+  plist("TRUSTED_IDS",", and procmail is invoked with one of the following\
+ user or group ids: ",trusted_ids,",",""," or ");
   ps("SYSTEM_MBOX",SYSTEM_MBOX);
+#ifdef console
   ps("console",console);
+#else
+  ps("console",vconsole);
+#endif
   pname("INIT_UMASK");printf("0%lo/g\n",INIT_UMASK);
   pn("DEFlinebuf",DEFlinebuf);
   ps("BOGUSprefix",BOGUSprefix);
@@ -53,6 +64,8 @@ main()
   pc("VERSIONOPT",VERSIONOPT);
   pc("PRESERVOPT",PRESERVOPT);
   pc("TEMPFAILOPT",TEMPFAILOPT);
+  pc("FROMWHOPT",FROMWHOPT);
+  pc("ALTFROMWHOPT",ALTFROMWHOPT);
   pc("DELIVEROPT",DELIVEROPT);
   pn("MINlinebuf",MINlinebuf);
   ps("FROM",FROM);
@@ -66,6 +79,7 @@ main()
   pc("FILTER",RECFLAGS[FILTER]);
   pc("CONTINUE",RECFLAGS[CONTINUE]);
   pc("WAIT_EXIT",RECFLAGS[WAIT_EXIT]);
+  pc("WAIT_EXIT_QUIET",RECFLAGS[WAIT_EXIT_QUIET]);
   pc("IGNORE_WRITERR",RECFLAGS[IGNORE_WRITERR]);
   ps("FROM_EXPR",FROM_EXPR);
   pc("UNIQ_PREFIX",UNIQ_PREFIX);
@@ -82,6 +96,8 @@ main()
   pc("FM_SPLIT",FM_SPLIT);
   pc("FM_NOWAIT",FM_NOWAIT);
   pc("FM_EVERY",FM_EVERY);
+  pc("FM_MINFIELDS",FM_MINFIELDS);
+  pn("DEFminfields",DEFminfields);
   pc("FM_DIGEST",FM_DIGEST);
   pc("FM_QUIET",FM_QUIET);
   pc("FM_EXTRACT",FM_EXTRACT);
@@ -100,6 +116,24 @@ pnr(name,value)const char*const name;const long value;
 { pname(name);printf("%ld/g\n",value);
 }
 
+plist(name,preamble,list,postamble,ifno,andor)const char*const name,
+ *const preamble,*const postamble,*const ifno,*const andor;
+ const char*const*list;
+{ pname(name);
+  if(!*list)
+     putsesc(ifno);
+  else
+   { putsesc(preamble);goto jin;
+     do
+      { putsesc(list[1]?", ":andor);
+jin:	putsesc(*list);
+      }
+     while(*++list);
+     putsesc(postamble);
+   }
+  puts("/g");
+}
+
 ps(name,value)const char*const name,*const value;
 { pname(name);putsesc(value);puts("/g");
 }
@@ -110,10 +144,12 @@ pc(name,value)const char*const name;const int value;
 
 putcesc(i)
 { switch(i)
-   { case '\t':i='t';goto fin;
+   { case '\1':i='\n';goto singesc;
+     case '\t':i='t';goto fin;
      case '\n':i='n';
 fin:	putchar('\\');
      case '\\':putchar('\\');putchar('\\');
+singesc:
      case '&':case '/':putchar('\\');
    }
   putchar(i);

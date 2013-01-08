@@ -1,8 +1,9 @@
-/*$Id: exopen.h,v 2.1 1991/10/22 15:31:26 berg Rel $*/
-#define SERIALchars	3
-#define UNIQnamelen	(1+SERIALchars+HOSTNAMElen+1)
-#define SERIALmask	((1L<<6*SERIALchars)-1)
+/*$Id: exopen.h,v 2.4 1992/04/21 15:27:50 berg Rel $*/
+#define charsSERIAL	4
+#define UNIQnamelen	(1+charsSERIAL+HOSTNAMElen+1)
+#define bitsSERIAL	(6*charsSERIAL)
+#define maskSERIAL	((1L<<bitsSERIAL)-1)
+#define rotbSERIAL	2
+#define mrotbSERIAL	((1L<<rotbSERIAL)-1)
 
-#ifdef NOstrpbrk
-char*strpbrk();
-#endif
+char*lastdirsep();

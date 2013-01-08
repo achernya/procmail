@@ -15,6 +15,18 @@
 	MMDF users should note that they need a .maildelivery file *instead*
 	of a .forward file (see the man page for more detailed information).
 
+	If however, procmail has been integrated in the maildelivery system
+	(i.e. if your system administrator installed it that way, ask him/her),
+	then you no longer need the .forward files in your home directory,
+	having a .procmailrc file will suffice.
+
+	On some systems .forward files are not checked, in this case it might
+	be worth trying to put a line looking like this:
+		Pipe to /usr/local/bin/procmail
+	as the only line in your mail spool file (e.g. /usr/mail/$USER), as
+	well as doing a "chmod 04600 /usr/mail/$USER".	For more information
+	on such systems, do a "man mail".
+
 3. When I compile everything the compiler complains about invalid or illegal
    pointer combinations, but it produces the executables anyway.
    Should I be concerned?
@@ -39,19 +51,15 @@
 	probably is all right.	If it doesn't, you might try inserting a
 	"#define const" in the autoconf.h file by hand.	 However in any case,
 	your compiler is broken; I would recommend submitting this as a
-	compiler bug to your vendor.
+	compiler bug to your vendor.  In any case, if this should occur, I'd
+	appreciate a mail from you (so I can try to fix the autoconf script
+	to recognise your compiler).
 
-6. The compiler produces some excessive warnings about enums, is that a reason
-   for concern?
-
-	Your compiler is not ANSI compliant;  so, in other words, ignore the
-	warnings.
-
-7. The compiler refuses to compile regexp.c, what is the problem?
+6. The compiler refuses to compile regexp.c, what is the problem?
 
 	Try compiling that module with optimisation turned off.
 
-8. When I send myself a testmail, the mail bounces with the message: cannot
+7. When I send myself a testmail, the mail bounces with the message: cannot
    execute binary file.	 What am I doing wrong?
 
 	It is very well possible that mail is processed on a different
@@ -61,19 +69,20 @@
 	get this right you might need to do some .forward file tweaking,
 	look at the examples/advanced file for some suggestions.
 
-9. Where do I look for examples about:
-	Crossmounted mailboxes?
+8. Where do I look for examples about:
+	One home directory, several machine architectures?
 	Procmail as an integrated local mail delivery agent?
 	Security considerations (when installing procmail suid root)
 	How to generate autoreplies?
+	`Vacation' functionality
 	Exorbitant rcfile formats?
 	The 'A' flag?
 
 	Well, this probably is your lucky day :-), all these topics are covered
 	in the examples/advanced file.
 
-10. Why do I have to insert my login name after the '#' in the .forward or
-    .maildelivery file?
+9. Why do I have to insert my login name after the '#' in the .forward or
+   .maildelivery file?
 
 	Some mailers 'optimise' maildelivery and take out duplicates from
 	Cc:, Bcc: and alias lists before delivery.  If two or more persons on
@@ -82,7 +91,7 @@
 	it will make the .forward files unique, and will ensure that the mailer
 	does optimise away some addresses.
 
-11. None of the above topics cover my problem.	Should I panic?
+10. None of the above topics cover my problem.	Should I panic?
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?

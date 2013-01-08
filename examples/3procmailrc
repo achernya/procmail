@@ -53,3 +53,4 @@ MAILDIR=$HOME/News	# This will change the current directory
 games/.
 
 # Anything not delivered by now will go to $HOME/Mail/mbox
+# Using LOCKFILE=$HOME/Mail/mbox.lock

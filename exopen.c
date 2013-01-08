@@ -7,14 +7,16 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: exopen.c,v 2.7 1992/01/21 17:27:04 berg Rel $";
+static char rcsid[]="$Id: exopen.c,v 2.11 1992/04/21 15:27:50 berg Rel $";
 #endif
 #include "config.h"
 #include "includes.h"
 #include "exopen.h"
+#include "strpbrk.h"
 
 const char*hostname();
 extern pid_t thepid;
+extern const char dirsep[];
 
 const char*hostname()
 { static char name[HOSTNAMElen+1];
@@ -22,7 +24,7 @@ const char*hostname()
   gethostname(name,HOSTNAMElen+1);
 #else
   struct utsname names;
-  uname(&names);strncpy(name,names.nodename,HOSTNAMElen);
+  uname_(&names);strncpy(name,names.nodename,HOSTNAMElen);
 #endif
   name[HOSTNAMElen]='\0';return name;
 }
@@ -39,9 +41,10 @@ ultoan(val,dest)unsigned long val;char*dest;	      /* convert to a number */
 }
 
 unique(full,p,mode)const char*const full;char*const p;const mode_t mode;
-{ unsigned long retry=3;int i;			  /* create unique file name */
+{ unsigned long retry=mrotbSERIAL;int i;	  /* create unique file name */
   do
-   { ultoan(SERIALmask&(retry<<16)+(unsigned long)thepid,p+1);
+   { ultoan(maskSERIAL&(retry<<bitsSERIAL-mrotbSERIAL)+
+      (unsigned long)thepid,p+1);
      *p=UNIQ_PREFIX;strcat(p,hostname());
    }
 #ifndef O_CREAT
@@ -55,18 +58,15 @@ unique(full,p,mode)const char*const full;char*const p;const mode_t mode;
   rclose(i);return 1;
 }
 				     /* rename MUST fail if already existent */
-myrename(old,new)const char*const old,*const new;
+myrename(old,newn)const char*const old,*const newn;
 { int i,serrno;struct stat stbuf;
-  link(old,new);serrno=errno;i=stat(old,&stbuf);unlink(old);errno=serrno;
+  link(old,newn);serrno=errno;i=stat(old,&stbuf);unlink(old);errno=serrno;
   return stbuf.st_nlink==2?i:-1;
 }
 
-#ifdef NOstrpbrk
-char*strpbrk(st,del)const char*const st,*del;
-{ const char*f=0,*t;
-  for(f=0;*del;)
-     if((t=strchr(st,*del++))&&(!f||t<f))
-	f=t;
-  return(char*)f;
+char*lastdirsep(filename)const char*filename;	 /* finds the next character */
+{ const char*p;					/* following the last DIRSEP */
+  while(p=strpbrk(filename,dirsep))
+     filename=p+1;
+  return(char*)filename;
 }
-#endif

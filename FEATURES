@@ -8,7 +8,7 @@ Feature summary for procmail:
 	+ Does not use *any* temporary files
 	+ Uses standard egrep regular expressions
 	+ Allows for very-easy-to-use yes-no decisions on where the mail
-	  should go
+	  should go (can take the size of the mail into consideration)
 	+ Filters, delivers and forwards mail *reliably*
 	+ Provides a reliable hook (you might even say anchor :-) for any
 	  programs or shell scripts you may wish to start upon mail arrival
@@ -35,17 +35,19 @@ Feature summary for procmail:
 	  '\0'); i.e. binary mailings can be processed if the rest of the
 	  mailing system knew how to handle them too
 	+ It has a man page (boy, does *it* have a man page)
-	+ procmail can be used as a local delivery agent (a completely
-	  integrated substitute for /bin/mail)
+	+ Procmail can be used as a local delivery agent (a completely
+	  integrated substitute for /bin/mail), in which case it can heal
+	  your system mailbox, if something messes up the permissions
 	+ It runs on virtually all (old and future) operating systems which
 	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
-	  code; POSIX,ANSI C and K&R conforming)
+	  code; POSIX, ANSI C and K&R conforming)
+	+ Is clock skew immune (e.g. in the case of NFS mounted mailboxes)
 	+ Works with (among others?) sendmail, smail and MMDF
 
 Feature summary for formail:
 	+ Can generate auto-reply headers
-	+ Can force mail into mailbox format (so that you can process it with
-	  standard mail programs)
+	+ Can convert mail into standard mailbox format (so that you can
+	  process it with standard mail programs)
 	+ Can split up mailboxes into the individual messages
 	+ Can split up digests into the individual messages
 	+ Can split up saved articles into the individual articles
@@ -53,3 +55,5 @@ Feature summary for formail:
 
 Feature summary for lockfile:
 	+ Provides NFS-secure lockfiles to shell script programmers
+	+ Gives normal users the ability to lock their system mailbox,
+	  regardless of permissions on the mail-spool directory

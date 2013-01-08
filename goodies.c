@@ -7,7 +7,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: goodies.c,v 2.13 1992/01/31 11:32:45 berg Rel $";
+static char rcsid[]="$Id: goodies.c,v 2.16 1992/04/09 16:16:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -26,16 +26,15 @@ static char rcsid[]="$Id: goodies.c,v 2.13 1992/01/31 11:32:45 berg Rel $";
 readparse(p,fgetc,sarg)register char*p;int(*const fgetc)();const int sarg;
 { static i;int got;char*startb;
   for(got=NOTHING_YET;;)		    /* buf2 is used as scratch space */
-   {
 loop:
-     i=fgetc();
+   { i=fgetc();
      if(buf+linebuf-3<p)	    /* doesn't catch everything, just a hint */
       { log("Exceeded LINEBUF\n");p=buf+linebuf-3;goto ready;
       }
 newchar:
      switch(i)
-      { case EOF:
-	   if(got>NORMAL_TEXT)
+      { case EOF:	/* check sarg too to prevent warnings in the recipe- */
+	   if(sarg!=2&&got>NORMAL_TEXT)		 /* condition expansion code */
 early_eof:    log(unexpeof);
 ready:	   if(got!=SKIPPING_SPACE||sarg)  /* not terminated yet or sarg==2 ? */
 	      *p++='\0';
@@ -199,22 +198,20 @@ ultstr(minwidth,val,dest)unsigned long val;char*dest;
 sputenv(a)char*a;	      /* smart putenv, the way it was supposed to be */
 { static struct lienv{struct lienv*next;char name[255];}*myenv;
   static alloced;int i,remove;char*split,**preenv;struct lienv*curr,**last;
-  yell("Assigning",a);remove=0;a=tstrdup(a);		/* make working copy */
+  yell("Assigning",a);remove=0;
   if(!(split=strchr(a,'=')))			   /* assignment or removal? */
-   { remove=1;i=strlen(a);*(split=i+(a=realloc(a,i+2)))='=';
-     split[1]='\0';
-   }
-  i= ++split-a;
-  for(curr= *(last= &myenv);curr;curr= *(last= &curr->next))
-     if(!strncmp(a,curr->name,i))	     /* is it one I created earlier? */
+     remove=1,split=strchr(a,'\0');
+  i=split-a;
+  for(curr= *(last= &myenv);curr;curr= *(last= &curr->next))	/* is it one */
+     if(!strncmp(a,curr->name,i)&&curr->name[i]=='=')  /* I created earlier? */
       { split=curr->name;*last=curr->next;free(curr);
 	for(preenv=environ;*preenv!=split;preenv++);
 	goto wipenv;
       }
-  for(preenv=environ;*preenv;preenv++)
-     if(!strncmp(a,*preenv,i))	       /* is it in the standard environment? */
-      {
-wipenv: while(*preenv=preenv[1])   /* wipe this entry out of the environment */
+  for(preenv=environ;*preenv;preenv++)		    /* is it in the standard */
+     if(!strncmp(a,*preenv,i)&&(*preenv)[i]=='=')	     /* environment? */
+wipenv:
+      { while(*preenv=preenv[1])   /* wipe this entry out of the environment */
 	   preenv++;
 	break;
       }
@@ -222,12 +219,11 @@ wipenv: while(*preenv=preenv[1])   /* wipe this entry out of the environment */
   if(alloced)		   /* have we ever alloced the environ array before? */
      environ=realloc(environ,i);
   else
-   { alloced=1;environ=tmemmove(malloc(i),environ,i-sizeof*environ);
-   }
+     alloced=1,environ=tmemmove(malloc(i),environ,i-sizeof*environ);
   if(!remove)		  /* if not remove, then add it to both environments */
    { for(preenv=environ;*preenv;preenv++);
-     curr=malloc(ioffsetof(struct lienv,name)+strlen(a)+1);
-     strcpy(*preenv=curr->name,a);free(a);preenv[1]=0;curr->next=myenv;
+     curr=malloc(ioffsetof(struct lienv,name[0])+(i=strlen(a)+1));
+     tmemmove(*preenv=curr->name,a,i);preenv[1]=0;curr->next=myenv;
      myenv=curr;
    }
 }
@@ -251,8 +247,7 @@ long strtol(start,ptr,base)const char*start,**const ptr;
    { start++;
      if((i= *++str)=='x'||i=='X')			/* leading 0x or 0X? */
 	if(!base||base==16)
-	 { base=16;str++;			    /* hexadecimal all right */
-	 }
+	   base=16,str++;			    /* hexadecimal all right */
 	else
 	   goto fault;
      else if(!base)

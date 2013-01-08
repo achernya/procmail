@@ -1,6 +1,8 @@
-/*$Id: procmail.h,v 2.13 1992/01/31 11:32:45 berg Rel $*/
+/*$Id: procmail.h,v 2.19 1992/04/23 16:46:41 berg Rel $*/
 
 #include "includes.h"
+#include "exopen.h"
+#include "strpbrk.h"
 
 typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #ifdef uchar
@@ -8,8 +10,10 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #endif
 #define uchar uschar
 
-#ifndef console
-#define console devnull
+#ifdef console
+#define vconsole (verbose=1,console)
+#else
+#define vconsole devnull
 #endif
 
 #ifndef DEFsendmail
@@ -20,16 +24,23 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #define SYSTEM_MBOX	SYSTEM_MAILBOX
 #endif
 
-#ifdef MAILBOX_SEPARATOR
-#define mboxseparator(fd)	\
- (tofolder?rwrite(fd,MAILBOX_SEPARATOR,STRLEN(MAILBOX_SEPARATOR)):0)
+#ifdef sMAILBOX_SEPARATOR
+#define smboxseparator(fd)	\
+ (tofolder?rwrite(fd,sMAILBOX_SEPARATOR,STRLEN(sMAILBOX_SEPARATOR)):0)
+#define emboxseparator(fd)	\
+ (tofolder?rwrite(fd,eMAILBOX_SEPARATOR,STRLEN(eMAILBOX_SEPARATOR)):0)
 #else
-#define mboxseparator(fd)
+#define smboxseparator(fd)
+#define emboxseparator(fd)
 #endif
 
 #ifndef KERNEL_LOCKS
-#define lockfd(fd)	0
-#define unlockfd()	0
+#define fdlock(fd)	0
+#define fdunlock()	0
+#else
+#ifndef SYS_FILE_H_MISSING
+#include <sys/file.h>
+#endif
 #endif
 
 #define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
@@ -44,6 +55,13 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #define LENoffset	(TABWIDTH*LENtSTOP)
 #define MAXfoldlen	(LENoffset-STRLEN(sfolder)-1)
 #define MCDIRSEP	(dirsep+STRLEN(dirsep)-1)      /* most common DIRSEP */
+
+#define lck_LOCKFILE	1	  /* crosscheck the order of this with msg[] */
+#define lck_ALLOCLIB	2		      /* in sterminate() in retint.c */
+#define lck_MEMORY	4
+#define lck_FORK	8
+#define lck_FILDES	16
+#define lck_KERNELL	32
 
 struct varval{const char*const name;long val;};
 #define locksleep	(strenvvar[0].val)
@@ -60,11 +78,11 @@ extern const char shellflags[],shell[],lockext[],newline[],binsh[],
  devnull[],executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[];
 extern struct varval strenvvar[];
 extern long lastdump;
-extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder,tofile,
- ignwerr,fakedelivery;
+extern sh,pwait,retval,retvl2,lcking,locknext,verbose,linebuf,rc,tofolder,
+ tofile,ignwerr,fakedelivery;
 extern volatile nextexit;
 extern volatile time_t alrmtime;
-extern pid_t thepid;
+extern pid_t thepid,pidchild;
 #endif
 
 #ifdef NOmemmove
@@ -75,16 +93,13 @@ void*smemmove();
 #define NOstrtol
 long strtol();
 #endif
-#ifdef NOstrpbrk
-char*strpbrk();
-#endif
 
 void*tmalloc(),*trealloc(),*bregcomp(),srequeue(),slose(),sbounce(),
  stermchild(),ftimeout();
 pid_t sfork();
 long dump(),pipin(),renvint();
 char*readdyn(),*fromprog(),*cat(),*tstrdup(),*cstr(),*pstrspn(),
- *bregexec(),*egrepin(),*lastdirsep();
+ *bregexec(),*egrepin();
 const char*tgetenv(),*hostname();
 int sgetc(),getb();
 
@@ -94,4 +109,5 @@ int sgetc(),getb();
  *	pid_t pidfilt,pidchild;
  *	volatile int nextexit;
  *	int lcking;
+ *	static volatile mailread;	in procmail.c
  */

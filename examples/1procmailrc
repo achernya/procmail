@@ -20,3 +20,4 @@ uunetbox			# will go to $MAILDIR/uunetbox
 henries				# will go to $MAILDIR/henries
 
 # Anything that has not been delivered by now will go to $DEFAULT
+# using LOCKFILE=$DEFAULT$LOCKEXT

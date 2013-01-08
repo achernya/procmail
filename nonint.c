@@ -7,7 +7,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: nonint.c,v 2.16 1992/01/31 12:35:17 berg Rel $";
+static char rcsid[]="$Id: nonint.c,v 2.19 1992/04/09 16:16:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -17,14 +17,16 @@ static char rcsid[]="$Id: nonint.c,v 2.16 1992/01/31 12:35:17 berg Rel $";
 
 void*tmalloc(len)const size_t len;    /* this malloc can survive a temporary */
 { void*p;int i;				    /* "out of swap space" condition */
+  lcking|=lck_ALLOCLIB;
   if(p=malloc(len))
-     return p;
+     goto ret;
+  lcking|=lck_MEMORY;
   if(p=malloc(1))
      free(p);			   /* works on some systems with latent free */
-  for(lcking=2,i=nomemretry;i<0||i--;)
+  for(i=nomemretry;i<0||i--;)
    { suspend();		     /* problems?  don't panic, wait a few secs till */
      if(p=malloc(len))	     /* some other process has paniced (and died 8-) */
-      { lcking=0;return p;
+ret:  { lcking&=~(lck_MEMORY|lck_ALLOCLIB);return p;
       }
    }
   nomemerr();
@@ -32,41 +34,47 @@ void*tmalloc(len)const size_t len;    /* this malloc can survive a temporary */
 
 void*trealloc(old,len)void*const old;const size_t len;
 { void*p;int i;
+  lcking|=lck_ALLOCLIB;
   if(p=realloc(old,len))
-     return p;				    /* for comment see tmalloc above */
+     goto ret;				    /* for comment see tmalloc above */
+  lcking|=lck_MEMORY;
   if(p=malloc(1))
     free(p);
-  for(lcking=2,i=nomemretry;i<0||i--;)
+  for(i=nomemretry;i<0||i--;)
    { suspend();
      if(p=realloc(old,len))
-      { lcking=0;return p;
+ret:  { lcking&=~(lck_MEMORY|lck_ALLOCLIB);return p;
       }
    }
   nomemerr();
 }
+
+tfree(p)void*const p;
+{ lcking|=lck_ALLOCLIB;free(p);lcking&=~lck_ALLOCLIB;
+}
 		       /* line buffered to keep concurrent entries untangled */
-log(new)const char*const new;
+log(newt)const char*const newt;
 { int lnew,i;static lold;static char*old;char*p;
-  if(lnew=strlen(new))						/* anything? */
-   {
 #ifndef O_CREAT
-     lseek(STDERR,0L,SEEK_END);		  /* locking should be done actually */
+  lseek(STDERR,0L,SEEK_END);		  /* locking should be done actually */
 #endif
-     if(nextexit)
-	goto direct;			       /* careful, in terminate code */
-     i=lold+lnew;
-     if(p=lold?realloc(old,i):malloc(i))		 /* unshelled malloc */
-      { memmove((old=p)+lold,new,(size_t)lnew);			   /* append */
-	if(p[(lold=i)-1]=='\n')					     /* EOL? */
-	 { rwrite(STDERR,p,i);lold=0;free(p);		/* flush the line(s) */
-	 }
+  if(!(lnew=strlen(newt))||nextexit)			     /* force flush? */
+     goto flush;
+  i=lold+lnew;
+  if(p=lold?realloc(old,i):malloc(i))			 /* unshelled malloc */
+   { memmove((old=p)+lold,newt,(size_t)lnew);			   /* append */
+     if(p[(lold=i)-1]=='\n')					     /* EOL? */
+	rwrite(STDERR,p,i),lold=0,free(p);		/* flush the line(s) */
+   }
+  else						   /* no memory, force flush */
+flush:
+   { if(lold)
+      { rwrite(STDERR,old,lold);lold=0;
+	if(!nextexit)
+	   free(old);			/* don't use free in signal handlers */
       }
-     else					   /* no memory, force flush */
-      { if(lold)
-	 { rwrite(STDERR,old,i);lold=0;free(old);
-	 }
-direct: rwrite(STDERR,new,lnew);
-      }
+     if(lnew)
+	rwrite(STDERR,newt,lnew);
    }
 }
 
@@ -74,14 +82,14 @@ direct: rwrite(STDERR,new,lnew);
 
 pid_t sfork()				/* this fork can survive a temporary */
 { pid_t i;int r;			   /* "process table full" condition */
-  r=noforkretry;
+  log("");r=noforkretry;			  /* flush log, just in case */
   while((i=fork())==-1)
-   { lcking=3;
+   { lcking|=lck_FORK;
      if(!(r<0||r--))
 	break;
      suspend();
    }
-  lcking=0;return i;
+  lcking&=~lck_FORK;return i;
 }
 
 void srequeue()
@@ -98,7 +106,7 @@ void sbounce()
 
 extern char*lastexec,*backblock;		/* see retint.c for comment */
 extern long backlen;
-extern pid_t pidfilt,pidchild;
+extern pid_t pidfilt;
 extern pbackfd[2];
 
 void stermchild()
@@ -115,21 +123,21 @@ void stermchild()
 void ftimeout()
 { alarm(0);alrmtime=0;
   if(pidchild>0&&!kill(pidchild,SIGTERM))	   /* careful, killing again */
-      { log("Timeout, terminating");logqnl(lastexec);
-      }
+	log("Timeout, terminating"),logqnl(lastexec);
   signal(SIGALRM,ftimeout);
 }
 
 long dump(s,source,len)const int s;const char*source;long len;
-{ int i;
+{ int i= -1;
   if(s>=0)
-   { fdlock(s);lastdump=len;mboxseparator(s);  /* prepend optional separator */
+   { fdlock(s);lastdump=len;smboxseparator(s); /* prepend optional separator */
 #ifndef O_CREAT
      lseek(s,0L,SEEK_END);
 #endif
+#ifndef NO_NFS_ATIME_HACK
      if(len&&tofile)		       /* if it is a file, trick NFS into an */
-      { --len;rwrite(s,source++,1);sleep(1);		    /* a_time<m_time */
-      }
+	--len,rwrite(s,source++,1),sleep(1);		    /* a_time<m_time */
+#endif
      while(i=rwrite(s,source,BLKSIZ<len?BLKSIZ:(int)len))
       { if(i<0)
 	 { i=0;goto writefin;
@@ -138,26 +146,27 @@ long dump(s,source,len)const int s;const char*source;long len;
       }
      if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n')))
 	lastdump++,rwrite(s,newline,1);	       /* message always ends with a */
-     mboxseparator(s);		 /* newline and an optional custom separator */
+     emboxseparator(s);		 /* newline and an optional custom separator */
 writefin:
-     fdunlock();rclose(s);return ignwerr?(ignwerr=0):len-i;
-   }
-  return len?len:-1;	   /* return an error even if nothing was to be sent */
+     fdunlock();len-=i;i=rclose(s);
+   }						  /* return an error even if */
+  return ignwerr?(ignwerr=0):i&&!len?-1:len;	   /* nothing was to be sent */
 }
 
 long pipin(line,source,len)char*const line;char*source;long len;
 { int poutfd[2];
   rpipe(poutfd);
   if(!(pidchild=sfork()))				    /* spawn program */
-   { rclose(PWRO);rclose(rc);getstdin(PRDO);callnewprog(line);
-   }
+     rclose(PWRO),rclose(rc),getstdin(PRDO),callnewprog(line);
   rclose(PRDO);
   if(forkerr(pidchild,line))
      return 1;
   if(len=dump(PWRO,source,len))			    /* dump mail in the pipe */
      writeerr(line);		       /* pipe was shut in our face, get mad */
   if(pwait&&waitfor(pidchild)!=EX_OK)	    /* optionally check the exitcode */
-   { progerr(line);len=1;
+   { if(!(pwait&2))				  /* do we put in on report? */
+	progerr(line);
+     len=1;
    }
   pidchild=0;
   if(!sh)
@@ -173,7 +182,7 @@ char*readdyn(bf,filled)char*bf;long*const filled;
 jumpin:
 #ifdef SMALLHEAP
      if((size_t)*filled>=(size_t)(*filled+BLKSIZ))
-	lcking=2,nomemerr();
+	lcking|=lck_MEMORY,nomemerr();
 #endif
      bf=realloc(bf,*filled+BLKSIZ);    /* dynamically adjust the buffer size */
 jumpback:;
@@ -228,7 +237,7 @@ const char*tgetenv(a)const char*const a;
   return(b=getenv(a))?b:"";
 }
 
-char*cstr(a,b)const char*const a,*const b;	/* dynamic buffer management */
+char*cstr(a,b)char*const a;const char *const b; /* dynamic buffer management */
 { if(a)
      free(a);
   return tstrdup(b);
@@ -236,19 +245,12 @@ char*cstr(a,b)const char*const a,*const b;	/* dynamic buffer management */
 
 long renvint(i,env)const long i;const char*const env;
 { const char*p;long t;
-  t=strtol(env,&p,10);return p==env?i:t;       /* parse it like a decimal nr */
+  t=strtol(env,(char**)&p,10);return p==env?i:t;  /* parse like a decimal nr */
 }
 
-char*egrepin(expr,source,len,casesens)const char*expr,*source;
+char*egrepin(expr,source,len,casesens)char*expr;const char*source;
  const long len;
 { source=bregexec(expr=bregcomp(expr,!casesens),
    source,len>0?(size_t)len:(size_t)0,!casesens);
   free(expr);return(char*)source;
-}
-
-char*lastdirsep(filename)const char*filename;	 /* finds the next character */
-{ const char*p;					/* following the last DIRSEP */
-  while(p=strpbrk(filename,dirsep))
-     filename=p+1;
-  return(char*)filename;
 }

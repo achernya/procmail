@@ -7,20 +7,20 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: retint.c,v 2.23 1992/01/31 12:28:53 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.26 1992/04/09 16:16:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
 #include "shell.h"
 
 setdef(name,contents)const char*const name,*const contents;
-{ strcat(strcat(strcpy(sgetcp=buf2,name),"="),contents);
-  readparse(buf,sgetc,0);sputenv(buf);
+{ strcat(strcat(strcpy((char*)(sgetcp=buf2),name),"="),contents);
+  readparse(buf,sgetc,2);sputenv(buf);
 }
 
 char*lastexec,*backblock;
 long backlen;		       /* length of backblock, filter recovery block */
-pid_t pidfilt,pidchild;
+pid_t pidfilt;
 int pbackfd[2];				       /* the emergency backpipe :-) */
 
 pipthrough(line,source,len)char*line,*source;const long len;
@@ -37,13 +37,13 @@ pipthrough(line,source,len)char*line,*source;const long len;
       }
      rclose(PWRI);rclose(PRDO);
      if(forkerr(pidfilt,line))
-      { rclose(PWRO);stermchild();
-      }
+	rclose(PWRO),stermchild();
      if(dump(PWRO,source,len))		  /* send in the text to be filtered */
-      { writeerr(line);stermchild();
-      }
+	writeerr(line),stermchild();
      if(pwait&&waitfor(pidfilt)!=EX_OK)	 /* check the exitcode of the filter */
-      { progerr(line);stermchild();
+      { if(!(pwait&2))				  /* do we put it on report? */
+	   progerr(line);
+	stermchild();
       }
      rclose(PWRB);exit(EX_OK);			  /* allow parent to proceed */
    }
@@ -55,10 +55,10 @@ pipthrough(line,source,len)char*line,*source;const long len;
 
 waitfor(pid)const pid_t pid;		      /* wait for a specific process */
 { int i;pid_t j;
-  while(pid!=(j=wait(&i))||(i&127)==127)
+  while(pid!=(j=wait(&i))||WIFSTOPPED(i))
      if(-1==j)
-	return EX_UNAVAILABLE;
-  return i>>8&255;
+	return -1;
+  return WIFEXITED(i)?WEXITSTATUS(i):-1;
 }
 
 getstdin(pip)const int pip;
@@ -125,28 +125,30 @@ opena(a)const char*const a;
 
 yell(a,b)const char*const a,*const b;		     /* log if -d option set */
 { if(verbose)
-   { log(a);logqnl(b);
-   }
+     log(a),logqnl(b);
 }
 
-unlock(lockp)const char**const lockp;
-{ lcking=1;
+unlock(lockp)char**const lockp;
+{ lcking|=lck_LOCKFILE;
   if(*lockp)
    { yell("Unlocking",*lockp);
      if(unlink(*lockp))
-      { log("Couldn't unlock");logqnl(*lockp);
-      }
-     free(*lockp);*lockp=0;
+	log("Couldn't unlock"),logqnl(*lockp);
+     if(!nextexit)			   /* if not inside a signal handler */
+	free(*lockp);
+     *lockp=0;
    }
-  lcking=0;
+  lcking&=~lck_LOCKFILE;
   if(nextexit==1)	    /* make sure we are not inside terminate already */
-   { log(newline);terminate();
-   }
+     log(newline),terminate();
 }
 
-nomemerr()
-{ log("Out of memory\nbuffer 0: \"");buf[linebuf-1]=buf2[linebuf-1]='\0';
-  log(buf);log("\"\nbuffer 1:");logqnl(buf2);
+nomemerr()		  /* set nextexit to prevent log from using malloc() */
+{ nextexit=2;log("Out of memory\n");
+  if(buf2)
+   { buf[linebuf-1]=buf2[linebuf-1]='\0';log("buffer 0:");logqnl(buf);
+     log("buffer 1:");logqnl(buf2);
+   }
   if(retval!=EX_TEMPFAIL)
      retval=EX_OSERR;
   terminate();
@@ -167,78 +169,82 @@ nextrcfile()			/* next rcfile specified on the command line */
   return 0;
 }
 
-rclose(fd)const int fd;		      /* a sysV secure close (signal immune) */
+rclose(fd)const int fd;		      /* a SysV secure close (signal immune) */
 { int i;
   while((i=close(fd))&&errno==EINTR);
   return i;
 }
 
-rwrite(fd,a,len)const int fd,len;void*const a;	      /* a sysV secure write */
+rwrite(fd,a,len)const int fd,len;void*const a;	      /* a SysV secure write */
 { int i;
   while(0>(i=write(fd,a,(size_t)len))&&errno==EINTR);
   return i;
 }
 
-rread(fd,a,len)const int fd,len;void*const a;	       /* a sysV secure read */
+rread(fd,a,len)const int fd,len;void*const a;	       /* a SysV secure read */
 { int i;
   while(0>(i=read(fd,a,(size_t)len))&&errno==EINTR);
   return i;
 }
 
 ropen(name,mode,mask)const char*const name;const int mode;const mode_t mask;
-{ int i,r;					       /* a sysV secure open */
-  if(!lcking)						  /* already locking */
-     lcking=4;
-  for(r=noresretry;0>(i=open(name,mode,mask));)
+{ int i,r;					       /* a SysV secure open */
+  for(r=noresretry,lcking|=lck_FILDES;0>(i=open(name,mode,mask));)
      if(errno!=EINTR&&!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
 	break;		 /* survives a temporary "file table full" condition */
-  if(lcking==4)
-     lcking=0;
-  return i;
+  lcking&=~lck_FILDES;return i;
 }
 
 rdup(p)const int p;
-{ int i,r;
-  for(lcking=4,r=noresretry;0>(i=dup(p));)	  /* catch "file table full" */
+{ int i,r;					  /* catch "file table full" */
+  for(r=noresretry,lcking|=lck_FILDES;0>(i=dup(p));)
      if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
 	break;
-  lcking=0;return i;
+  lcking&=~lck_FILDES;return i;
 }
 
 rpipe(fd)int fd[2];
-{ int i,r;
-  for(lcking=4,r=noresretry;0>(i=pipe(fd));)	  /* catch "file table full" */
+{ int i,r;					  /* catch "file table full" */
+  for(r=noresretry,lcking|=lck_FILDES;0>(i=pipe(fd));)
      if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
       { *fd=fd[1]= -1;break;
       }
-  lcking=0;return i;
+  lcking&=~lck_FILDES;return i;
 }
 
 lockit(name,lockp)char*name;const char**const lockp;
-{ int i,permanent=2;struct stat stbuf;
-  unlock(lockp);		       /* unlock any previous lockfile FIRST */
-  if(!*name)			  /* to prevent deadlocks (I hate deadlocks) */
+{ int i,permanent=2,triedforce=0;struct stat stbuf;time_t t;
+  if(*lockp)
+   { if(!strcmp(name,*lockp))	/* compare the previous lockfile to this one */
+	return;			 /* they're equal, save yourself some effort */
+     unlock(lockp);		       /* unlock any previous lockfile FIRST */
+   }				  /* to prevent deadlocks (I hate deadlocks) */
+  if(!*name)
      return;
   name=tstrdup(name); /* allocate now, so we won't hang on memory *and* lock */
-  for(;;)
-   { yell("Locking",name);
-     if(!NFSxopen(name,LOCKperm))
+  for(lcking|=lck_LOCKFILE;;)
+   { yell("Locking",name);		/* in order to cater for clock skew: */
+     if(!NFSxopen(name,LOCKperm,&t))	       /* get time t from filesystem */
       { *lockp=name;break;			   /* lock acquired, hurray! */
       }
      switch(errno)
-      { case EEXIST:
-	 { time_t t;		   /* check if it's time for a lock override */
-	   if(!stat(name,&stbuf)&&stbuf.st_size<=MAX_LOCK_SIZE&&locktimeout
-	    &&(t=time((time_t*)0),!stat(name,&stbuf))&&	 /* stat till unlink */
-	    locktimeout<t-stbuf.st_mtime)		/* should be atomic, */
-	      if(unlink(name))		       /* but I can't guarantee that */
-	       { log("Forced unlock denied on");logqnl(name);
-	       }
+      { case EEXIST:		   /* check if it's time for a lock override */
+	   if(!lstat(name,&stbuf)&&stbuf.st_size<=MAX_LOCK_SIZE&&locktimeout
+	    &&!lstat(name,&stbuf)&&locktimeout<t-stbuf.st_mtime)
+	     /*
+	      * stat() till unlink() should be atomic, but can't guarantee that
+	      */
+	    { if(triedforce)			/* already tried, not trying */
+		 goto faillock;					    /* again */
+	      if(S_ISDIR(stbuf.st_mode)||unlink(name))
+		 triedforce=1,log("Forced unlock denied on"),logqnl(name);
 	      else
-	       { log("Forcing lock on");logqnl(name);suspend();
+	       { log("Forcing lock on");logqnl(name);suspend();goto ce;
 	       }
+	    }
+	   else
+	      triedforce=0;		 /* legitimate iteration, clear flag */
 	   break;
-	 }
 	default:	       /* maybe filename too long, shorten and retry */
 	   if(0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1]))
 	    { log("Truncating");logqnl(name);log(" and retrying lock\n");
@@ -254,12 +260,11 @@ faillock:  log("Lock failure on");logqnl(name);goto term;
 #endif
       }
      sleep((unsigned)locksleep);
-     if(nextexit)
-      {
-term:	free(name);break;		     /* drop the preallocated buffer */
+ce:  if(nextexit)
+term: { free(name);break;		     /* drop the preallocated buffer */
       }
    }
-  lcking=0;
+  lcking&=~lck_LOCKFILE;
   if(nextexit)
    { log(whilstwfor);log("lockfile");logqnl(name);terminate();
    }
@@ -274,30 +279,35 @@ lcllock()				   /* lock a local file (if need be) */
 }
 
 sterminate()
-{ static const char*const msg[]={newline,0,"memory\n","fork\n",
-   "a file descriptor\n","a kernel lock\n"};
+{ static const char*const msg[]={"memory","fork",	  /* crosscheck with */
+   "a file descriptor","a kernel lock"};	  /* lck_ defs in procmail.h */
   ignoreterm();
   if(pidchild>0)	    /* don't kill what is not ours, we might be root */
      kill(pidchild,SIGTERM);
   if(!nextexit)
    { nextexit=1;log("Terminating prematurely");
-     if(1!=lcking)
-      { if(1<lcking)
-	   log(whilstwfor);
-	log(msg[lcking]);terminate();
+     if(!(lcking&lck_LOCKFILE))
+      { register unsigned i,j;
+	if(i=(lcking&~(lck_ALLOCLIB|lck_LOCKFILE))>>1)
+	 { log(whilstwfor);
+	   for(j=0;(i>>=1)&1;++j);
+	   log(msg[j]);
+	 }
+	log(newline);terminate();
       }
    }
 }
 
 terminate()
-{ nextexit=2;			/* prevent multiple invocations of terminate */
+{ ignoreterm();
+  if(retvl2!=EX_OK)
+     fakedelivery=0,retval=retvl2;
   if(getpid()==thepid)
    { if(retval!=EX_OK)
-      { log(Mail);
-	log(fakedelivery?"lost\n":
-	 retval==EX_TEMPFAIL?"requeued\n":"bounced\n");
+      { lastfolder=fakedelivery?"**Lost**":		/* don't free() here */
+	 retval==EX_TEMPFAIL?"**Requeued**":"**Bounced**";
       }
-     unlock(&loclock);unlock(&globlock);fdunlock();
+     logabstract();nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
    }
   exit(fakedelivery==2?EX_OK:retval);
 }
@@ -374,8 +384,7 @@ getb()								 /* my fgetc */
      i=ungetb;ungetb= -1;return i;
    }
   if(rcbufp==rcbufend)
-   { rcbufend=rcbuf+rread(rc,rcbufp=rcbuf,STDBUF);		   /* refill */
-   }
+     rcbufend=rcbuf+rread(rc,rcbufp=rcbuf,STDBUF);		   /* refill */
   return rcbufp<rcbufend?*rcbufp++:EOF;
 }
 
@@ -397,15 +406,15 @@ deliver(boxname)char*const boxname;
    (tofolder=1,opena(buf)):dirmail();
 }
 
-#ifndef fdlock
+#ifdef KERNEL_LOCKS
 static oldfdlock;				    /* the fd we locked last */
 #ifdef F_SETLKW
 static struct flock flck;		/* why can't it be a local variable? */
 
 fdlock(fd)					   /* the POSIX-fcntl() lock */
 { flck.l_type=F_WRLCK;flck.l_whence=SEEK_SET;flck.l_len=0;
-  flck.l_start=tell(fd);lcking=5;fd=fcntl(oldfdlock=fd,F_SETLKW,&flck);
-  lcking=0;return fd;
+  flck.l_start=tell(fd);lcking|=lck_KERNELL;
+  fd=fcntl(oldfdlock=fd,F_SETLKW,&flck);lcking&=~lck_KERNELL;return fd;
 }
 
 fdunlock()
@@ -415,9 +424,9 @@ fdunlock()
 #ifdef F_LOCK
 static long oldlockoffset;
 
-fdlock(fd)						 /* the sysV-lockf() */
-{ oldlockoffset=tell(fd);lcking=5;fd=lockf(oldfdlock=fd,F_LOCK,0L);lcking=0;
-  return fd;
+fdlock(fd)						 /* the SysV-lockf() */
+{ oldlockoffset=tell(fd);lcking|=lck_KERNELL;fd=lockf(oldfdlock=fd,F_LOCK,0L);
+  lcking&=~lck_KERNELL;return fd;
 }
 
 fdunlock()
@@ -426,7 +435,8 @@ fdunlock()
 #else /* F_LOCK */
 #ifdef LOCK_EX
 fdlock(fd)						  /* the BSD-flock() */
-{ lcking=5;fd=flock(oldfdlock=fd,LOCK_EX);lcking=0;return fd;
+{ lcking|=lck_KERNELL;fd=flock(oldfdlock=fd,LOCK_EX);lcking&=~lck_KERNELL;
+  return fd;
 }
 
 fdunlock()
@@ -435,14 +445,16 @@ fdunlock()
 #endif /* LOCK_EX */
 #endif /* F_LOCK */
 #endif /* F_SETLKW */
-#endif /* fdlock */
-
-#include "exopen.h"
+#endif /* KERNEL_LOCKS */
 					/* an NFS secure exclusive file open */
-NFSxopen(name,mode)char*name;const mode_t mode;
-{ char*p;int j= -2,i;
-  i=lastdirsep(name)-name;strncpy(p=malloc(i+UNIQnamelen),name,i);lcking=1;
-  if(unique(p,p+i,mode))
-     j=myrename(p,name);	 /* try and rename it, fails if nonexclusive */
+NFSxopen(name,mode,tim)char*name;const mode_t mode;time_t*const tim;
+{ char*p;int j= -2,i;struct stat stbuf;
+  i=lastdirsep(name)-name;strncpy(p=malloc(i+UNIQnamelen),name,i);
+  if(unique(p,p+i,mode))	       /* try and rename the unique filename */
+   { stat(p,&stbuf);
+     if(tim)
+	*tim=stbuf.st_mtime;	 /* return the filesystem time to the caller */
+     j=myrename(p,name);
+   }
   free(p);return j;
 }

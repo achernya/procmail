@@ -15,13 +15,16 @@ regexp.c	Custom regular expression library, *fully* egrep compatible.
 common.c	Some routines that are used by procmail and formail.
 exopen.c	Collection of routines about an NFS secure excl. open.
 exopen.h	The very same.
-procmail.h	Include file with all declarations.
+strpbrk.c	A substitute for a possibly missing strpbrk() library function.
+strpbrk.h	Yes.
+procmail.h	Include file with all declarations for procmail.
 
 includes.h	System include files are all referenced here.
 config.h	The file to edit if you want to change, yes, the configuration.
 autoconf	The shell script that seizes your compiler and machine,
 		and then creates a file called autoconf.h describing the
 		kludges that are going to be applied for your installation.
+recommend.c	A program showing the best configuration for you.
 
 shell.h		Defines a few 'shell' macros for malloc and the like.
 man/*		Yes, the man pages (made in a labour camp) and two additional

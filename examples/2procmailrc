@@ -58,10 +58,7 @@ henries				# will go to $MAILDIR/henries
 toread				# $MAILDIR/toread
 
 # Anything that has not been delivered by now will go to $DEFAULT
-# BUT, since we have not specified any global lock file because we
-# were working with local lock files, and since we are sending the mail to
-# $DEFAULT now, we need to specify a lockfile for that too.  We use
-# a global lockfile for that  (it won't be created until procmail
-# has parsed (needed to parse) up till here).
 
-LOCKFILE=$DEFAULT.lock
+# After procmail sees the end of the rcfile, it pretends that it sees a
+# LOCKFILE=$DEFAULT$LOCKEXT
+# Therefore $DEFAULT is always locked.

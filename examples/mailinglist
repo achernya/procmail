@@ -1,4 +1,4 @@
-$Id: mailinglist,v 2.4 1992/01/31 12:03:04 berg Rel $
+$Id: mailinglist,v 2.6 1992/04/09 16:17:41 berg Rel $
 
 			How to set up mailing lists
 			---------------------------
@@ -93,10 +93,10 @@ a. Can be circumvented by using nested aliases like:
    This can however, become extremely messy to maintain.
 
 b. This can partly be avoided if you use aliases like:
-	mylist: :input:/path/to/the/memberfile
+	mylist: :include:/path/to/the/memberfile
    The memberfile should contain:
 	fred,john,wilma,barney@bedrock,pebbles
-   You cannot avoid using newaliases however, and *will* get extremely messy
+   You cannot avoid using newaliases however, and it *will* get extremely messy
    if you have to start using nested aliases.
 
 c. Can only be taken care of by using a mailfilter like procmail.
@@ -114,8 +114,8 @@ h. Can only be taken care of by using a mailfilter like procmail.
    ------------------------------------------------
 
 Instead of using a mailfilter you could also take care of most of the problems
-three till seven by editing the sendmail.cf file.  I strongly would recommend
-against this approach however, since this will be too much of a customizing
+three till seven by editing the sendmail.cf file.  I would strongly recommend
+against this approach however, since this will be too much of a customising
 operation and surely will not be a trivial task (in all cases).	 As a general
 rule: don't mess with a sendmail.cf file once it is working :-).
 
@@ -204,9 +204,9 @@ subscribers separated by whitespace (blanks, tabs or newlines) like:
 
  fred john  wilma  barney@bedrock  pebbles
 
-The /some/path/listrc file you should look like the sample listrc file
+The /some/path/listrc file should look like the sample listrc file
 supplied in this directory.  This listrc file need only be present once,
-it will cater for all the mailinglists you like to create.
+it will cater for all the mailinglists you'd like to create.
 
 
 7. Now, what does the above all do?

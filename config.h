@@ -1,4 +1,4 @@
-/*$Id: config.h,v 2.13 1992/01/31 11:32:45 berg Rel $*/
+/*$Id: config.h,v 2.19 1992/04/29 15:54:33 berg Rel $*/
 
 /*#define KERNEL_LOCKS	/* uncomment if you want to use kernel locks on file
 			   descriptors (not recommended if your system uses a
@@ -6,14 +6,49 @@
 	mailboxes and moves them into place); only advisable if your mailreader
 	can't be convinced to use "dotfile"-locks */
 
-/*#define MAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment if your mail
+/*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
+#define eMAILBOX_SEPARATOR	"\2\1\1\1\n"	/* uncomment if your mail
 						   system uses nonstandard
 	mail separators (non sendmail or smail compatible mailers like MMDF),
 	if yours is even different, uncomment and change the value of course */
 
-/*#define DONT_DISCARD_IFS	/* uncomment if you don't want procmail to
-				   discard the value of the IFS environment
-	variable, forget about this if you don't know what IFS is for */
+/* KEEPENV and PRESTENV should be defined as a comma-separated null-terminated
+   list of strings */
+
+/* every environment variable appearing in KEEPENV will not be thrown away
+ * upon startup of procmail, e.g. you could define KEEPENV as follows:
+ * #define KEEPENV	{"TZ","LANG",0}
+ */
+#define KEEPENV		{0}
+
+/* every environment variable appearing in PRESTENV will be set or wiped
+ * out of the environment (variables without an '=' sign will be thrown
+ * out), e.g. you could define PRESTENV as follows:
+ * #define PRESTENV	{"IFS","PATH=$HOME/bin:/bin:/usr/bin",0}
+ * any side effects (like setting the umask after an assignment to UMASK) will
+ * *not* take place
+ */
+#define PRESTENV	{"IFS","LD_LIBRARY_PATH",0}
+
+/*****************************************************************
+ * Only edit below this line if you have edited this file before *
+ *****************************************************************/
+
+/*#define NO_USER_TO_LOWERCASE_HACK	/* uncomment if your getpwnam() is
+					   case insensitive or if procmail
+	will always be supplied with the correct case in the explicit
+	delivery mode argument */
+
+/*#define NO_NFS_ATIME_HACK	/* uncomment if you're definitely not using
+				   NFS mounted filesystems and can't afford
+	procmail to sleep for 1 sec. before writing a mailbox */
+
+/* every user & group appearing in TRUSTED_IDS is allowed to use the -f option
+   if the list is empty (just a terminating 0), everyone can use it
+   TRUSTED_IDS should be defined as a comma-separated null-terminated
+   list of strings */
+
+#define TRUSTED_IDS	{"root","daemon","uucp","mail","x400",0}
 
 /*#define SYSTEM_MBOX	"$HOME/.mbox"	/* uncomment and/or change if the
 					   preset default mailbox is *not*
@@ -24,7 +59,7 @@
 					   preset default SENDMAIL is not
 	suitable */
 
-/*#define console	":/dev/console" /* uncomment if you want procmail to
+/*#define console	"/dev/console"	/* uncomment if you want procmail to
 					   use the console (or any other
 	terminal) to print any error messages that could not be dumped in the
 	"logfile".  (Only recommended for debugging purposes, if you have
@@ -52,7 +87,7 @@
 #define BLKSIZ		1024
 #define STDBUF		128
 #endif /* SMALLHEAP */
-#define HOSTNAMElen	8	  /* nr of significant chararacters for HOST */
+#define HOSTNAMElen	9	  /* nr of significant chararacters for HOST */
 #define BOGUSprefix	"BOGUS."	     /* prepended to bogus mailboxes */
 #define PROCMAILRC	".procmailrc"
 #define DEFsuspend	16		 /* multi-purpose 'idle loop' period */
@@ -82,12 +117,15 @@
 #define VERSIONOPT	'v'			/* option to display version */
 #define PRESERVOPT	'p'			     /* preserve environment */
 #define TEMPFAILOPT	't'		      /* return EX_TEMPFAIL on error */
+#define FROMWHOPT	'f'			   /* set name on From_ line */
+#define ALTFROMWHOPT	'r'		/* alternate and obsolete form of -f */
 #define DELIVEROPT	'd'		  /* deliver mail to named recipient */
 #define PROCMAIL_USAGE	\
- "Usage: procmail [-vpt] [-d recipient ] [ parameter=value | rcfile ] ...\n"
+ "Usage: procmail [-vpt] [-f fromwhom] [parameter=value | rcfile] ...\
+\n   Or: procmail [-vpt] [-f fromwhom] -d recipient ...\n"
 
 #define MINlinebuf	128    /* minimal LINEBUF length (don't change this) */
-#define FROM_EXPR	"\n\nFrom +[^\t\n ]+ +[^\t\n ]"
+#define FROM_EXPR	"\nFrom "
 #define FROM		"From "
 #define NSUBJECT	"^Subject:.*$"
 #define MAXSUBJECTSHOW	78
@@ -97,7 +135,7 @@
 #define TABCHAR		"\t"
 #define TABWIDTH	8
 
-#define RECFLAGS	"HBDAahbfcwi"
+#define RECFLAGS	"HBDAahbfcwWi"
 #define HEAD_GREP	 0
 #define BODY_GREP	  1
 #define DISTINGUISH_CASE   2
@@ -108,7 +146,8 @@
 #define FILTER			7
 #define CONTINUE		 8
 #define WAIT_EXIT		  9
-#define IGNORE_WRITERR		   10
+#define WAIT_EXIT_QUIET		   10
+#define IGNORE_WRITERR		    11
 
 #define UNIQ_PREFIX	'_'	  /* prepended to temporary unique filenames */
 #define ESCAP		'>'
@@ -127,7 +166,9 @@
 #define FM_TRUST	't'	/* trust the sender to supply a valid header */
 #define FM_SPLIT	's'				      /* split it up */
 #define FM_NOWAIT	'n'		      /* don't wait for the programs */
-#define FM_EVERY	'e'			 /* split on every From line */
+#define FM_EVERY	'e'	/* don't require empty lines leading headers */
+#define FM_MINFIELDS	'm'    /* the number of fields that have to be found */
+#define DEFminfields	2	    /* before a header is recognised as such */
 #define FM_DIGEST	'd'				 /* split up digests */
 #define FM_QUIET	'q'		    /* ignore write errors on stdout */
 #define FM_EXTRACT	'x'			   /* extract field contents */
@@ -135,4 +176,4 @@
 #define FM_REN_INSERT	'i'			/* rename and insert a field */
 #define FM_DEL_INSERT	'I'			/* delete and insert a field */
 #define FM_USAGE	"Usage: \
-formail [+nnn] [-nnn] [-bfrktnedq] [-xaiI field] [-s command arg ...]\n"
+formail [+nn] [-nn] [-bfrktnedq] [-m nn] [-xaiI field] [-s prog arg ...]\n"

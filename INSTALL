@@ -12,7 +12,8 @@ Discusses:
 To install procmail, lockfile and formail: edit Makefile & config.h accordingly
 and type 'make install'.
 Intended configurable options in Makefile are: the install-destinations
-Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support.
+Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support,
+ standard environment presettings, trusted user ids.
 
 'make install' will:
       - execute autoconf (a shell script that repeatedly calls the C compiler
@@ -21,11 +22,11 @@ Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support.
       - compile the *.c files, create the three stripped binaries:
 	procmail, lockfile and formail
       - copy these binaries to $(BINDIR)
-      - copy the man pages to $(MANDIR)
+      - copy the man pages to $(MAN1DIR) and $(MAN5DIR)
 
 'make deinstall' will:
       - remove the just installed files in $(BINDIR)
-      - remove the just installed files in $(MANDIR)
+      - remove the just installed files in $(MAN1DIR) and $(MAN5DIR)
 
 
 Minimal requirements:
@@ -94,7 +95,7 @@ MMDF users should note that they need a .maildelivery file *instead* of the
    -----------------------------------------------
 
 If you are a system administrator you can decide to install procmail
-globally (i.e. as an equivalent substitute for the local-mail*delivery*-
+globally (i.e. as an equivalent substitute for the local-maildelivery-
 capabilities of /bin/mail), this has the advantage that users do not need to
 have a .forward file anymore that calls up procmail.  Simply having a
 .procmailrc file in the $HOME directory will suffice.  Operation is transparent
@@ -102,6 +103,13 @@ in this case (i.e. if no .procmailrc file is present in the $HOME directory,
 mail will be delivered as usual).
 
 For direct examples on how to do this, look at the examples/advanced file.
+
+*******************************************************************************
+HIGHLY RECOMMENDED: install procmail setuid root (and/or setgid maildeamon)
+		    install lockfile setgid maildaemon (and/or setuid root)
+
+To obtain specific instructions on the best installation, type "make recommend"
+*******************************************************************************
 
 				---
 

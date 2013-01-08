@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: lockfile.1,v 2.3 1992/01/31 12:07:40 berg Rel $
+.Id $Id: lockfile.man,v 2.6 1992/04/29 15:55:09 berg Rel $
 .de Sh
 .br
 .ne 11
@@ -16,7 +16,7 @@
 .de Tp
 .br
 .ne 9
-.TP "\\$1"
+.TP \\$1
 ..
 .de Rs
 .na
@@ -45,6 +45,10 @@ lockfile \- conditional semaphore-file creator
 |
 .I "\fB\-s\fPsuspend"
 |
+.B "\-ml"
+|
+.B "\-mu"
+|
 .I filename
 \&.\|.\|.
 .ad
@@ -63,30 +67,30 @@ to do until failure is returned.
 If the number of
 .I retries
 is 0 (default) lockfile will retry forever.
-.LP
+.PP
 If the number of
 .I retries
 expires before all files have been created, lockfile returns failure and
 removes all the files it created up till that point.
-.LP
+.PP
 The return value of lockfile can be easily inverted by specifying
 .B \-!
 as an argument (comes in handy in shell scripts).
-.LP
+.PP
 All flags can be specified anywhere on the command line, they will be
 processed when encountered.  The command line is simply parsed from
 left to right.
-.LP
+.PP
 All files created by lockfile will have access permission 0, and therefore
 will have to be removed with
 .B rm
 .BR \-f .
-.LP
+.PP
 If you specify a
 .I locktimeout
 then a lockfile will be removed by force after locktimeout seconds have
-passed since the lockfile was last modified/created.  After a lockfile is
-removed by  force, a suspension of
+passed since the lockfile was last modified/created.  Lockfile is clock skew
+immune.  After a lockfile has been removed by force, a suspension of
 .I suspend
 seconds (defaults to 16) is taken into account, in order to prevent the
 inadvertent immediate removal of any newly created lockfile by another program
@@ -94,6 +98,20 @@ inadvertent immediate removal of any newly created lockfile by another program
 .BR SUSPEND
 in
 .BR procmail (1)).
+.Ss "Mailbox locks"
+If the permissions on the system mail spool directory allow it, or if lockfile
+is suitably setuid or setgid, it will be able to lock and unlock your system
+mailbox by using the options
+.B "\-ml"
+and
+.B "\-mu"
+respectively.
+.Sh FILES
+.Tp 2.3i
+.B  /etc/passwd
+to get the invoker's loginname
+.B +SYSTEM_MBOX++DEFlockext+
+lockfile for the system mailbox
 .Sh "SEE ALSO"
 .na
 .BR rm (1),
@@ -116,22 +134,22 @@ lockfile is only a simple program and can't process concatenated options.
 Multiple
 .B \-!
 flags will toggle the return status.
-.LP
+.PP
 Since flags can occur anywhere on the command line, any filename starting
 with a '-' has to be preceded by './'.
-.LP
+.PP
 The number of
 .I retries
 is global.  That is, it is not reset when a new file is being created.
 It can, however, be reset by specifying
 .RI \-r newretries
 after every file on the command line.
-.LP
+.PP
 lockfile performs the locking in an NFS-secure way.
 .Sh AUTHOR
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .Rs
-berg@messua.informatik.rwth-aachen.de
+berg@pool.informatik.rwth-aachen.de
 .br
 berg@physik.tu-muenchen.de
 .Re

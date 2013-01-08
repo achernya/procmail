@@ -1,3 +1,5 @@
+	Only the last entry is complete, the others might have been condensed.
+
 1990/12/07: v1.00
 1990/12/12: v1.01
 1991/02/04: v1.02
@@ -19,54 +21,22 @@
 	    Implemented a custom regular expression library (fully egrep
 	       compatible), should eliminate the annoyances with incompatible
 	       egreps
-	    Changed the formatting (indenting) style in all the source files
-	       (which blows up all diffs beyond proportion of course)
 	    Accomplished the doubtful milestone of having a source file
 	       (regexp.c) which provokes a compiler error on an old compiler
 	       (if using the optimiser)
-	    Threw out the GREP environment variable
 	    Ignoring leading spaces on condition lines now (means that
 	       everything can be indented in the rcfile)
-	    Rewrote some parts to use the regexp lib, making the code smaller
 1991/10/22: v2.31
-	    Added answers to FAQ list
-	    Fixed portability problem with missing strpbrk and strchr
-	    Cleaned up the lockfile creation when in explicit delivery mode
 1991/12/05: v2.40
-	    Cleaned the example rcfiles
-	    Updated the FAQ list
-	    Updated the man pages to fully correspond to the program again
-	       (beautified them in the process)
 	    Made a clear debugging-aid entry in the INSTALL file
-	    Added the -a option to formail
-	    Added an IFS environment variable override in procmail
-	    Fixed regression bug in formail, it did not terminate if the mail
-	       which was piped in did not contain an end of header mark
-	    Made the -aiI options of formail work while splitting as well
-	    Fixed bug in the new regexp lib (caused core dumps if the mail had
-	       a null body)
 	    Made procmail capable of healing the recipient's mail spool file
-	    Corrected all the docs (fixed a spelling error)
 	    Tricked NFS into supplying an access_time<modification_time for the
 	       folders written
-	    Added the 'a' flag to procmail
 1991/12/13: v2.50
-	    Fixed portability problems onto ISC in the autoconf script
-	    Fixed bug in procmail evaluating $- and $$
-	    Added -x option to formail
-	    Made formail operate as orthogonal as possible with combinated
-	       options
 1992/01/22: v2.60
-	    Complete overhaul of the regexp lib (reduced size, and fixed some
-	       portability problems to buggy compilers)
-	    Fixed lockfile not to modify argv[]
-	    Removed superfluous escapes in the example files
-	    Extended the portability of the autoconf script
 	    Enhanced the response to signals (SIGTERM and SIGQUIT now have
 	       different meanings)
-	    Improved autoconfiguration for 16-bit machines
-	    Updated the man pages/FAQ-list/INSTALL-file for MMDF support
-1991/01/31: v2.61
+1992/01/31: v2.61
 	    Updated the directions for .forward file contents
 	    Fixed the EDQUOT define (some machines didn't define it)
 	    Eliminated a rare (no report of it occuring yet) inconvenience,
@@ -77,4 +47,61 @@
 	       examples/advanced)
 	    Added a search for sendmail in autoconf
 	    Fixed a problem in the implicit-lockfile-searching code
-	    Added the ARCHITECTURE variable to the makefile (for convenience)
+	    Added the ARCHITECTURE variable to the Makefile (for convenience)
+1992/04/30: v2.70
+	    Added NO_USER_TO_LOWERCASE_HACK and NO_NFS_ATIME_HACK defines to
+	       config.h
+	    Added LD_LIBRARY_PATH protection (would have been a security hole
+	       on some machines)
+	    Fixed mistakenly default usage of KERNEL_LOCKS (was enabled
+	       regardless of the definition of KERNEL_LOCKS in config.h), if
+	       your system is running buggy lockd's, problems could have
+	       occurred
+	    Inserted some casts to shut up systems with ANSI compilers and
+	       prototyped include files
+	    Made sure logfile is flushed before forking
+	    Made sure no library calls are made in signal handlers
+	    Added a `vacation'-autoreply sample in examples/advanced
+	    Worked around a `PATH' bug in some Bourne shells
+	    Sped up sputenv, the smart environment handler routine
+	    Made sure procmail checks the return value from close()
+	    Made the man pages yet more portable (.LP->.PP)
+	    Made it possible for lockfile to be setuid or setgid, so that
+	       it is able to create and unlink lockfiles in the mail
+	       spool directory, even if normal users cannot
+	    Created the targets 'recommend' and 'suid' in Makefile, in
+	       order to make suid/sgid recommendations even more obvious,
+	       not easily overlooked and automatic
+	    Worked around bugs in some compilers not accepting:
+	       - struct eps const*const something;
+	       - char a[2]; &a;
+	    Worked around a bug in the SINIX include files (wrong protype for
+	       uname)
+	    Made procmail & lockfile clock skew independent (during LOCKTIMEOUT)
+	    By popular demand: added possibility to select mails on size
+	    Made procmail accept multiple recipients (this was not as trivial
+	       as it sounds!), in order for complete compatibility with mailers
+	       like smail 2.x
+	    Expanded the mail-delivery-agent instructions in examples/advanced,
+	       this includes specific intstructions for smail 2.x
+	    Made special entries in config.h for semi-permanent environment-
+	       variable overrides
+	    Made formail more intelligent, it can now parse full-fledged
+	       RFC822 addresses (quoting et al)
+	    Let formail look at the Date: field when reconstructing the date
+	    Changed stdin handling in forks in formail, to circumvent a bug in
+	       HP/UX
+	    A complete rewrite of formail, the code got bigger, the runtime
+	       requirement got bigger, it got slower, but, it's more structured
+	       (so much for structured programming :-)
+	    Provide a separate strpbrk.c file, since I use it in several
+	       programs now
+	    Made procmail check the permissions of its invoker, generate
+	       an overriding From_ line if necessary, and consequently made it
+	       accept the -f option (fromwhom), and also the alternate obsolete
+	       -r option of course
+	    Wiped out the ./include tree, made autoconf check it instead (the
+	       compile line looks so terribly clean now :-)
+	    Procmail makes an additional security check on the rcfiles before
+	       accepting them (owner and permissions, see man page)
+	    Fixed the `spurious' 0660 permissions on system-mailboxes
