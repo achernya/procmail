@@ -1,0 +1,34 @@
+#
+# Assign the fully qualified mail address of the maintainer of this list
+# to "maintainer".  If empty, request-mail will not be mailed to any
+# maintainer and will be stored in the "request" file for this list.
+#
+
+maintainer	=
+
+#LOGFILE=log				# uncomment in case of emergency
+#VERBOSE=yes				# uncomment in case of real emergency
+
+#size_limit	=	524288		# sanity cutoff value for submissions
+#archive_hist	=	2		# number of messages left archived
+#archive_log	=	log		# log file for archive retrievals
+#maxhist	=	8		# bounce history limit
+#minbounce	=	3		# no. of bounces before removal
+#cutoff_bounce	=	256		# lines to keep in bounce processing
+#match_threshold=	28672		# for close matches to the list
+#off_threshold	=	20480		# for loosely finding your name
+
+#reject_threshold=	$match_threshold # to determine if you may subscribe
+#submit_threshold=	$match_threshold # to determine if you may submit
+#foreign_submit =	yes
+##foreign_submit			# uncomment this line if you
+					# *don't* want to allow
+					# non-subscribers to submit
+
+#X_COMMAND	=	X-Command
+#X_COMMAND_PASSWORD =			# put the password for
+					# X-Command mails here
+
+RC_CUSTOM				# clear this one from the environment
+					# so that we include this file only
+					# once

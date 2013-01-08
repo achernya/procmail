@@ -1,57 +1,34 @@
-.de Id
-.ds Rv \\$3
-.ds Dt \\$4
-..
-.Id $Id: formail.man,v 2.18 1992/06/03 14:40:24 berg Rel $
-.de Sh
-.br
-.ne 11
-.SH "\\$1"
-..
-.de Ss
-.br
-.ne 10
-.SS "\\$1"
-..
-.de Tp
-.br
-.ne 9
-.TP \\$1
-..
-.de Rs
-.na
-.nf
-.RS
-..
-.de Re
-.RE
-.fi
-.ad
-..
+.Id $Id: formail.man,v 1.8 1993/01/22 13:42:11 berg Exp $
 .TH FORMAIL 1 \*(Dt BuGless
-.SH NAME
 .na
+.SH NAME
 formail \- mail (re)formatter
 .SH SYNOPSIS
 .B formail
 .RI [ "\fB\+FM_SKIP+\fPskip" ]
 .RI [ "\fB\+FM_TOTAL+\fPtotal" ]
-.RB [ \-+FM_BOGUS++FM_FORCE++FM_REPLY++FM_KEEPB++FM_TRUST++FM_NOWAIT++FM_EVERY++FM_DIGEST++FM_QUIET+ ]
+.RB [ \-+FM_BOGUS++FM_CONCATENATE++FM_FORCE++FM_REPLY++FM_KEEPB++FM_TRUST++FM_NOWAIT++FM_EVERY++FM_DIGEST++FM_QUIET+ ]
 .RB [ \-+FM_MINFIELDS+
 .IR "min fields" ]
 .if n .ti +0.5i
 .RB [ \-+FM_EXTRACT+
 .IR "header field" ]
+.RB [ \-+FM_EXTRC_KEEP+
+.IR "header field" ]
+.if n .ti +0.5i
 .RB [ \-+FM_ADD_IFNOT+
 .IR "header field" ]
-.if n .ti +0.5i
 .RB [ \-+FM_ADD_ALWAYS+
 .IR "header field" ]
+.if n .ti +0.5i
 .RB [ \-+FM_REN_INSERT+
 .IR "header field" ]
-.if n .ti +0.5i
 .RB [ \-+FM_DEL_INSERT+
 .IR "header field" ]
+.if n .ti +0.5i
+.RB [ \-+FM_ReNAME+
+.I "oldfield"
+.IR "newfield" ]
 .RB [ \-+FM_SPLIT+
 .I command
 .I arg
@@ -77,6 +54,10 @@ bogus `+FROM+' lines with a `+ESCAP+'.
 .B \-+FM_BOGUS+
 Don't escape any bogus mailbox headers (i.e. lines starting with `+FROM+').
 .Tp
+.B \-+FM_CONCATENATE+
+Concatenate continued fields in the header.  Might be convenient when
+postprocessing mail with standard (line oriented) text utilities.
+.Tp
 .B \-+FM_FORCE+
 Force formail to simply pass along any non-mailbox format (i.e. don't
 generate a `+FROM+' line as the first line).
@@ -97,11 +78,11 @@ option then the body will not be escaped.
 .B \-+FM_TRUST+
 Trust the sender to have used a valid return address in his header.  This
 option will be most useful when generating auto-reply headers from news
-articles.  If this option is not turned on, formail tries to digest the most
-probable valid return address itself.
+articles.  If this option is not turned on, formail tends to favour
+machine-generated addresses in the header.
 .Tp
 .B \-+FM_SPLIT+
-The input will be split up into seperate mail messages, and piped into
+The input will be split up into separate mail messages, and piped into
 a program one by one (a new program is started for every part).
 .B \-+FM_SPLIT+
 has to be the last option specified, the first argument following it
@@ -129,9 +110,14 @@ before it decides it found the start of a new message, it defaults to
 Tells formail to ignore any write errors on stdout.
 .Tp
 .I "\fB\-+FM_EXTRACT+\fP header field"
-Extract this
+Extract the contents of this
 .I header field
 from the header, display it as a single line.
+.Tp
+.I "\fB\-+FM_EXTRC_KEEP+\fP header field"
+Same as
+.BR \-+FM_EXTRACT+ ,
+but also preserves the field name.
 .Tp
 .I "\fB\-+FM_ADD_IFNOT+\fP header field"
 Append a custom
@@ -156,6 +142,12 @@ Same as
 .BR \-+FM_REN_INSERT+ ,
 except that any existing similar fields are simply removed.
 .Tp
+.I "\fB\-+FM_ReNAME+\fP oldfield newfield"
+Renames all occurrences of the fieldname
+.I oldfield
+into
+.IR newfield .
+.Tp
 .I "\fB\+FM_SKIP+\fPskip"
 Skip the first
 .I skip
@@ -168,11 +160,11 @@ messages while splitting.
 .Sh EXAMPLES
 To split up a digest one usually uses:
 .Rs
-formail +FM_SKIP+1 -+FM_DIGEST++FM_SPLIT+ cat >>the_mailbox_of_your_choice
+formail +FM_SKIP+1 \-+FM_DIGEST++FM_SPLIT+ cat >>the_mailbox_of_your_choice
 .Re
 or
 .Rs
-formail +FM_SKIP+1 -+FM_DIGEST++FM_SPLIT+ procmail
+formail +FM_SKIP+1 \-+FM_DIGEST++FM_SPLIT+ procmail
 .Re
 .PP
 To supersede the Reply-To: field in a header you could use:
@@ -183,23 +175,27 @@ formail \-+FM_REN_INSERT+ "Reply-To: foo@bar"
 To convert a non-standard mailbox file into a standard mailbox file you can
 use:
 .Rs
-formail -+FM_DIGEST++FM_SPLIT+ cat <old_mailbox >>new_mailbox
+formail \-+FM_DIGEST++FM_SPLIT+ cat <old_mailbox >>new_mailbox
+.Re
+.PP
+Or, alternatively, if you have a very tolerant mailer:
+.Rs
+formail \-+FM_ADD_IFNOT+ Date: \-+FM_DIGEST++FM_SPLIT+ cat <old_mailbox >>new_mailbox
 .Re
 .Sh MISCELLANEOUS
 The regular expression that is used to find `real' postmarks is:
 .Rs
-"\\n\\n+FROM+[\\t ]*[^\\t\\n ]+[\\t ]+[^\\n\\t ]"
+"\en\en+FROM+[\et ]*[^\et\en ]+[\et ]+[^\en\et ]"
 .Re
-.PP
-In order to make postprocessing of mail easier, formail concatenates any
-continued header fields.
 .Sh "SEE ALSO"
 .na
+.nh
 .BR mail (1),
 .BR binmail (1),
 .BR sendmail (8),
 .BR procmail (1),
 .BR sh (1)
+.hy
 .ad
 .Sh DIAGNOSTICS
 .Tp 2.3i
@@ -231,13 +227,17 @@ the original sender was careful enough though, formail will be able to pick
 his/her address, instead of the list's).  Now if the list is not intelligent
 enough (most aren't) this autoreply will be widely distributed.
 .Sh BUGS
-None.  It's perfect :-).
-.Sh
+When formail has to generate a leading `+FROM+' line it normally will contain
+the current date.  If formail is given the option `\-+FM_ADD_IFNOT+ Date:',
+it will use the date from the `Date:' field in the header (if present).
+However, since formail copies it verbatim, the format will differ from that
+expected by most mail readers.
+.Sh MISCELLANEOUS
+Formail is eight-bit clean.
+.PP
+When formail has to determine the sender's address, every RFC 822 conforming
+mail address is allowed.  Formail will always strip down the address to
+its minimal form (deleting excessive comments and whitespace).
+.Sh NOTES
 Calling up formail with the \-+HELPOPT1+ or \-+HELPOPT2+ options will cause
 it to display a command-line help page.
-.Sh AUTHOR
-Stephen R. van den Berg at RWTH-Aachen, Germany
-.Rs
-berg@pool.informatik.rwth-aachen.de
-berg@physik.tu-muenchen.de
-.Re

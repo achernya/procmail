@@ -1,4 +1,4 @@
-#$Id: Makefile,v 2.23 1992/07/01 18:04:38 berg Rel $
+#$Id: Makefile,v 1.17 1993/01/28 14:21:47 berg Exp $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
@@ -8,202 +8,84 @@ BASENAME = /usr/local
 
 BINDIR	  = $(BASENAME)/bin$(ARCHITECTURE)
 MANDIR	  = $(BASENAME)/man
+# MAN1SUFFIX for regular utility manuals
 MAN1SUFFIX= 1
+# MAN5SUFFIX for file-format descriptions
 MAN5SUFFIX= 5
 MAN1DIR	  = $(MANDIR)/man$(MAN1SUFFIX)
 MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 
 # Things that can be made are:
 
-# procmail formail lockfile		These are the three programs contained
-#					in this package
-
-# all			Makes all three binaries and the man pages
-# install.man		Installs the man pages to $(MAN1DIR) and $(MAN5DIR)
-# install		Is a "make all" followed by copying all the binaries
-#			and man pages to $(BINDIR), $(MAN1DIR) and $(MAN5DIR)
-#			respectively
+# init (or makefiles)	Performs some preliminary sanity checks on your system
+#			and generates Makefiles accordingly
+# bins			Preinstalls only the binaries to ./new
+# mans			Preinstalls only the man pages to ./new
+# all			Does both
+# install.bin		Installs the binaries from ./new to $(BINDIR)
+# install.man		Installs the man pages from ./new to $(MAN[15]DIR)
+# install		Does both
 # recommend		Show some recommended suid/sgid modes
-# suid			Install the by-'make recommend'-shown modes
-# clean			Restores the package to pre-make state
-# deinstall		Removes the previously installed binaries and man
-#			pages by careful surgery
+# suid			Impose the modes shown by 'make recommend'
+# clean			Attempts to restore the package to pre-make state
+# realclean		Attempts to restore the package to pre-make-init state
+# deinstall		Removes any previously installed binaries and man
+#			pages from your system by careful surgery
+# autoconf.h		Will list your system's anomalies
+# procmail		Preinstalls just all procmail related stuff to ./new
+# formail		Preinstalls just all formail related stuff to ./new
+# lockfile		Preinstalls just all lockfile related stuff to ./new
 
 ########################################################################
 # Only edit below this line if you *think* you know what you are doing #
 ########################################################################
 
-# Directory for the standard include files
+# Makefile.0 - mark, don't (re)move this, a sed script needs it
+
+# Directory for the system include files
 USRINCLUDE = /usr/include
+# Paths for system libraries
+LIBPATHS   = /lib /usr/lib /usr/local/lib /lib/386
 
-OCFLAGS = -O #-ansi -pedantic -Wid-clash-6
-OLDFLAGS= -s
+CFLAGS0 = -O #-ansi -pedantic #-Wid-clash-6
+LDFLAGS0= -s
 
-CFLAGS	= $(OCFLAGS) #-D_POSIX_SOURCE
-LDFLAGS = $(OLDFLAGS) #-lcposix
+CFLAGS1 = $(CFLAGS0) #-posix -Xp
+LDFLAGS1= $(LDFLAGS0) #-lcposix
 
-CC	= cc # gcc
-MAKE	= make
-SHELL	= /bin/sh
+####CC	= cc # gcc
+# object file extension
 O	= o
 RM	= /bin/rm -f
+MV	= mv -f
+LN	= ln -f
+BSHELL	= /bin/sh
 INSTALL = cp
 DEVNULL = /dev/null
 
-BINS=procmail lockfile formail mailstat
+SUBDIRS = src man
+BINSS	= procmail lockfile formail mailstat
+MANS1S	= procmail formail lockfile
+MANS5S	= procmailrc procmailex
 
-MANS=man/procmail.1 man/procmailrc.5 man/procmailex.5 man/formail.1 \
-	man/lockfile.1
+# Makefile - mark, don't (re)move this, a sed script needs it
 
-MANS1=procmail.$(MAN1SUFFIX) formail.$(MAN1SUFFIX) lockfile.$(MAN1SUFFIX)
-MANS5=procmailrc.$(MAN5SUFFIX) procmailex.$(MAN5SUFFIX)
+HIDEMAKE=$(MAKE)
 
-OBJ=nonint.$(O) goodies.$(O) regexp.$(O)
+all: init
+	$(HIDEMAKE) make $@
 
-DEP=shell.h procmail.h config.h
+make:
+	@$(BSHELL) -c "exit 0"
 
-all:	everything recommend
+init:
+	$(BSHELL) ./initmake $(BSHELL) "$(SHELL)" "$(RM)" "$(MV)" "$(LN)" \
+	 $(USRINCLUDE) "$(LIBPATHS)" $(DEVNULL) "$(HIDEMAKE)" $(O) \
+	 "$(CC)" "$(CFLAGS1)" "$(LDFLAGS1)" "$(BINSS)" \
+	 "$(MANS1S)" "$(MANS5S)" "$(SUBDIRS)"
 
-everything: autoconf.h $(BINS) $(MANS)
+makefiles makefile Makefiles Makefile: init
 
-procmail: procmail.$(O) $(OBJ) exopen.$(O) common.$(O) retint.$(O) strpbrk.$(O)
-	$(CC) $(CFLAGS) -o procmail procmail.$(O) $(OBJ) exopen.$(O) \
-	 common.$(O) retint.$(O) strpbrk.$(O) $(LDFLAGS)
-
-lockfile: lockfile.$(O) exopen.$(O) strpbrk.$(O)
-	$(CC) $(CFLAGS) -o lockfile lockfile.$(O) exopen.$(O) strpbrk.$(O) \
-	 ${LDFLAGS}
-
-formail: formail.$(O) common.$(O) strpbrk.$(O)
-	$(CC) $(CFLAGS) -o formail formail.$(O) common.$(O) strpbrk.$(O) \
-	 ${LDFLAGS}
-
-mailstat: examples/mailstat
-	cp examples/mailstat mailstat
-
-_autotst: _autotst.$(O)
-	$(CC) $(CFLAGS) -o _autotst _autotst.$(O) $(LDFLAGS)
-
-autoconf.h: autoconf Makefile
-	$(SHELL) ./autoconf $(O) "$(MAKE)" autoconf.h "$(SHELL)" "$(RM)" \
-$(USRINCLUDE)
-
-Makefile: Manifest
-
-Manifest: config.h
-	@touch Manifest
-	@-if fgrep -n -e '`' config.h $(DEVNULL) | fgrep -v -e EOFName ; then \
-	 echo;echo '	^^^^^^^^^^^^^^^^^^^^ WARNING ^^^^^^^^^^^^^^^^^^^^^';\
-	      echo '	* Having backquotes in there could be unhealthy! *';\
-	 echo;fi;exit 0
-
-$(OBJ): $(DEP)
-
-retint.$(O): $(DEP)
-
-procmail.$(O): $(DEP) patchlevel.h
-
-exopen.$(O): config.h includes.h exopen.h strpbrk.h
-
-formail.$(O): config.h includes.h shell.h strpbrk.h
-
-lockfile.$(O): config.h includes.h exopen.h strpbrk.h
-
-common.$(O): includes.h shell.h
-
-recommend.$(O): config.h includes.h strpbrk.h
-	@$(CC) -c $(CFLAGS) recommend.c
-
-strpbrk.$(O): strpbrk.h includes.h
-
-procmail.h: includes.h exopen.h strpbrk.h
-	touch procmail.h
-
-includes.h: autoconf.h
-	touch includes.h
-
-.c.$(O):
-	$(CC) -c $(CFLAGS) $*.c
-
-man/man.sed: man/manconf.c config.h procmail.h
-	$(CC) $(CFLAGS) -o man/manconf man/manconf.c ${LDFLAGS}
-	man/manconf >man/man.sed
-	rm -f man/manconf
-
-man/procmail.1: man/man.sed man/procmail.man man/mansed
-	$(SHELL) man/mansed man/procmail.man man/procmail.1 $(SHELL)
-
-man/procmailrc.5: man/man.sed man/procmailrc.man man/mansed
-	$(SHELL) man/mansed man/procmailrc.man man/procmailrc.5 $(SHELL)
-
-man/procmailex.5: man/man.sed man/procmailex.man man/mansed
-	$(SHELL) man/mansed man/procmailex.man man/procmailex.5 $(SHELL)
-
-man/formail.1: man/man.sed man/formail.man man/mansed
-	$(SHELL) man/mansed man/formail.man man/formail.1 $(SHELL)
-
-man/lockfile.1: man/man.sed man/lockfile.man man/mansed
-	$(SHELL) man/mansed man/lockfile.man man/lockfile.1 $(SHELL)
-
-recommend: recommend.$(O) strpbrk.$(O)
-	@echo ----------------------------------------------------------------\
----------------
-	@echo If you are a system administrator you should consider \
-integrating procmail
-	@echo into the mail-delivery system -- for advanced functionality \
-AND SECURITY --.
-	@echo For more information about this topic you should look in the \
-examples/advanced
-	@echo file.
-	@echo
-	@echo "Also, HIGLY RECOMMENDED (type 'make suid' to execute it):"
-	@echo
-	@$(CC) $(CFLAGS) -o _autotst recommend.$(O) strpbrk.$(O) ${LDFLAGS}
-	@./_autotst $(BINDIR)/procmail $(BINDIR)/lockfile >suid.sh
-	@./_autotst $(BINDIR)/procmail $(BINDIR)/lockfile
-	@$(RM) _autotst
-	@echo ----------------------------------------------------------------\
----------------
-
-suid.sh: recommend
-
-suid:	suid.sh install.bin
-	@cat suid.sh
-	@$(SHELL) ./suid.sh
-	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINS)
-
-install.man: $(MANS)
-	@-mkdir $(MANDIR) 2>$(DEVNULL); exit 0
-	@-mkdir $(MAN1DIR) 2>$(DEVNULL); exit 0
-	@-mkdir $(MAN5DIR) 2>$(DEVNULL); exit 0
-	@chmod 0644 man/*.1 man/*.5
-	$(INSTALL) man/procmail.1 $(MAN1DIR)/procmail.$(MAN1SUFFIX)
-	$(INSTALL) man/procmailrc.5 $(MAN5DIR)/procmailrc.$(MAN5SUFFIX)
-	$(INSTALL) man/procmailex.5 $(MAN5DIR)/procmailex.$(MAN5SUFFIX)
-	$(INSTALL) man/lockfile.1 $(MAN1DIR)/lockfile.$(MAN1SUFFIX)
-	$(INSTALL) man/formail.1 $(MAN1DIR)/formail.$(MAN1SUFFIX)
-
-install.bin: everything
-	@-mkdir $(BINDIR) 2>$(DEVNULL); exit 0
-	@chmod 0755 $(BINS)
-	$(INSTALL) $(BINS) $(BINDIR)
-
-install: everything install.man install.bin
-	@echo
-	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINS)
-	@cd $(MAN1DIR); echo Installed in $(MAN1DIR); ls -l $(MANS1)
-	@cd $(MAN5DIR); echo Installed in $(MAN5DIR); ls -l $(MANS5)
-	@$(MAKE) recommend
-
-deinstall:
-	@echo ----------------------------- Deinstalling the procmail package.
-	@echo ----------------------------- Checking if everything was removed:
-	@-cd $(BINDIR); $(RM) $(BINS); ls -l $(BINS)
-	@-cd $(MAN1DIR); $(RM) $(MANS1); ls -l $(MANS1)
-	@-cd $(MAN5DIR); $(RM) $(MANS5); ls -l $(MANS5)
-	@echo ----------------------------- Ready.
-
-clean:
-	$(RM) $(OBJ) common.$(O) lockfile.$(O) exopen.$(O) retint.$(O) \
-	 strpbrk.$(O) formail.$(O) procmail.$(O) $(BINS) autoconf.h _autotst* \
-	 lookfor grepfor $(MANS) man/man.sed recommend.$(O) suid.sh
+bins mans install.bin install.man install recommend suid clean realclean \
+deinstall autoconf.h $(BINSS) multigram: init
+	$(HIDEMAKE) make $@

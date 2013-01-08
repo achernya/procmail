@@ -4,7 +4,8 @@
 
 1. How do I go about setting up a mailinglist?
 
-	Look in the examples/mailinglist file, it describes it in detail.
+	Look in the mailinglist directory, start reading the INTRO file,
+	it describes it in detail and should get you started.
 
 2. I installed procmail (i.e. typed 'make install'), but how am I supposed to
    use it?  When I type procmail on the command line it simply does nothing.
@@ -22,10 +23,21 @@
 
 	On some systems .forward files are not checked, in this case it might
 	be worth trying to put a line looking like this:
+		Forward to "|/usr/local/bin/procmail"
+	or if that doesn't work, try:
 		Pipe to /usr/local/bin/procmail
 	as the only line in your mail spool file (e.g. /usr/mail/$USER), as
-	well as doing a "chmod 04600 /usr/mail/$USER".	For more information
+	well as doing a "chmod 06600 /usr/mail/$USER".	For more information
 	on such systems, do a "man mail".
+
+	If all of this doesn't work, procmail can be called on a periodical
+	basis, either via "cron", "at" or whenever you start reading mail (or
+	log in).  The commands you would need in such a case would be
+	something like:
+		lockfile -ml
+		formail -s procmail </usr/mail/$USER
+		cp /dev/null /usr/mail/$USER
+		lockfile -mu
 
 3. When I compile everything the compiler complains about invalid or illegal
    pointer combinations, but it produces the executables anyway.
@@ -71,25 +83,28 @@
 
 8. Where do I look for examples about:
 	One home directory, several machine architectures?
-	Procmail as an integrated local mail delivery agent?
+	Procmail as an integrated local mail delivery agent? (generic,
+	 sendmail, smail, SysV mail)
+	Changing the mail spool directory to $HOME for all users
 	Security considerations (when installing procmail suid root)
-	How to generate autoreplies?
-	`Vacation' functionality
 	Exorbitant rcfile formats?
-	The 'A' flag?
+	The `A' flag?
 
 	Well, this probably is your lucky day :-), all these topics are covered
 	in the examples/advanced file.
 
+	Other examples (e.g. for autoreplies) are most likely to be found by
+	typing:		man procmailex
+
 9. Why do I have to insert my login name after the '#' in the .forward or
    .maildelivery file?
 
-	Some mailers 'optimise' maildelivery and take out duplicates from
+	Some mailers `optimise' maildelivery and take out duplicates from
 	Cc:, Bcc: and alias lists before delivery.  If two or more persons on
 	such a list would have identical .forward files, then the mailer will
-	eliminate all but one.	Adding a '#' with your login name following
+	eliminate all but one.	Adding a `#' with your login name following
 	it will make the .forward files unique, and will ensure that the mailer
-	does optimise away some addresses.
+	doesn't optimise away some addresses.
 
 10. How do I view the man pages?
 
@@ -106,4 +121,7 @@
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?
-	If you have, well, then panic.
+	If you have, well, then panic.	Or, alternatively, you could submit
+	your question to the procmail mailinglist (see the man page for the
+	exact addresses, or try "procmail -v", or look in the patchlevel.h
+	file).

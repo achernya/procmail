@@ -1,33 +1,4 @@
-.de Id
-.ds Rv \\$3
-.ds Dt \\$4
-..
-.Id $Id: procmailex.man,v 2.7 1992/06/03 12:58:50 berg Rel $
-.de Sh
-.br
-.ne 11
-.SH "\\$1"
-..
-.de Ss
-.br
-.ne 10
-.SS "\\$1"
-..
-.de Tp
-.br
-.ne 9
-.TP \\$1
-..
-.de Rs
-.na
-.nf
-.RS
-..
-.de Re
-.RE
-.fi
-.ad
-..
+.Id $Id: procmailex.man,v 1.10 1993/01/29 13:32:49 berg Exp $
 .de Sx
 .PP
 .ne \\$1
@@ -37,9 +8,9 @@
 .Re
 .PP
 ..
-.TH PROCMAILRC 5 \*(Dt BuGless
-.SH NAME
+.TH PROCMAILEX 5 \*(Dt BuGless
 .na
+.SH NAME
 procmailex \- procmail rcfile examples
 .SH SYNOPSIS
 .B $HOME/+PROCMAILRC+ examples
@@ -52,7 +23,7 @@ This man page shows several example recipes.  For examples of complete rcfiles
 you can check the NOTES section in
 .BR procmail (1),
 or look at the example rcfiles part of the procmail source distribution
-(procmail/examples/?procmailrc).
+(procmail*/examples/?procmailrc).
 .Sh EXAMPLES
 Sort out all mail coming from the scuba-dive mailling list into the mailfolder
 scubafile (uses the locallockfile scubafile.lock).
@@ -113,31 +84,34 @@ Store everything coming from the postmaster or mailer-daemon (like bounced
 mail) into the file postm, using postm.lock as the locallockfile.
 .Sx 3
 ::
-^From +[^ ]*(postmaster|Mailer)
+^From[ :].*(postmaster|Mailer)
 postm
 .Ex
-A simple autoreply recipe.  It makes sure that neither bouncing mail (from
-postmaster or the mailer-daemon), nor mail coming from yourself will be
-autoreplied.  If this precaution would not be taken, disaster could result
-("ringing" mail).  In order for this recipe to autoreply to all the incoming
-mail, you should of course insert it before all other recipes in your rcfile.
-However, it is advisable to put it
+A simple autoreply recipe.  It makes sure that neither mail from any daemon
+(like bouncing mail or mail from mailing-lists), nor mail coming from yourself
+will be autoreplied.  If this precaution would not be taken, disaster could
+result (`ringing' mail).  In order for this recipe to autoreply to all the
+incoming mail, you should of course insert it before all other recipes in your
+rcfile.  However, it is advisable to put it
 .I after
 any recipes that process the mails from subscribed mailinglists; it generally
-is not a good idea to generate autoreplies to mailinglists.
+is not a good idea to generate autoreplies to mailinglists (yes, the
+!^FROM_DAEMON regexp should already catch those, but if the mailinglist
+doesn't follow accepted conventions, this might not be enough).
 .Sx 4
 : 2 +PASS_HEAD+ +CONTINUE+
-!^From +[^ ]*(postmaster|Mailer)
+!^FROM_DAEMON
 !^From +YOUR_LOGIN_NAME
-| (formail \-+FM_REPLY+ ; echo "Mail received.") | $SENDMAIL \-t
+| (formail \-+FM_REPLY+ \-+FM_ADD_ALWAYS+"Precedence: junk";\e
+   echo "Mail received.") | $SENDMAIL \-t
 .Ex
-A more complicated autoreply recipe, that implements the functional equivalent
+A more complicated autoreply recipe that implements the functional equivalent
 of the well known
 .BR vacation (1)
 program.  This recipe is based on the same principles as the last one (prevent
-"ringing" mail).  In addition to that however, it maintains a vacation database
-by extracting the name of the sender and appending it the file $ALREADYSENT, if
-the name is
+`ringing' mail).  In addition to that however, it maintains a vacation database
+by extracting the name of the sender and appending it to the file
+$ALREADYSENT, if the name is
 .B not
 already in there.  If the name was new, an autoreply will be sent (using the
 `+ALSO_N_IF_SUCC+' flag functionality).  To reliably extract the name of the
@@ -146,34 +120,109 @@ out the most appropriate sender address), and then telling it to extract the
 value of the `To:' field.
 .Sx 14
 SHELL=/bin/sh    # for other shells, this might need adjustment
-ALREADYSENT=$MAILDIR/vacation     # the vacation database
+ALREADYSENT=$HOME/vacation     # the vacation database
 
-: 2 +PASS_HEAD++WAIT_EXIT_QUIET++CONTINUE+:                          # the lockfile is important
-!^From +[^ ]*(postmaster|Mailer)
+: 2 +PASS_HEAD++WAIT_EXIT_QUIET++CONTINUE+:                       # the lockfile is important
+!^FROM_DAEMON
 !^From +YOUR_LOGIN_NAME
-| FROM="`formail \-+FM_REPLY++FM_EXTRACT+ To:`" ;\\
-  if fgrep \-e "$FROM" <$ALREADYSENT ;\\
-  then exit 1 ;\\
-  else echo "$FROM" >>$ALREADYSENT ;\\
+| FROM="`formail \-+FM_REPLY++FM_EXTRACT+ To:`" ;\e
+  if fgrep \-e "$FROM" <$ALREADYSENT ;\e
+  then exit 1 ;\e
+  else echo "$FROM" >>$ALREADYSENT ;\e
   fi
 
    :+ALSO_N_IF_SUCC++PASS_HEAD++CONTINUE+
-   | (formail \-+FM_REPLY+ ; echo "Mail received.") | $SENDMAIL \-t
+   | (formail \-+FM_REPLY++FM_ADD_ALWAYS+"Precedence: junk";\e
+      echo "Mail received.") | $SENDMAIL \-t
 .Ex
 Store all messages concerning TeX in separate, unique filenames, in a directory
 named texmail (this directory has to exist); there is no need to use lockfiles
 in this case, so we won't.
 .Sx 3
 :
-^(To|Apparently-To|Cc|Subject):.*tex[^t]
+(^TO|^Subject:.*)TeX[^t]
 texmail
 .Ex
 The same as above, except now we store the mails in numbered files (MH mail
 folder), again the texmail directory has to exist already.
 .Sx 3
 :
-^(To|Apparently-To|Cc|Subject):.*tex[^t]
+(^TO|^Subject:.*)TeX[^t]
 texmail/.
+.Ex
+Store all the messages about meetings in a folder that is in a directory
+that changes every month.  E.g. if it were January 1994, the folder
+would have the name `94-01/meeting' and the locallockfile would be
+`94-01/meeting.lock'.
+.Sx 3
+::
+meeting
+`date +%y-%m`/meeting
+.Ex
+The same as above, but, if the `94-01' directory wouldn't have existed, it
+is created automatically:
+.Sx 9
+MONTHFOLDER=`date +%y-%m`
+
+:+IGNORE_WRITERR+
+? test ! \-d $MONTHFOLDER
+| mkdir $MONTHFOLDER
+
+::
+meeting
+${MONTHFOLDER}/meeting
+.Ex
+The same as above, but now by slightly different means:
+.Sx 6
+MONTHFOLDER=`date +%y-%m`
+DUMMY=`test \-d $MONTHFOLDER || mkdir $MONTHFOLDER`
+
+::
+meeting
+${MONTHFOLDER}/meeting
+.Ex
+To extract certain headers from a mail and put them into environment
+variables you can use any of the following constructs:
+.Sx 5
+SUBJECT=`formail \-+FM_EXTRACT+Subject:`    # regular field
+FROM=`formail \-+FM_REPLY++FM_TRUST+ \-+FM_EXTRACT+To:`        # special case
+
+:0+PASS_HEAD+                             # alternate method
+KEYWORDS=| formail \-+FM_EXTRACT+Keywords:
+.Ex
+If you are using temporary files in a procmailrc file, and want to make
+sure that they are removed just before procmail exits, you could use
+something along the lines of:
+.Sx 2
+TEMPORARY=/tmp/pmail.$$
+TRAP="/bin/rm \-f $TEMPORARY"
+.Ex
+The TRAP keyword can also be used to change the exitcode of procmail.
+I.e. if you want procmail to return an exitcode of `1' instead of its
+regular exitcodes, you could simply use:
+.Sx 2
+TRAP="exit 1;"   # The trailing semi-colon is important
+                 # since exit is not a standalone program
+.Ex
+The following recipe prints every incoming mail that looks like a postscript
+file.
+.Sx 3
+:+BODY_GREP++PASS_BODY+
+^^%!
+| lpr
+.Ex
+The following recipe does the same, but is a bit more selective.  It only
+prints the postscript file if it comes from the print-server.  The first
+condition matches only if it is found in the header (i.e. no preceding empty
+line).  The second condition only matches at the start of the body (i.e.
+right after the
+.B first
+empty line).
+.Sx
+:2 +HEAD_GREP++BODY_GREP+ +PASS_BODY+
+^^(.+$)*From[ :].*print-server
+^^(.+$)*^%!
+| lpr
 .Ex
 Suppose you have two accounts, you use both accounts regularly, but they are
 in very distinct places (i.e. you can only read mail that arrived at either one
@@ -188,15 +237,15 @@ them.
 .Sx 4
 :+CONTINUE+
 !^X-Loop: yourname@your.main.mail.address
-| formail \-+FM_ADD_ALWAYS+ "X-Loop: yourname@your.main.mail.address" | \\
+| formail \-+FM_ADD_ALWAYS+ "X-Loop: yourname@your.main.mail.address" | \e
    $SENDMAIL \-oi yourname@the.other.account
 .Ex
 The following one is rather exotic, but it only serves to demonstrate a
 feature.  Suppose you have a file in your HOME directory called ".urgent",
 and the (one) person named in that file is the sender of an incoming mail,
 you'd like that mail to be stored in $MAILDIR/urgent instead of in any of the
-normal mailfolder it would have been sorted in.  Then this is what you could do
-(beware, the filelength of $HOME/.urgent should be well below $LINEBUF,
+normal mailfolders it would have been sorted in.  Then this is what you could
+do (beware, the filelength of $HOME/.urgent should be well below $LINEBUF,
 increase LINEBUF if necessary):
 .Sx 5
 URGMATCH=`cat $HOME/.urgent`
@@ -207,22 +256,22 @@ urgent
 .Re
 .Sh "SEE ALSO"
 .na
+.nh
 .BR procmail (1),
 .BR procmailrc (5),
 .BR sh (1),
 .BR csh (1),
 .BR mail (1),
+.BR mailx (1),
 .BR binmail (1),
-.BR uucp (1C),
+.BR uucp (1),
 .BR aliases (5),
 .BR sendmail (8),
-.BR egrep (1V),
+.BR egrep (1),
+.BR grep (1),
+.BR biff (1),
+.BR comsat (8),
 .BR lockfile (1),
 .BR formail (1)
+.hy
 .ad
-.Sh AUTHOR
-Stephen R. van den Berg at RWTH-Aachen, Germany
-.Rs
-berg@pool.informatik.rwth-aachen.de
-berg@physik.tu-muenchen.de
-.Re

@@ -1,0 +1,89 @@
+# BEFORE editing this file, you should make sure that it is not linked to
+# the master version (../.listadmin/listrc.sub) anymore (i.e. make a copy).
+# If the mailinglist is not in active use yet, or if you want to take the
+# chance, you can write out this file without locking.	To do it properly
+# you should create the ../.listadmin/the_lists.lock file with lockfile(1)
+# shortly before writing out the new version of this file (remove the lockfile
+# afterwards of course)
+
+#$Id: rc.submit,v 1.10 1993/02/02 15:26:59 berg Exp $
+
+INCLUDERC=$RC_INIT
+INCLUDERC=$RC_CUSTOM
+
+#
+# The following recipe makes sure that:
+#	The mail was not sent to the request address.
+#	It does not look like an administrative request.
+#	It wasn't sent by this list itself.
+#	It wasn't sent by a daemon (misdirected bounce message perhaps).
+# Then check to see if sender is a subscriber of this mailinglist, and while
+# doing so, also check if this subscriber wants to receive copies.
+#
+
+:6Wh
+	< $size_limit
+	$!^$X_COMMAND:
+	!^TO.*-request
+	!^Subject:( *(help|info) *$|.*( \
+    (add .* to|remove .* from|take .* off|put .* on) .* list|subscri(be|ption))
+	$!^X-Loop: $listaddr
+	$!$FROM_MAILER_DAEMON
+METOO=	| formail -X"From " -xFrom: -xReply-To: -xSender: -xResent-From: \
+	    -xResent-Reply-To: -xResent-Sender: -xResent-From: | \
+	   multigram -b1 -m -l$submit_threshold dist
+
+#
+# Check if we are the first mailinglist to distribute this message, if so
+# archive the message.
+#
+
+	:1A c
+	!^X-Mailing-List:
+	archive/latest/.
+
+#
+# Truncate the archive to the correct number of files (and possibly other
+# housekeeping chores to keep the archive current).
+#
+
+	:1A c
+	!^X-Mailing-List:
+	ARCHIVE=| arch_trunc "$-"
+
+#
+# Main header munger for submissions passing through this list.
+#
+
+	: A wfh
+	| formail -b -IReceived: -IReturn-Receipt-To: -IErrors-To: \
+	   -iReturn-Path: -iX-Envelope-To: -iX-Envelope-From: \
+	   -I"Precedence: list" -I"Resent-Sender: $listreq" \
+	   -a"Resent-From: $listaddr" -A"X-Loop: $listaddr" \
+	   -a"Subject: Unidentified subject!" \
+	   -a"X-Mailing-List: <$listaddr> $ARCHIVE"
+
+#
+# The following recipe will distribute the message to the subscribers.
+# Note that there are several possibilities, the first one listed here is
+# the cleanest one, but it has the disadvantage that the $listdist alias
+# is accessible to the outside world (can be queried and mailed to directly).
+#
+
+	:1A w: dist.lock
+	!? test -z "$foreign_submit$METOO"
+	! $sendmailOPT $METOO $listdist
+       #! $sendmailOPT $METOO `cat dist` ;
+	# alternate sendmail call
+
+result=$?
+
+	:1Awfh
+	? test 0 != $result
+	| formail -A "X-Diagnostic: $SENDMAIL $listdist failed"
+
+	:1Awfh
+	? test -z "$foreign_submit$METOO"
+	| formail -A "X-Diagnostic: Not on the subscriber list"
+
+HOST=continue_with_rc.request

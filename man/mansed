@@ -1,18 +1,86 @@
+#! /bin/sh
+:
+#$Id: mansed,v 1.6 1992/11/24 15:59:43 berg Exp $
 
-#$Id: mansed,v 2.2 1992/03/06 12:40:16 berg Rel $
+test 5 != $# &&
+ echo "Don't start this script directly, use \`make'" && exit 1
 
-SHELL=$3 || exec $3 man/mansed $* # we're in a csh, feed myself to sh
-export SHELL
+SHELL=$1
+SRC="$2"
+DEST="$3"
 RM="$4"
+DEVNULL=$5
+export SHELL SRC DEST RM DEVNULL
 
-if test ! -f "$2"
+if test ! -f "$DEST"
 then
- trap "$RM \"$2\";exit 1" 1 2 3 15
+ trap "$RM \"$DEST\";exit 1" 1 2 3 15
 fi
 
-sed -f man/man.sed <"$1" >"$2"
+(cat <<\HERE
+.de Id
+.ds Rv \\$3
+.ds Dt \\$4
+..
+.de Sh
+.br
+.ne 11
+.SH "\\$1"
+..
+.de Ss
+.br
+.ne 10
+.SS "\\$1"
+..
+.de Tp
+.br
+.ne 9
+.TP \\$1
+..
+.de Rs
+.na
+.nf
+.RS
+..
+.de Re
+.RE
+.fi
+.ad
+..
+HERE
+cat "$SRC"
+expr match "$DEST" '.*[18]$' >$DEVNULL && cat <<HERE
+.Sh SOURCE
+This program is part of the
+.I procmail mail-processing-package
+(+PM_VERSION+) available at your nearest USENET comp.sources.misc archive, or
+at ftp.informatik.rwth-aachen.de (137.226.112.172) as
+.BR pub/unix/procmail.tar.Z .
+.Sh MAILINGLIST
+There exists a mailinglist for questions relating to any program in the
+procmail package:
+.RS
++PM_MAILINGLIST+
+.RS
+for submitting questions/answers.
+.RE
++PM_MAILINGLISTR+
+.RS
+for subscription requests.
+.RE
+.RE
+HERE
+cat <<HERE
+.Sh AUTHOR
+Stephen R. van den Berg at RWTH-Aachen, Germany
+.Rs
++MY_MAIL_ADDR+
++MY_ALT_MAIL_ADDR+
+.Re
+HERE
+ )| sed -f man.sed >"$DEST"
 
-if test -f "$2"
+if test -f "$DEST"
 then
  exit 0
 else

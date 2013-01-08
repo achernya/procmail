@@ -1,7 +1,7 @@
 For installation instructions see the INSTALL file.
 ----------------------
 Procmail & formail mail processing package.
-Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands.
+Copyright (c) 1990-1993, S.R. van den Berg, The Netherlands.
 
 Some legal stuff:
 
@@ -25,17 +25,17 @@ world, contact me instead.
 
 Any *NIX-alike system.
 
-Sendmail, smail, MMDF or compatible mailers (in effect any mailer that can
-process RFC-822 compliant mails).
+Sendmail, smail, MMDF, mailsurr or compatible mailers (in effect any mailer
+that can process RFC-822 compliant mails).
 
 The most important system calls that need to be supported (among others):
 dup(),wait(),getpwnam(),fork(),pipe()
 
-For a more complete list of all library references see "includes.h"
+For a more complete list of all library references see "src/includes.h"
 
 ------------------------------ DESCRIPTION -----------------------------------
 
-The procmail mail processing program. (v2.71 1992/07/01)
+The procmail mail processing program. (v2.80 1993/02/04)
 
 Can be used to create mail-servers, mailing lists, sort your incoming mail
 into separate folders/files (real convenient when subscribing to one or more
@@ -75,6 +75,21 @@ I'll look at them and will try to fix it in a future release.
 don't hesitate to point them out to me; I like correct English just as much
 as you do).
 
+----------------------
+
+I would like to take the opportunity to express my gratitude in particular
+to three powerusers of the procmail-package.  Without their constant feedback
+v2.80 would not have looked the same:
+
+	David W. Tamkin		An excellent proofreader and betatester
+	 <dattier@gagme.chi.il.us>
+	Josh Laff		For stresstesting procmail (and me :-)
+	 <smiley@uiuc.edu>
+	Dan Jacobson		For his many useful suggestions
+	 <Dan_Jacobson@ATT.COM>
+
+----------------------
+
 Please note that this program essentially is supposed to be static, that
 means no extra features (honouring the VNIX spirit) are supposed to be
 added (though any useful suggestions will be appreciated and evaluated if
@@ -94,8 +109,9 @@ Snail-Mail:	P.O.Box 21074
 A recent version can be picked up at various comp.sources.misc archives.
 The latest version can be obtained directly from the ftp-archive at:
 
-	ftp.informatik.rwth-aachen.de (137.226.112.31)
+	ftp.informatik.rwth-aachen.de (137.226.112.172)
 
-	as compressed tar file:		pub/unix/procmail.tar.Z		<128KB
-	or in compressed shar format:	pub/unix/procmail.0?.Z
+	as zipped tar file:		pub/unix/procmail.tar.zip	~128KB
+	as compressed tar file:		pub/unix/procmail.tar.Z		~192KB
+	in compressed shar format:	pub/unix/procmail.??.Z	      11 parts
 ----------------------

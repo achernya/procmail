@@ -1,0 +1,61 @@
+#! /bin/sh
+: &&O= || exec /bin/sh $0 $argv:q # we're in a csh, feed myself to sh
+#$Id: procbounce,v 1.5 1993/02/02 16:54:09 berg Exp $
+
+test=test		# /bin/test
+echo=echo		# /bin/echo
+cat=cat			# /bin/cat
+mkdir=mkdir		# /bin/mkdir
+sed=sed			# /bin/sed
+ls=ls			# /bin/ls
+rm=rm			# /bin/rm
+find=find		# /bin/find
+expr=expr		# /bin/expr
+date=date		# /bin/date
+formail=formail		# /usr/local/bin/formail
+multigram=multigram	# ../.bin/multigram
+idhash=idhash		# ../.bin/idhash
+
+$test -z "$listaddr" &&
+ $echo "Don't start this script directly, it is used in rc.request" && exit 64
+
+tmprequest=tmp.request
+dist=dist
+bounces=bounces
+
+$test -d $bounces || $mkdir $bounces
+
+addr=`$formail -1 -kde -xSubject: -s \
+ $multigram -b1 -l$off_threshold $dist <$tmprequest |
+ $sed -e 's/^ *[0-9]* [^ ]* *[0-9]* *\([^ ]*\) *\$/\1/' `
+
+if test ! -z "$addr"
+then
+  serial=`$formail +1 -1 -m4 -dexMessage-Id: -s $idhash <$tmprequest`
+  test -z "$serial" && serial=`$date +%y-%m-%d`
+  $echo "$addr" >>$bounces/$serial
+  $rm -f `$ls -t $bounces/* | $sed -e '1,'$maxhist' d' `
+
+  bounced=0
+  for a in $bounces/*
+  do
+    $test -f "$a" &&
+     $echo "$addr" | $multigram -b1 -l$match_threshold $a >/dev/null &&
+     bounced=`$expr $bounced + 1`
+  done
+
+  addfield="X-Diagnostic: Mail to $addr bounced $bounced times"
+  if expr $bounced \>= $minbounce >/dev/null
+  then
+     addfield="$addfield
+X-Diagnostic: Bounces exceed threshold of $minbounce
+X-Diagnostic: `
+     if echo "$addr" | $multigram -b1 -l$match_threshold -d $dist 2>/dev/null
+     then
+     :
+     else
+	$echo 'Could not find the offending address'
+     fi | $sed -e '1 s/^ *[0-9]* \([^ ]* *[0-9]*\).*\$/Removed: \1/' -e '2 d'`"
+  fi
+  $formail -A "$addfield"
+fi
