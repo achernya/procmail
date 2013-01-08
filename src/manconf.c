@@ -1,6 +1,6 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 1.14 1993/01/28 15:18:33 berg Exp $*/
+/*$Id: manconf.c,v 1.18 1993/02/19 15:04:30 berg Exp $*/
 
 #include "../patchlevel.h"
 #include "procmail.h"
@@ -96,13 +96,13 @@ installed globally as the default mail delivery agent (ask your system \
 administrator), you have to make sure it is invoked when your mail arrives.");
 #else
   ps("CF_procmail","Instead of using the system provided invocation of \
-procmail when mail arrives, you can control the invokation of procmail \
+procmail when mail arrives, you can control the invocation of procmail \
 yourself.");
 #endif
 #ifndef MAILBOX_SEPARATOR
   ps("DOT_FORWARD",".forward");
   ps("FW_content",
-   "\"|IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
+   "|\"IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
 #else
   ps("DOT_FORWARD",".maildelivery");
   ps("FW_content",

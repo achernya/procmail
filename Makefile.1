@@ -1,4 +1,4 @@
-#$Id: Makefile.1,v 1.9 1993/01/26 14:49:37 berg Exp $
+#$Id: Makefile.1,v 1.14 1993/02/18 17:19:31 berg Exp $
 
 HIDEMAKE=$(MAKE)
 
@@ -31,6 +31,7 @@ multigram: config.check src/Makefile man/Makefile
 
 config.check: config.h
 	@echo Housekeeping file >$@
+	@-mkdir new 2>$(DEVNULL); exit 0
 	@-if $(FGREP) -n -e '`' config.h $(DEVNULL) | $(FGREP) -v EOFName ; \
 	 then \
 	 echo;echo '	^^^^^^^^^^^^^^^^^^^^ WARNING ^^^^^^^^^^^^^^^^^^^^^';\
@@ -73,7 +74,6 @@ $(MANS): mans
 $(BINS): bins
 
 install.man: $(MANS)
-	@echo Housekeeping file >install.man
 	@-mkdir $(MANDIR) 2>$(DEVNULL); exit 0
 	@-mkdir $(MAN1DIR) 2>$(DEVNULL); exit 0
 	@-mkdir $(MAN5DIR) 2>$(DEVNULL); exit 0
@@ -82,12 +82,13 @@ install.man: $(MANS)
 	  do $(INSTALL) new/$$a.1 $(MAN1DIR)/$$a.$(MAN1SUFFIX); done
 	@for a in $(MANS5S); \
 	  do $(INSTALL) new/$$a.5 $(MAN5DIR)/$$a.$(MAN5SUFFIX); done
+	@echo Housekeeping file >install.man
 
 install.bin: $(BINS)
 	@-mkdir $(BINDIR) 2>$(DEVNULL); exit 0
 	@chmod 0755 $(BINS)
-	@echo Housekeeping file >install.bin
 	$(INSTALL) $(BINS) $(BINDIR)
+	@echo Housekeeping file >install.bin
 
 install: install.man install.bin
 	@echo
@@ -95,9 +96,6 @@ install: install.man install.bin
 	@cd $(MAN1DIR); echo Installed in $(MAN1DIR); ls -l $(MANS1)
 	@cd $(MAN5DIR); echo Installed in $(MAN5DIR); ls -l $(MANS5)
 	@$(MAKE) recommend
-
-new:
-	@-mkdir $@ 2>$(DEVNULL); exit 0
 
 deinstall:
 	@echo ----------------------------- Deinstalling the procmail package.
@@ -108,18 +106,18 @@ deinstall:
 	@-cd $(MAN5DIR); $(RM) $(MANS5); ls -l $(MANS5); exit 0
 	@echo ----------------------------- Ready.
 
-clean: new
+clean: config.check
 	-for a in $(SUBDIRS); do cd $$a; $(MAKE) $@; cd ..; done; exit 0
 	$(RM) $(MANS) $(BINS) libcheck install.man install.bin suid.sh \
-	 _Makefile core
+	 _Makefile core autoconf.h.tmp
 
 realclean: clean _init
-	-rmdir new; exit 0
 	$(RM) config.check
+	-rmdir new; exit 0
 	-for a in $(SUBDIRS); do $(MV) $$a/Makefile.init $$a/Makefile; done; \
 	 exit 0
 
-veryclean: realclean
+veryclean clobber: realclean
 
 _init:
 	sed -e '/^# Makefile.1 - mark/,$$ d' <Makefile >_Makefile

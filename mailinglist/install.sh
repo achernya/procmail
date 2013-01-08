@@ -1,6 +1,6 @@
 #! /bin/sh
 : &&O= || exec /bin/sh $0 $argv:q # we're in a csh, feed myself to sh
-#$Id: install.sh,v 1.10 1993/01/28 14:21:59 berg Exp $
+#$Id: install.sh,v 1.12 1993/02/11 13:48:36 berg Exp $
 
 test $# != 1 && echo "Usage: install.sh target-directory" && exit 1
 
@@ -39,25 +39,23 @@ do
   fi
 done
 
+cd ../src
+test -f multigram || make multigram
+cp multigram "$target/.bin"
+cd ../mailinglist
+
 cp Manual "$target/.etc"
 mv -f "$target/.bin/procmail" "$target/.bin/.procmail" 2>/dev/null
 chmod 0755 $target/.bin/*
+ln -f "$target/.bin/multigram" "$target/.bin/idhash" 2>/dev/null
+ln -f "$target/.bin/multigram" "$target/.bin/flist" 2>/dev/null
+chmod 04755 "$target/.bin/flist"
 mv -f "$target/.bin/.procmail" "$target/.bin/procmail" 2>/dev/null
 
 for a in $DIRS
 do
   ls -ld "$target/.$a" $target/.$a/*
 done
-
-cd ../src
-test -f multigram || make multigram
-cp multigram "$target/.bin"
-cd ../mailinglist
-
-ln -f "$target/.bin/multigram" "$target/.bin/idhash" 2>/dev/null
-ln -f "$target/.bin/multigram" "$target/.bin/flist" 2>/dev/null
-chmod 04755 "$target/.bin/flist"
-ls -l "$target/.bin/multigram" "$target/.bin/idhash" "$target/.bin/flist"
 
 echo Creating link from .etc/rc.main to .procmailrc
 rm -f "$target/.procmailrc"

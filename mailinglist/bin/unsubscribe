@@ -1,6 +1,6 @@
 #! /bin/sh
 : &&O= || exec /bin/sh $0 $argv:q # we're in a csh, feed myself to sh
-#$Id: unsubscribe,v 1.6 1993/02/02 15:26:54 berg Exp $
+#$Id: unsubscribe,v 1.9 1993/02/11 14:00:17 berg Exp $
 
 test=test		# /bin/test
 echo=echo		# /bin/echo
@@ -16,8 +16,19 @@ tmprequest=tmp.request
 tmpfrom=tmp.from
 dist=dist
 
+case "$X_ENVELOPE_TO" in
+  *$list-request*) wrongaddress="" ;;
+  *) wrongaddress="
+WARNING:
+	Please try to use '$listreq'
+	the next time when issuing (un)subscribe requests.
+" ;;
+esac
+
 $formail -i"From: $listreq" -rtA"X-Loop: $listaddr" -I"Precedence: junk" \
  <$tmprequest
+
+$test ! -z "$wrongaddress" && $echo "$wrongaddress" && wrongaddress=""
 
 fromaddr="`$cat $tmpfrom`"
 

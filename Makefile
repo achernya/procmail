@@ -1,9 +1,10 @@
-#$Id: Makefile,v 1.17 1993/01/28 14:21:47 berg Exp $
+#$Id: Makefile,v 1.19 1993/02/11 12:21:22 berg Exp $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
 
 # You can predefine ARCHITECTURE to a bin directory suffix
+ARCHITECTURE=
 #ARCHITECTURE=.sun4
 
 BINDIR	  = $(BASENAME)/bin$(ARCHITECTURE)
@@ -87,5 +88,5 @@ init:
 makefiles makefile Makefiles Makefile: init
 
 bins mans install.bin install.man install recommend suid clean realclean \
-deinstall autoconf.h $(BINSS) multigram: init
+veryclean clobber deinstall autoconf.h $(BINSS) multigram: init
 	$(HIDEMAKE) make $@
