@@ -447,7 +447,7 @@
 	       - weights<1 didn't work if floats changed accuracy when stored
 	    Worked around a bug in the Dunix 4.0e compiler (pointer addition
 	       not commutative)
-1999/04/02: v3.14
+1999/11/22: v3.14
 	    Changes to procmail:
 	       - Some zero-length extractions using \/ could core dump
 	       - Missed a couple possible overflows
@@ -511,3 +511,79 @@
 	    Updated the FAQ and the list of mirrors in the README
 	    Documented the exact behavior of lockfile's -! flag
 	    Documented the suggested usage of -r vs -rt
+2000/08/25: v3.15
+	    Changes to procmail:
+	       - v3.14 broke compilation on systems without lstat() or
+		 that didn't declare it
+	       - Rewrite folder type parsing: corrects handling of MH and
+		 maildir style spools
+	       - v3.14 changed '!' actions too much: revert to v3.13 behavior
+		 but continue to split SENDMAILFLAGS
+	       - Contents of skipped nested blocks could affect 'E', 'e', 'a',
+		 and 'A' flags
+	       - Prevent peeking into buffers on "Out of memory" errors
+	       - Unquoted $\var expansions could alter the interpretation of
+		 the following whitespace
+	       - Prevent attempts to set LINEBUF to really huge values
+	       - Optimize SWITCHRC = $_
+	       - Use a secure PATH when processing /etc/procmailrc
+	       - Prevent attempts to exercise a Linux kernel security hole
+	       - Use 2^31-1 as the maximum score even when sizeof(long)>4
+	    Changes to formail:
+	       - Allow -n with -D and -s again -- corruption couldn't happen
+		 after all
+	       - Don't strip pre-colon whitespace until header is identified
+	       - Properly handle NULs in the body when generating an autoreply
+		 that keeps the body (could coredump)
+	    Changes to autoconf:
+	       - Avoid coredump on systems where sprintf() calls getenv()
+	    Documented that $\var expansions are never split on whitespace
+	    More manpage tweaks
+	    Worked around linkers that don't support compile-time stripping
+	       (for MacOS X)
+	    Removed ':' and '@' from list of characters that can appear in
+	       tempfile names
+	    Called nice() when shouldn't have
+	    Workaround SunOS 4.x compiler again
+2001/01/08: v3.15.1 (fixes backported from 3.20pre)
+	    Changes to procmail:
+	       - A race to create the mailspool would bounce one of the
+		 messages due to an internal error
+	       - LC_ in KEEPENV would preserve only the first LC_foo variable
+	       - Strip runtime linker variables (LD_*) from environment on
+		 all platforms
+	       - Drop duplicate and malformed environment entries
+	       - Worked around AIX 4.3.3 xlc compiler (incorrect file-scope
+		 variable initialization)
+	    Changes to autoconf:
+	       - Check for enum support
+	       - Warn people that non-ISO/ANSI C compilers might not be
+		 supported in the future
+	    Fixed a man page formatting problem
+2001/07/18: v3.15.2 (fixes backported from 3.20 and 3.21)
+	    Changes to procmail:
+	       - SECURITY: don't do unsafe things from signal handlers:
+		  - ignore TRAP when terminating because of a signal
+		  - resolve the host and protocol of COMSAT when it is set
+		  - save the absolute path form of $LASTFOLDER for the comsat
+		    message when it is set
+		  - only use the log buffer if it's safe
+	       - Command line assignments to INCLUDERC and SWITCHRC no longer
+		 have any effect
+	       - Be more paranoid about leaking information between recipients
+	       - LASTFOLDER was sometimes set by '?' conditions
+	       - Buffer the log more efficiently
+	       - Rename by linking to prevent lossage
+	       - Avoid dangling pointers when variable capture actions fail
+	       - Catch overly long command line variable assignments
+	    Changes to autoconf:
+	       - IRIX compiler (7.3.1) failed the const check from warnings
+	    Changes to lockfile:
+	       - Resist attempts to use a setuid lockfile command
+	       - Fix infinite loop on -l, -r, or -s flag with no value
+	    Documented formail's treatment of >From_ lines as continuations
+	       of the From_ line and warned of problems caused by non-RFC822
+	       field names like 'Old-From '
+	    Clarified procmail's treatment of $@ and $#
+	    Increase our paranoia: start to use strlcpy()/strlcat()
+	    Called nice() when shouldn't have (this time for sure!)

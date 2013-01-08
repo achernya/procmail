@@ -1,8 +1,11 @@
-/*$Id: robust.h,v 1.9 1999/04/19 06:42:26 guenther Exp $*/
+/*$Id: robust.h,v 1.9.2.2 2001/07/15 09:27:33 guenther Exp $*/
 
 void
+ nomemerr Q((const size_t len)) __attribute__((noreturn)),
  *tmalloc Q((const size_t len)),
  *trealloc Q((void*const old,const size_t len)),
+ *fmalloc Q((const size_t len)),
+ *frealloc Q((void*const old,const size_t len)),
  tfree P((void*const p)),
  opnlog P((const char*file)),
  ssleep P((const unsigned seconds)),

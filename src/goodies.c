@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: goodies.c,v 1.64 1999/11/20 23:24:32 guenther Exp $";
+ "$Id: goodies.c,v 1.64.2.6 2001/07/15 09:27:17 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -46,8 +46,8 @@ static const char*evalenv P((void))	/* expects the variable name in buf2 */
 int readparse(p,fpgetc,sarg)register char*p;int(*const fpgetc)();
  const int sarg;
 { static int i,skipbracelev,bracegot;int got,bracelev,qbracelev,overflow;
-  charNUM(num,long),*startb,*const fencepost=buf+linebuf-XTRAlinebuf,
-     *const fencepost2=buf2+linebuf-XTRAlinebuf;
+  charNUM(num,long),*startb,*const fencepost=buf+linebuf,
+     *const fencepost2=buf2+linebuf;
   static char*skipback;static const char*oldstartb;
   overflow=bracelev=qbracelev=0;All_args=0;
   for(got=NOTHING_YET;;)		    /* buf2 is used as scratch space */
@@ -279,38 +279,33 @@ finsb:		    *startb='\0';
 		       for(;CHECKINC(),*startb;*p++= *startb++)
 			  if(strchr("(|)*?+.^$[\\",*startb))	/* specials? */
 			     *p++='\\';		      /* take them literally */
-		       goto newchar;
+normchar:	       quoted=0;
 		     }
-		    break;
-normchar:	    quoted=0;
+		    else
+		       break;
 		  }
-		 *p++='$';
+		 else				       /* not a substitution */
+		    *p++='$';			 /* pretend nothing happened */
+		 if(got<=SKIPPING_SPACE)
+		    got=NORMAL_TEXT;
 		 if(quoted)
-		    goto Quoted;		 /* pretend nothing happened */
-		 goto newchar;			       /* not a substitution */
+		    goto Quoted;
+		 goto eeofstr;
 	       }
 	    }
 	   if(got!=DOUBLE_QUOTED)
-simplsplit: { if(sarg)
+simplsplit: { char*q;
+	      if(sarg)
 		 goto copyit;
-	      for(;;startb++)		  /* simply split it up in arguments */
-	       { CHECKINC();
-		 switch(*startb)
-		  { case ' ':case '\t':case '\n':
-		       if(got<=SKIPPING_SPACE)
-			  continue;
-		       *p++='\0';got=SKIPPING_SPACE;
-		       continue;
-		    case '\0':
-		       goto eeofstr;
-		  }
-		 *p++= *startb;got=NORMAL_TEXT;
-	       }
+	      if(q=simplesplit(p,startb,fencepost,&got))     /* simply split */
+		 p=q;				       /* it up in arguments */
+	      else
+		 skiprc|=1,overflow=1,p=fencepost;
 	    }
 	   else
 copyit:	    { strncpy(p,startb,fencepost-p+2);		   /* simply copy it */
 	      if(fencepost[1]!='\0')		      /* did we truncate it? */
-		 skiprc|=1,overflow=1,fencepost[1]='\0';
+		 skiprc|=1,overflow=1,*fencepost='\0';
 	      if(got<=SKIPPING_SPACE)		/* can only occur if sarg!=0 */
 		 got=NORMAL_TEXT;
 	      p=strchr(p,'\0');
@@ -318,6 +313,16 @@ copyit:	    { strncpy(p,startb,fencepost-p+2);		   /* simply copy it */
 eeofstr:   if(i)			     /* already read next character? */
 	      goto newchar;
 	   continue;
+#if 0					      /* autodetect quoted specials? */
+	case '~':
+	   if(got==NORMAL_TEXT&&p[-1]!='='&&p[-1]!=':')
+	      break;
+	case '&':case '|':case '<':case '>':case ';':
+	case '?':case '*':case '[':
+	   if(got<=NORMAL_TEXT)
+	      sh=1;
+	   break;
+#endif
 	case ' ':case '\t':
 	   switch(got)
 	    { case NORMAL_TEXT:
@@ -336,6 +341,26 @@ nodelim:
      if(got<=SKIPPING_SPACE)		 /* should we bother to change mode? */
 	got=NORMAL_TEXT;
    }
+}
+
+char*simplesplit(to,from,fencepost,gotp)char*to;const char*from,*fencepost;
+ int*gotp;
+{ register int got=*gotp;
+  for(;to<=fencepost;from++)
+   { switch(*from)
+      { case ' ':case '\t':case '\n':
+	   if(got>SKIPPING_SPACE)
+	      *to++='\0',got=SKIPPING_SPACE;
+	   continue;
+	case '\0':
+	   goto ret;
+      }
+     *to++= *from;got=NORMAL_TEXT;
+   }
+  to=0;
+ret:
+  *gotp=got;
+  return to;
 }
 
 void ltstr(minwidth,val,dest)const int minwidth;const long val;char*dest;
@@ -410,16 +435,25 @@ void primeStdout(varname)const char*const varname;   /* changes are allowed! */
   Stdfilled=ioffsetof(struct dynstring,ename[0])+strlen(varname);
 }
 
-void retStdout(newmyenv,unset)			/* see note on primeStdout() */
- char*const newmyenv;int unset;
-{ if(unset)					     /* on second thought... */
+void retStdout(newmyenv,fail,unset)		/* see note on primeStdout() */
+ char*const newmyenv;const int fail,unset;
+{ char*var,*p;
+  if(fail&&unset)				     /* on second thought... */
    { myenv=((struct dynstring*)newmyenv)->enext;	 /* pull it back out */
      free(newmyenv);*lastenv=Stdout=0;
      return;
    }
-  if(newmyenv[Stdfilled-1]=='\n')	       /* strip one trailing newline */
+  else if(!fail&&newmyenv[Stdfilled-1]=='\n')  /* strip one trailing newline */
      Stdfilled--;
   retbStdout(newmyenv);
+  var=newmyenv+ioffsetof(struct dynstring,ename[0]);	    /* setup to copy */
+  p=strchr(var,'=');			       /* the variable name into buf */
+  tmemmove(buf,var,p-var);			     /* so that we can check */
+  buf[p-var]='\0';						/* for magic */
+  if(fail)
+     asenvtext(p+1);	  /* we always have to update the pointers for these */
+  else
+     asenv(p+1);					 /* invoke any magic */
 }
 
 void retbStdout(newmyenv)char*const newmyenv;	/* see note on primeStdout() */
@@ -427,7 +461,16 @@ void retbStdout(newmyenv)char*const newmyenv;	/* see note on primeStdout() */
   Stdout=0;
 }
 
-void postStdout P((void))		 /* throw it into the keyword parser */
-{ const char*p;size_t i;
-  p= *lastenv;tmemmove(buf,p,i=strchr(p,'=')-p);buf[i]='\0';asenv(p+i+1);
+		 /* Append a space and then `value' to the last variable set */
+void appendlastvar(value)const char*const value;
+{ size_t len;char*p;
+  Stdout=(char*)value;primeStdout(empty);
+  len=Stdfilled+strlen(Stdout+Stdfilled);	     /* Skip over the header */
+  p=realloc(Stdout,(Stdfilled=len+1+strlen(value))+1);
+  p[len]=' ';strcpy(p+len+1,buf);retbStdout(p);	  /* WARNING: no magic here! */
+}
+
+const char*eputenv(src,dst)const char*const src;char*const dst;
+{ sgetcp=src;
+  return readparse(dst,sgetc,2)?0:sputenv(buf);
 }

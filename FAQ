@@ -206,7 +206,7 @@
 	signal to other mailtool processes.  With newer versions of
 	mailtool, enabling the "Use network aware mail file locking"
 	configuration option may solve the problem, though this option
-	isn't always available.  If that doesn't work then recompile
+	isn't always available.	 If that doesn't work then recompile
 	procmail with both the fcntl() and lockf() locking method
 	disabled (see config.h).
 

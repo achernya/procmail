@@ -9,13 +9,15 @@
  *	Seems to be relatively bug free.				*
  *									*
  *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
+ *						of America		*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: lockfile.c,v 1.43 1999/11/16 06:32:56 guenther Exp $";
+ "$Id: lockfile.c,v 1.43.2.2 2001/07/15 09:27:20 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1999/11/16 06:32:56 $";
+static /*const*/char rcsdate[]="$Date: 2001/07/15 09:27:20 $";
 #include "includes.h"
 #include "sublib.h"
 #include "exopen.h"
@@ -41,7 +43,7 @@ static int xcreat(name,tim)const char*const name;time_t*const tim;
   i=q-name;
   if(!(p=malloc(i+UNIQnamelen)))
      return exitflag=1;
-  strncpy(p,name,i);
+  memcpy(p,name,i);
   if(unique(p,p+i,0,LOCKperm,0,doCHECK|doLOCK))
      stat(p,&stbuf),*tim=stbuf.st_mtime,j=myrename(p,name);
   free(p);
@@ -67,10 +69,14 @@ int main(argc,argv)int argc;const char*const argv[];
      goto usg;
   sleepsec=DEFlocksleep;retries= -1;suspend=DEFsuspend;thepid=getpid();force=0;
   uid=getuid();signal(SIGPIPE,SIG_IGN);
+  if(setuid(uid)||geteuid()!=uid)		  /* resist setuid operation */
+sp:{ nlog("Unable to give up special permissions");
+     return EX_OSERR;
+   }
 again:
   invert=(char*)progid-(char*)progid;qsignal(SIGHUP,failure);
   qsignal(SIGINT,failure);qsignal(SIGQUIT,failure);qsignal(SIGTERM,failure);
-  for(p=argv;--argc;)
+  for(p=argv;--argc>0;)
      if(*(cp=(char*)*++p)=='-')
 	for(cp++;;)
 	 { char*cp2=cp;int i;
@@ -79,7 +85,9 @@ again:
 		 continue;
 	      case 'r':case 'l':case 's':
 		 if(!*cp&&(cp=(char*)*++p,!--argc)) /* concatenated/seperate */
+		  { p--;
 		    goto eusg;
+		  }
 		 i=strtol(cp,&cp,10);
 		 switch(*cp2)
 		  { case 'r':retries=i;
@@ -155,6 +163,7 @@ xusg:		       retval=EX_USAGE;
 		       else
 			  virgin=0;
 		  }
+
 	       }
 	      case '\0':;
 	    }
@@ -163,8 +172,9 @@ xusg:		       retval=EX_USAGE;
      else if(sleepsec<0)      /* second pass, release everything we acquired */
 	unlink(cp);
      else
-      { time_t t;int permanent;
-	setgid(getgid());		      /* just to be on the safe side */
+      { time_t t;int permanent;gid_t gid=getgid();
+	if(setgid(gid)||getegid()!=gid)	      /* just to be on the safe side */
+	   goto sp;
 stilv:	virgin=0;permanent=nfsTRY;
 	while(0>xcreat(cp,&t))				     /* try and lock */
 	 { struct stat stbuf;

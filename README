@@ -2,6 +2,7 @@ For installation instructions see the INSTALL file.
 ----------------------
 Procmail & formail mail processing package.
 Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands.
+Copyright (c) 1999-2001, Philip Guenther, The United States of America
 
 Some legal stuff:
 
@@ -35,7 +36,7 @@ see "src/includes.h".
 
 ------------------------------ DESCRIPTION -----------------------------------
 
-The procmail mail processing program. (v3.14 1999/11/22)
+The procmail mail processing program. (v3.15.2 2001/07/18)
 
 Can be used to create mail-servers, mailing lists, sort your incoming mail
 into separate folders/files (real convenient when subscribing to one or more
@@ -109,7 +110,7 @@ feedback procmail would not have looked the same:
 	Alan K. Stebbens	For his endless creativity and suggestions.
 	 <aks@sgi.com>
 	Philip Guenther		Sometimes faster at repairing bugs than I can
-	 <guenther@gac.edu>	write them :-)	He's also the current main
+	 <guenther@sendmail.com>  write them :-)  He's also the current main
 				coordinator of procmail/SmartList development.
 	Era Eriksson		For maintaining the FAQ.  He's also the
 	 <era@iki.fi>		current coordinator of the procmail volunteer
@@ -180,4 +181,5 @@ The current list of mirror sites include:
 	http://www.ring.gr.jp/archives/net/mail/procmail/
 	ftp://ftp.ring.gr.jp/pub/net/mail/procmail/
 	ftp://sunsite.cnlab-switch.ch/mirror/procmail/
+	ftp://ftp.gigabell.net/pub/procmail/
 ----------------------

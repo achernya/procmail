@@ -15,6 +15,7 @@ For installation instructions see the INSTALL file.
 ----------------------
 SmartList mailinglist management package.
 Copyright (c) 1993-1999, S.R. van den Berg, The Netherlands.
+Copyright (c) 1999-2000, Philip Guenther, The United States of America
 
 Some legal stuff:
 
@@ -52,5 +53,9 @@ The current list of mirror sites include:
 	ftp://ftp.win.ne.jp/pub/network/mail/procmail/
 	http://www.ring.gr.jp/archives/net/mail/procmail/
 	ftp://ftp.ring.gr.jp/pub/net/mail/procmail/
+	ftp://ftp.ayamura.org/pub/procmail/
 	ftp://sunsite.cnlab-switch.ch/mirror/procmail/
+	ftp://ftp.linja.net/pub/mirrors/procmail/
+	ftp://ftp.stealth.net/pub/mirrors/ftp.procmail.org/pub/procmail/
+	ftp://ftp.mirror.ac.uk/sites/ftp.procmail.org/pub/procmail/
 ----------------------

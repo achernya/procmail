@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.88 1999/08/20 04:41:37 guenther Exp $*/
+/*$Id: config.h,v 1.88.2.4 2001/07/15 09:26:57 guenther Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -14,29 +14,49 @@
  * upon startup of procmail, e.g. you could define KEEPENV as follows:
  * #define KEEPENV	{"TZ","LANG",0}
  * environment variables ending in an _ will designate the whole group starting
- * with this prefix (e.g. "LC_").
+ * with this prefix (e.g. "LC_").  Note that keeping LANG and or the LC_
+ * variables is not recommended for most installations due to the security
+ * considerations/dependencies present in the use of locales other than
+ * the "C" locale.
  */
 #define KEEPENV		{"TZ",0}
 
-/*#define DEFPATH	"PATH=$HOME/bin:/bin:/usr/bin"	/* uncomment and/or
-							   change if you
-	do not want the autoconf generated defPATH setting to be used in
-	PRESTENV below. */
+/* procmail is compiled with two definitions of the PATH variable.  The first
+ * definition is used while processing the /etc/procmailrc file and should
+ * only contain trustable (i.e., system) directories.  Otherwise the second
+ * definition is used.	Note that the /etc/procmailrc file cannot change the
+ * PATH seen by user's rcfiles: the second definition will be applied upon the
+ * completion of the /etc/procmailrc file (future versions of procmail are
+ * expected to provide better runtime configuration control).  The autoconf
+ * process attempts to determine reasonable values for these versions of PATH
+ * and sets the defSPATH and defPATH variables accordingly.  If you want to
+ * override those settings you should uncomment and possibly change the
+ * DEFSPATH and DEFPATH defines below
+ */
+/*#define DEFSPATH	"PATH=/bin:/usr/bin"			/* */
+/*#define DEFPATH	"PATH=$HOME/bin:/bin:/usr/bin"		/* */
 
 /* every environment variable appearing in PRESTENV will be set or wiped
  * out of the environment (variables without an '=' sign will be thrown
  * out), e.g. you could define PRESTENV as follows:
- * #define PRESTENV	{"IFS","ENV","PWD","PATH=$HOME/bin:/bin:/usr/bin",0}
+ * #define PRESTENV	{"IFS","ENV","PWD",0}
  * any side effects (like setting the umask after an assignment to UMASK) will
- * *not* take place
+ * *not* take place.  Do *not* define PATH here -- use the DEFSPATH and
+ * DEFPATH defines above instead
  */
-#define PRESTENV	{"IFS","ENV","PWD",DEFPATH,0}
+#define PRESTENV	{"IFS","ENV","PWD",0}
 
 /*#define GROUP_PER_USER			/* uncomment this if each
 						   user has his or her own
 	group and procmail can therefore trust a $HOME/.procmailrc that
 	is group writable or contained in a group writable home directory
 	if the group involved is the user's default group. */
+
+/* This file previously allowed you to define SYSTEM_MBOX.  This has
+   changed.  If you want mail delivery to custom mail-spool-files, edit the
+   src/authenticate.c file and change the content of:  auth_mailboxname()
+   (either directly, or through changing the definitions in the same file
+   of MAILSPOOLDIR, MAILSPOOLSUFFIX, MAILSPOOLHASH or MAILSPOOLHOME) */
 
 /************************************************************************
  * Only edit below this line if you have viewed/edited this file before *
@@ -58,23 +78,22 @@
 /*#define RESTRICT_EXEC 100	/* uncomment to prevent users with uids equal
 				   or higher than RESTRICT_EXEC from
 	executing programs from within their .procmailrc files (this
-	restriction does not apply to /etc/procmailrc and /etc/procmailrcs
-	files) */
+	restriction does not apply to the /etc/procmailrc and
+	/etc/procmailrcs files) */
 
 /*#define NO_NFS_ATIME_HACK	/* uncomment if you're definitely not using
 				   NFS mounted filesystems and can't afford
 	procmail to sleep for 1 sec. before writing a regular mailbox
 	(under heavy load procmail automatically suppresses this) */
 
-/* This usually allowed you to define SYSTEM_MBOX.  This has changed.
-   If you want mail delivery to custom mail-spool-files, edit the
-   src/authenticate.c file and change the content of:  auth_mailboxname()
-   (either directly, or through changing the definitions in the same file
-   of MAILSPOOLDIR, MAILSPOOLHASH or MAILSPOOLHOME) */
-
 /*#define DEFsendmail	"/bin/mail"	/* uncomment and/or change if the
 					   autoconfigured default SENDMAIL is
-	not suitable */
+	not suitable.  This program should quack like a sendmail: it should
+	accept the -oi flag (to tell it to _not_ treat a line containing just
+	a period as EOF) and then a list of recipients.	 If the -t flag is
+	given, it should instead extract the recipients from the To:, Cc:,
+	and Bcc: header fields.	 If it can't do this, many standard recipes
+	will not work. */
 
 #define PROCMAILRC	"$HOME/.procmailrc"	/* default rcfile for every
 						   recipient;  if this file
@@ -104,6 +123,7 @@
  ************************************************************************/
 
 #define ROOT_uid	0
+#define LDENV		{"LD_","_RLD","LIBPATH=","ELF_LD_","AOUT_LD_",0}
 
 #define UPDATE_MASK	S_IXOTH	   /* bit set on mailboxes when mail arrived */
 #define OVERRIDE_MASK	(S_IXUSR|S_ISUID|S_ISGID|S_ISVTX)    /* if found set */
@@ -126,6 +146,8 @@
 #define BLKSIZ		1024
 #define STDBUF		128
 #endif /* SMALLHEAP */
+#define MINlogbuf	81			       /* fit an entire line */
+#define MAXlogbuf	1000		       /* in case someone abuses LOG */
 #define FAKE_FIELD	">From "
 #define RETRYunique	8	   /* # of tries at making a unique filename */
 #define BOGUSprefix	"BOGUS."	     /* prepended to bogus mailboxes */
@@ -173,7 +195,8 @@ MMGR)\
 #define DEFcomsat	"no"		/* when an rcfile has been specified */
 
 #define BinSh		"/bin/sh"
-#define RootDir		"/"
+#define ROOT_DIR	"/"
+#define DEAD_LETTER	"/tmp/dead.letter"    /* $ORGMAIL if no passwd entry */
 #define DevNull		"/dev/null"
 #define NICE_RANGE	39			  /* maximal nice difference */
 #define chCURDIR	'.'			    /* the current directory */
@@ -181,8 +204,10 @@ MMGR)\
 #define DIRSEP		"/"		 /* directory separator symbols, the */
 				   /* last one should be the most common one */
 #define MAILDIRtmp	"/tmp"			   /* maildir subdirectories */
-#define MAILDIRnew	"/new"
 #define MAILDIRcur	"/cur"
+#define MAILDIRnew	"/new"
+#define MAILDIRLEN	STRLEN(MAILDIRnew)
+#define MAILDIRretries	5	   /* retries on obtaining a unique filename */
 
 #define EOFName		" \t\n#`'\");"
 

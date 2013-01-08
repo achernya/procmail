@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: robust.c,v 1.27 1999/11/04 23:26:25 guenther Exp $";
+ "$Id: robust.c,v 1.27.2.2 2001/07/15 09:27:32 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -25,7 +25,7 @@ void nomemerr(len)const size_t len;
   nextexit=2;nlog(outofmem);elog("\n");
   syslog(LOG_NOTICE,"%s as I tried to allocate %ld bytes\n",outofmem,
    (long)len);
-  if(buf2)
+  if(rcstate==rc_NORMAL&&buf&&buf2)
    { buf[linebuf-1]=buf2[linebuf-1]='\0';elog("buffer 0:");logqnl(buf);
      elog("buffer 1:");logqnl(buf2);
    }
@@ -55,6 +55,18 @@ ret:  { lcking&=~(lck_MEMORY|lck_ALLOCLIB);
       }
    }
   nomemerr(len);
+}
+
+void*fmalloc(len)const size_t len;			 /* 'fragile' malloc */
+{ void*p;
+  lcking|=lck_ALLOCLIB;p=malloc(len);lcking&=~lck_ALLOCLIB;
+  return p;
+}
+
+void*frealloc(old,len)void*const old;const size_t len;	/* 'fragile' realloc */
+{ void*p;
+  lcking|=lck_ALLOCLIB;p=realloc(old,len);lcking&=~lck_ALLOCLIB;
+  return p;
 }
 
 void*trealloc(old,len)void*const old;const size_t len;
@@ -105,7 +117,7 @@ void opnlog(file)const char*file;
 }
 
 int opena(a)const char*const a;
-{ setlastfolder(a);yell("Opening",a);
+{ yell("Opening",a);
 #ifdef O_CREAT
   return ropen(a,O_WRONLY|O_APPEND|O_CREAT,NORMperm);
 #else

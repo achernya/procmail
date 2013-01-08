@@ -1,4 +1,4 @@
-/*$Id: sublib.h,v 1.10 1999/04/19 06:42:29 guenther Exp $*/
+/*$Id: sublib.h,v 1.10.2.1 2001/07/15 09:27:35 guenther Exp $*/
 
 #ifdef NOmemmove
 void
@@ -13,6 +13,17 @@ char
 #ifdef SLOWstrstr
 char
  *sstrstr P((const char*const phaystack,const char*const pneedle));
+#endif
+
+#ifdef NEEDbbzero
+void
+ bbzero Q((void *s,size_t n));
+#endif
+
+#ifdef NOstrlcat
+size_t
+ sstrlcat Q((char *dst,const char*src,size_t size)),
+ sstrlcpy Q((char *dst,const char*src,size_t size));
 #endif
 
 #ifdef NOstrtol

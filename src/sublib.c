@@ -2,11 +2,13 @@
  *	Collection of standard library substitute routines		*
  *									*
  *	Copyright (c) 1990-1997, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
+ *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: sublib.c,v 1.19 1999/04/19 06:42:28 guenther Exp $";
+ "$Id: sublib.c,v 1.19.2.2 2001/07/15 09:27:34 guenther Exp $";
 #endif
 #include "includes.h"
 #include "sublib.h"
@@ -125,11 +127,45 @@ ret0:
   return 0;
 }
 #endif
+
+#ifdef NEEDbbzero				      /* NObzero && NOmemset */
+void bbzero(s,n)void *s;size_t n;
+{ register char*p=s;
+  while(n-->0)
+     *p++='\0';
+}
+#endif
+
+#ifdef NOstrlcat
+size_t sstrlcat(dst,src,size)char *dst;const char*src;size_t size;
+{ const char*start=dst;
+  if(size>0)
+   { size--;					/* reserve space for the NUL */
+     while(size>0&&*dst)				  /* skip to the end */
+	size--,dst++;
+     while(size>0&&*src)			     /* copy over characters */
+	size--,*dst++= *src++;
+     *dst='\0';					    /* hasta la vista, baby! */
+   }
+  return dst-start+strlen(src);
+}
+
+size_t sstrlcpy(dst,src,size)char *dst;const char*src;size_t size;
+{ const char*start=dst;
+  if(size>0)
+   { size--;					/* reserve space for the NUL */
+     while(size>0&&*src)			     /* copy over characters */
+	size--,*dst++= *src++;
+     *dst='\0';					    /* hasta la vista, baby! */
+   }
+  return dst-start+strlen(src);
+}
+#endif
 			    /* strtol replacement which lacks range checking */
 #ifdef NOstrtol
 long strtol(start,ptr,base)const char*start,**const ptr;int base;
 { long result;const char*str=start;unsigned i;int sign,found;
-  if(base>=36||base<(sign=found=result=0))
+  if(base<(sign=found=result=0)||base>=36)
      goto fault;
   for(;;str++)					  /* skip leading whitespace */
    { switch(*str)
@@ -173,10 +209,14 @@ fault:
   return sign?-result:result;
 }
 #else /* NOstrtol */
+#ifndef NOstrlcat
+#ifndef NEEDbbzero
 #ifndef SLOWstrstr
 #ifndef NOstrpbrk
 #ifndef NOmemmove
 int sublib_dummy_var;		      /* to prevent insanity in some linkers */
+#endif
+#endif
 #endif
 #endif
 #endif

@@ -2,11 +2,13 @@
  *	Custom standard-io library					*
  *									*
  *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2000, Philip Guenther, The United States	*
+ *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: cstdio.c,v 1.45 1999/11/19 07:24:43 guenther Exp $";
+ "$Id: cstdio.c,v 1.45.2.3 2000/06/21 20:34:54 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -17,6 +19,10 @@ static uchar rcbuf[STDBUF],*rcbufp,*rcbufend;	  /* buffer for custom stdio */
 static off_t blasttell;
 static struct dyna_long inced;				  /* includerc stack */
 struct dynstring*incnamed;
+
+static void refill(offset)const int offset;		/* refill the buffer */
+{ rcbufp=rcbuf+(rcbuf==(rcbufend=rcbuf+rread(rc,rcbuf,STDBUF))?1:offset);
+}
 
 void pushrc(name)const char*const name;		      /* open include rcfile */
 { if(*name&&strcmp(name,devnull))
@@ -37,28 +43,30 @@ rerr:	   readerr(name);
 }
 
 void changerc(name)const char*const name;		    /* change rcfile */
-{ if(*name&&strcmp(name,devnull))
-   { struct stat stbuf;int orc;uchar*orbp,*orbe;
-     if(stat(name,&stbuf)||!S_ISREG(stbuf.st_mode))   /* skip irregularities */
-	goto rerr;
-     if(stbuf.st_size)		  /* only if size>0, try to open the new one */
-      { if(orbp=rcbufp,orbe=rcbufend,orc=rc,bopen(name)<0)
-	 { rcbufp=orbp;rcbufend=orbe;rc=orc;   /* we couldn't, so restore rc */
-rerr:	   readerr(name);
-	 }
-	else
-	 { struct dynstring*dp;
-	   if(dp=incnamed->enext)		      /* fixup the name list */
-	      incnamed->enext=dp->enext,free(dp);
-	   rclose(orc);
-	   ifstack.filled=ifdepth;    /* act like all the braces were closed */
-	 }
-	goto ret;
-      }
+{ if(!*name||!strcmp(name,devnull))
+pr:{ ifstack.filled=ifdepth;	   /* lose all the braces to avoid a warning */
+     poprc();		 /* drop the current rcfile and restore the previous */
+     return;
    }
-  ifstack.filled=ifdepth;					/* see above */
-  poprc();		 /* drop the current rcfile and restore the previous */
-ret:;
+  if(!strcmp(name,incnamed->ename))		    /* just restart this one */
+     lseek(rc,0,SEEK_SET),refill(0);
+  else
+   { struct stat stbuf;int orc;uchar*orbp,*orbe;struct dynstring*dp;
+     if(stat(name,&stbuf)||!S_ISREG(stbuf.st_mode))
+rerr: { readerr(name);				      /* skip irregularities */
+	return;
+      }
+     if(!stbuf.st_size)			    /* avoid opening trivial rcfiles */
+	goto pr;
+     if(orbp=rcbufp,orbe=rcbufend,orc=rc,bopen(name)<0)
+      { rcbufp=orbp;rcbufend=orbe;rc=orc;		    /* restore state */
+	goto rerr;
+      }
+     rclose(orc);				/* success! drop the old and */
+     if(dp=incnamed->enext)			      /* fixup the name list */
+	incnamed->enext=dp->enext,free(dp);
+   }
+  ifstack.filled=ifdepth;			     /* close all the braces */
 }
 
 void duprcs P((void))		/* `duplicate' all the fds of opened rcfiles */
@@ -81,10 +89,6 @@ static void closeonerc P((void))
 { struct dynstring*last;
   if(rc>=0)
      rclose(rc),rc= -1,last=incnamed,incnamed=last->enext,free(last);
-}
-
-static void refill(offset)const int offset;
-{ rcbufp=rcbuf+(rcbuf==(rcbufend=rcbuf+rread(rc,rcbuf,STDBUF))?1:offset);
 }
 
 int poprc P((void))
@@ -114,7 +118,7 @@ int bopen(name)const char*const name;				 /* my fopen */
      if(!strchr(dirsep,*name)&&
 	*(md=(char*)tgetenv(maildir))&&
 	strchr(dirsep,*md)&&
-	(len=strlen(md))+strlen(name)+2+XTRAlinebuf<linebuf)
+	(len=strlen(md))+strlen(name)+2<linebuf)
       { strcpy(buf2,md);*(md=buf2+len)= *dirsep;strcpy(++md,name);
 	md=buf2;				    /* then prepend $MAILDIR */
       }

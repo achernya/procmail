@@ -1,4 +1,4 @@
-/*$Id: pipes.h,v 1.10 1995/10/30 02:09:25 srb Exp $*/
+/*$Id: pipes.h,v 1.10.4.1 2001/07/15 09:27:28 guenther Exp $*/
 
 void
  inittmout P((const char*const progname)),
@@ -8,7 +8,7 @@ void
 int
  pipthrough P((char*line,char*source,const long len));
 long
- pipin P((char*const line,char*source,long len));
+ pipin P((char*const line,char*source,long len,const int asgnlastf));
 char*
  readdyn P((char*bf,long*const filled)),
  *fromprog Q((char*name,char*const dest,size_t max));

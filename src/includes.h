@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.63 1999/11/04 23:11:42 guenther Exp $*/
+/*$Id: includes.h,v 1.63.2.1 2001/07/15 09:27:19 guenther Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -159,6 +159,10 @@ double pow();
 
 #ifndef EXIT_SUCCESS
 #define EXIT_SUCCESS	0
+#endif
+
+#ifdef NO_exit
+#define _exit(sig)	exit(sig)
 #endif
 
 #if O_SYNC
@@ -486,6 +490,21 @@ extern void*memmove();
 #define strstr(haystack,needle) sstrstr(haystack,needle)
 #endif
 
+#ifdef NOmemset
+#ifdef NObzero
+#define NEEDbbzero
+#else
+#define bbzero(s,l) bzero(s,l)
+#endif
+#else
+#define bbzero(s,l) memset(s,'\0',l)
+#endif
+
+#ifdef NOstrlcat
+#define strlcat(d,s,z) sstrlcat(d,s,z)
+#define strlcpy(d,s,z) sstrlcpy(d,s,z)
+#endif
+
 #ifndef P
 #define P(args)		args
 #endif
@@ -516,3 +535,7 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #undef uchar
 #endif
 #define uchar uschar
+
+#if ! (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 5))
+#define __attribute__(foo)
+#endif

@@ -2,11 +2,13 @@
  *	Miscellaneous routines used by procmail				*
  *									*
  *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
+ *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.99 1999/11/18 01:59:48 guenther Exp $";
+ "$Id: misc.c,v 1.99.2.10 2001/07/16 08:04:15 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -22,19 +24,18 @@ static /*const*/char rcsid[]=
 #include "goodies.h"
 #include "locking.h"
 #include "../patchlevel.h"
-#ifndef NO_COMSAT
-#include "network.h"
-#endif
+#include "comsat.h"
 #include "mailfold.h"
 #include "lastdirsep.h"
 #include "authenticate.h"
+#include "shell.h"
 
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
  {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout},{"VERBOSE",DEFverbose},
  {"LOGABSTRACT",DEFlogabstract}};
 struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
- {"MSGPREFIX",DEFmsgprefix},{"COMSAT",empty},{"TRAP",empty},
+ {"MSGPREFIX",DEFmsgprefix},{"TRAP",empty},
  {"SHELLFLAGS",DEFshellflags},{"DEFAULT",DEFdefault},{"SENDMAIL",DEFsendmail},
  {"SENDMAILFLAGS",DEFflagsendmail},{"PROCMAIL_VERSION",PM_VERSION}};
 
@@ -42,37 +43,50 @@ struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
 #define MAXvarstrs	 maxindex(strenstr)
 
 const char lastfolder[]="LASTFOLDER",maildir[]="MAILDIR",slinebuf[]="LINEBUF";
+static const char scomsat[]="COMSAT";
 int didchd;
 char*globlock;
 static time_t oldtime;
 static int fakedelivery;
 		       /* line buffered to keep concurrent entries untangled */
 void elog(newt)const char*const newt;
-{ int lnew;size_t i;static int lold;static char*old;char*p;
+{ int lnew;size_t i;static size_t lold,lmax;static char*old;
+  if(lcking&lck_LOGGING)			 /* reentered via sighandler */
+     lold=lmax=0;		       /* so give up on any buffered message */
+  i=lold+(lnew=strlen(newt));	   /* calculate additional and total lengths */
+  if(lnew&&				/* if this is not a forced flush and */
+   (lmax>=i||		      /* either we have enough room in the buffer or */
+    (MAXlogbuf>=i&&			 /* the buffer won't get too big and */
+     !nextexit)))	    /* we're not in a signal handler, then it's safe */
+   { if(i>lmax)				      /* to use or expand the buffer */
+      { char*p;size_t newmax=lmax*2;	 /* exponential expansion by default */
+	if(i>newmax)				   /* ...unless we need more */
+	   newmax=i;
+	if(MINlogbuf>newmax)		    /* ...or that would be too small */
+	   newmax=MINlogbuf;
+	lcking|=lck_LOGGING;		      /* about to change old or lmax */
+	if(p=lmax?frealloc(old,newmax):fmalloc(newmax))/* fragile allocation */
+	   lmax=newmax,old=p;				/* update the values */
+	lcking&=~lck_LOGGING;		       /* okay, they're stable again */
+	if(!p)				      /* couldn't expand the buffer? */
+	   goto flush;					/* then flush it now */
+      }				    /* okay, we now have enough buffer space */
+     tmemmove(old+lold,newt,lnew);		      /* append the new text */
+     lnew=0;lold=i;		    /* the text in newt is now in the buffer */
+     if(old[i-1]!='\n')			    /* if we don't need to flush now */
+	return;						  /* then we're done */
+   }
+flush:
 #ifndef O_CREAT
   lseek(STDERR,(off_t)0,SEEK_END);	  /* locking should be done actually */
 #endif
-  if(!(lnew=strlen(newt))||nextexit)			     /* force flush? */
-     goto flush;
-  i=lold+lnew;
-  if(p=lold?realloc(old,i):malloc(i))			 /* unshelled malloc */
-   { memmove((old=p)+lold,newt,(size_t)lnew);			   /* append */
-     if(p[(lold=i)-1]=='\n')					     /* EOL? */
-	rwrite(STDERR,p,(int)i),lold=0,free(p);		/* flush the line(s) */
+  if(lold)					       /* anything buffered? */
+   { rwrite(STDERR,old,lold);
+     lold=0;					 /* we never free the buffer */
    }
-  else						   /* no memory, force flush */
-flush:
-   { if(lold)
-      { rwrite(STDERR,old,lold);lold=0;
-	if(!nextexit)
-	   free(old);			/* don't use free in signal handlers */
-      }
-     if(lnew)
-	rwrite(STDERR,newt,lnew);
-   }
+  if(lnew)
+     rwrite(STDERR,newt,lnew);
 }
-
-#include "shell.h"
 
 void ignoreterm P((void))
 { signal(SIGTERM,SIG_IGN);signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);
@@ -83,11 +97,25 @@ void shutdesc P((void))
 { rclose(savstdout);closelog();closerc();
 }
 
+void checkroot(c,Xid)const int c;const unsigned long Xid;
+{ uid_t eff;
+  if((eff=geteuid())!=ROOT_uid&&getuid()!=ROOT_uid)
+     return;
+  syslog(LOG_CRIT,"set%cid(%lu) failed with ruid/euid = %lu/%lu",c,Xid,
+   (unsigned long)getuid(),(unsigned long)eff);
+  nlog(insufprivs);
+  exit(EX_NOPERM);
+}
+
 void setids P((void))
 { if(rcstate!=rc_NORMAL)
-   { if(setRgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
-	setgid(gid);	   /* sets the saved gid as well; we can't use that! */
-     setruid(uid);setuid(uid);setegid(gid);rcstate=rc_NORMAL;
+   { if(setRgid(gid)&&	/* due to these !@#$%^&*() POSIX semantics, setgid() */
+      setgid(gid))	   /* sets the saved gid as well; we can't use that! */
+	checkroot('g',(unsigned long)gid);	 /* did setgid fail as root? */
+     setruid(uid);
+     if(setuid(uid))				     /* "This cannot happen" */
+	checkroot('u',(unsigned long)uid);			/* Whoops... */
+     setegid(gid);rcstate=rc_NORMAL;
 #if !DEFverbose
      verbose=0;			/* to avoid peeking in rcfiles using SIGUSR1 */
 #endif
@@ -152,8 +180,8 @@ void nlog(a)const char*const a;
 { time_t newtime;
   static const char colnsp[]=": ";
   elog(procmailn);elog(colnsp);
-  if(verbose&&oldtime!=(newtime=time((time_t*)0)))
-   { charNUM(num,thepid);
+  if(verbose&&!nextexit&&oldtime!=(newtime=time((time_t*)0)))  /* don't call */
+   { charNUM(num,thepid);			  /* ctime from a sighandler */
      elog("[");oldtime=newtime;ultstr(0,(unsigned long)thepid,num);elog(num);
      elog("] ");elog(ctime(&oldtime));elog(procmailn);elog(colnsp);
    }
@@ -174,7 +202,7 @@ int nextrcfile P((void))	/* next rcfile specified on the command line */
   while(p= *gargv)
    { gargv++;
      if(!strchr(p,'='))
-      { if(strlen(p)>linebuf-1)
+      { if(strlen(p)>linebuf-XTRAlinebuf-1)
 	 { nlog("Excessively long rcfile path skipped\n");
 	   continue;
 	 }
@@ -187,16 +215,16 @@ int nextrcfile P((void))	/* next rcfile specified on the command line */
 }
 
 void onguard P((void))
-{ lcking|=lck_LOCKFILE;
+{ lcking|=lck_DELAYSIG;
 }
 
 void offguard P((void))
-{ lcking&=~lck_LOCKFILE;
+{ lcking&=~lck_DELAYSIG;
   if(nextexit==1)	  /* make sure we are not inside Terminate() already */
      elog(newline),Terminate();
 }
 
-void sterminate P((void))
+static void sterminate P((void))
 { static const char*const msg[]={"memory","fork",	  /* crosscheck with */
    "a file descriptor","a kernel-lock"};	  /* lck_ defs in procmail.h */
   ignoreterm();
@@ -204,9 +232,9 @@ void sterminate P((void))
      kill(pidchild,SIGTERM);
   if(!nextexit)
    { nextexit=1;nlog("Terminating prematurely");
-     if(!(lcking&lck_LOCKFILE))
+     if(!(lcking&lck_DELAYSIG))
       { register unsigned i,j;
-	if(i=(lcking&~(lck_ALLOCLIB|lck_LOCKFILE))>>1)
+	if(i=(lcking&~lck__NOMSG)>>1)
 	 { elog(whilstwfor);
 	   for(j=0;!((i>>=1)&1);j++);
 	   elog(msg[j]);
@@ -217,79 +245,31 @@ void sterminate P((void))
 }
 
 void Terminate P((void))
-{ const char*chp;
-  ignoreterm();
-  if(retvl2!=EXIT_SUCCESS)
-     fakedelivery=0,retval=retvl2;
+{ ignoreterm();
   if(getpid()==thepid)
    { const char*lstfolder;
      if(retval!=EXIT_SUCCESS)
-      { tofile=0;lasttell= -1;			  /* mark it for logabstract */
+      { lasttell= -1;				   /* mark it for sendcomsat */
 	lstfolder=fakedelivery?"**Lost**":
 	 retval==EX_TEMPFAIL?"**Requeued**":"**Bounced**";
+	sendcomsat(lstfolder);
       }
      else
-	lstfolder=tgetenv(lastfolder);
-     logabstract(lstfolder);
-#ifndef NO_COMSAT
-     if(strlen(chp=tgetenv(lgname))+2<=linebuf)	  /* first pass length check */
-      { int s;struct sockaddr_in addr;char*chad;	     /* @ seperator? */
-	cat(chp,"@");			     /* start setting up the message */
-	if(chad=strchr(chp=(char*)scomsat,SERV_ADDRsep))
-	   *chad++='\0';	      /* split it up in service and hostname */
-	else if(!renvint(-1L,chp))		/* or is it a false boolean? */
-	   goto nocomsat;			       /* ok, no comsat then */
-	else
-	   chp=empty;			  /* set to yes, so take the default */
-	if(!chad||!*chad)					  /* no host */
-#ifndef IP_localhost
-	   chad=COMSAThost;				      /* use default */
-#else /* IP_localhost */
-	 { static const unsigned char ip_localhost[]=IP_localhost;
-	   addr.sin_family=AF_INET;
-	   tmemmove(&addr.sin_addr,ip_localhost,sizeof ip_localhost);
-	 }
-	else
-#endif /* IP_localhost */
-	 { const struct hostent*host;	      /* what host?  paranoid checks */
-	   if(!(host=gethostbyname(chad))||!host->h_0addr_list)
-	    { endhostent();		     /* host can't be found, too bad */
-	      goto nocomsat;
-	    }
-	   addr.sin_family=host->h_addrtype;	     /* address number found */
-	   tmemmove(&addr.sin_addr,host->h_0addr_list,host->h_length);
-	   endhostent();
-	 }
-	if(!*chp)					       /* no service */
-	   chp=BIFF_serviceport;			/* new balls please! */
-	s=strtol(chp,&chad,10);
-	if(chp==chad)			       /* the service is not numeric */
-	 { const struct servent*serv;
-	   if(!(serv=getservbyname(chp,COMSATprotocol)))   /* so get its no. */
-	    { endservent();
-	      goto nocomsat;
-	    }
-	   addr.sin_port=serv->s_port;endservent();
-	 }
-	else
-	   addr.sin_port=htons((short)s);		    /* network order */
-	if(lasttell>=0)					   /* was it a file? */
-	   ultstr(0,(unsigned long)lasttell,buf2),catlim(buf2);	      /* yep */
-	catlim(COMSATxtrsep);				 /* custom seperator */
-	if(lasttell>=0&&!strchr(dirsep,*lstfolder))    /* relative filename? */
-	   catlim(tgetenv(maildir)),catlim(MCDIRSEP_);	   /* prepend curdir */
-	catlim(lstfolder);s=socket(PF_INET,SOCK_DGRAM,UDP_protocolno);
-	sendto(s,buf,strlen(buf),0,(const void*)&addr,sizeof(addr));rclose(s);
-	yell("Notified comsat:",buf);
+      { lstfolder=tgetenv(lastfolder);
+	sendcomsat(0);
       }
-nocomsat:
-#endif /* NO_COMSAT */
-     shutdesc();
-     if(!(lcking&lck_ALLOCLIB))			/* don't reenter malloc/free */
+     logabstract(lstfolder);
+     if(!nextexit)			/* these are unsafe from sighandlers */
+      { shutdesc();
 	exectrap(traps);
-     nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
+	fdunlock();
+      }
+     nextexit=2;unlock(&loclock);unlock(&globlock);
    }					/* flush the logfile & exit procmail */
-  elog(empty);exit(fakedelivery==2?EXIT_SUCCESS:retval);
+  elog(empty);
+  _exit(retvl2!=EXIT_SUCCESS?retvl2:		      /* unsuccessful child? */
+   fakedelivery==2?EXIT_SUCCESS:		   /* told to throw it away? */
+   retval);					/* okay, use the real status */
 }
 
 void suspend P((void))
@@ -337,16 +317,6 @@ void sbounce P((void))
 { retval=EX_CANTCREAT;sterminate();
 }
 
-void catlim(src)register const char*src;
-{ register char*dest=buf;register size_t lim=linebuf;
-  while(lim&&*dest)
-     dest++,lim--;
-  if(lim)
-   { while(--lim&&(*dest++= *src++));
-     *dest='\0';
-   }
-}
-
 void setdef(name,contents)const char*const name,*const contents;
 { strcat(strcat(strcpy((char*)(sgetcp=buf2),name),"="),contents);
   if(!readparse(buf,sgetc,2))
@@ -376,10 +346,6 @@ void concatenate(p)register char*p;
   *p=p[-1]='\0';
 }
 
-char*cat(a,b)const char*const a,*const b;
-{ return strcat(strcpy(buf,a),b);
-}
-
 char*tstrdup(a)const char*const a;
 { int i;
   i=strlen(a)+1;
@@ -398,13 +364,13 @@ char*cstr(a,b)char*const a;const char*const b;	/* dynamic buffer management */
 }
 
 void setlastfolder(folder)const char*const folder;
-{ if(asgnlastf)
-   { char*chp;
-     asgnlastf=0;
-     strcpy(chp=malloc(STRLEN(lastfolder)+1+strlen(folder)+1),lastfolder);
-     chp[STRLEN(lastfolder)]='=';strcpy(chp+STRLEN(lastfolder)+1,folder);
-     sputenv(chp);free(chp);
-   }
+{ char*chp;size_t len;
+  setlfcs(folder);
+  len=STRLEN(lastfolder)+2+strlen(folder);
+  strlcpy(chp=malloc(len),lastfolder,len);
+  strlcat(chp,"=",len);
+  strlcat(chp,folder,len);
+  sputenv(chp);free(chp);
 }
 
 char*gobenv(chp,end)char*chp,*end;
@@ -432,11 +398,19 @@ int asenvcpy(src)char*src;
      *	really change the uid now, since it would not be safe to
      *	evaluate the extra command line arguments otherwise
      */
-   { erestrict=1;setids();strcpy(buf,src);src=buf+(chp-src);
-     strcpy((char*)(sgetcp=buf2),++src);
-     if(!readparse(src,sgetc,2))
-      { chp=sputenv(buf);src[-1]='\0';
-	asenv(chp);
+   { size_t len=chp++-src+1;			      /* variable name + '=' */
+     erestrict=1;setids();				   /* always do this */
+     if(len>linebuf-XTRAlinebuf-1)			/* too long of name? */
+      { setoverflow();
+	nlog("Assignment to variable with excessively long name skipped\n");
+      }
+     else
+      { memcpy(buf,src,len);
+	src=buf+len;
+	if(chp=eputenv(chp,src))
+	 { src[-1]='\0';
+	   asenv(chp);
+	 }
       }
      return 1;
    }
@@ -448,13 +422,21 @@ void mallocbuffers(lineb,setenv)size_t lineb;int setenv;
    { free(buf);
      free(buf2);
    }
-  buf=malloc(lineb);buf2=malloc(lineb);
+  buf=malloc(lineb+XTRAlinebuf);buf2=malloc(lineb+XTRAlinebuf);
   if(setenv)
    { char*chp;
      *(chp=strcpy(buf,slinebuf)+STRLEN(slinebuf))='=';
-     ultstr(0,lineb-XTRAlinebuf,chp+1);
+     ultstr(0,lineb,chp+1);
      sputenv(buf);
    }
+}
+
+void asenvtext(chp)const char*const chp;
+{ int i=MAXvarstrs;
+  do						 /* several text assignments */
+     if(!strcmp(buf,strenstr[i].sname))
+	strenstr[i].sval=chp;
+  while(i--);
 }
 
 void asenv(chp)const char*const chp;
@@ -462,9 +444,10 @@ void asenv(chp)const char*const chp;
    includerc[]="INCLUDERC",eumask[]="UMASK",dropprivs[]="DROPPRIVS",
    shift[]="SHIFT",switchrc[]="SWITCHRC";
   if(!strcmp(buf,slinebuf))
-   { if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
-	linebuf=MINlinebuf+XTRAlinebuf;		       /* check minimum size */
-     mallocbuffers(linebuf,0);
+   { long lineb;			 /* signed to catch negative numbers */
+     if((lineb=renvint(0L,chp))<MINlinebuf)
+	lineb=MINlinebuf;			       /* check minimum size */
+     mallocbuffers(linebuf=lineb,0);
    }
   else if(!strcmp(buf,maildir))
      if(chdir(chp))
@@ -477,6 +460,12 @@ void asenv(chp)const char*const chp;
      elog(chp);
   else if(!strcmp(buf,exitcode))
      setxit=1;
+  else if(!strcmp(buf,lgname))
+     setlgcs(chp);
+  else if(!strcmp(buf,lastfolder))
+     setlfcs(chp);
+  else if(!strcmp(buf,scomsat))
+     setcomsat(chp);
   else if(!strcmp(buf,shift))
    { int i;
      if((i=renvint(0L,chp))>0)
@@ -495,8 +484,8 @@ void asenv(chp)const char*const chp;
   else if(!strcmp(buf,sdelivered))			    /* fake delivery */
    { if(renvint(0L,chp))				    /* is it really? */
       { onguard();
-	if((thepid=sfork())>0)			/* signals may cause trouble */
-	   nextexit=2,lcking&=~lck_LOCKFILE,exit(retvl2);
+	if((thepid=sfork())>0)
+	   _exit(retvl2);			   /* parent: do not pass go */
 	if(!forkerr(thepid,procmailn))
 	   fakedelivery=1;
 	newid();offguard();
@@ -507,9 +496,13 @@ void asenv(chp)const char*const chp;
   else if(!strcmp(buf,eumask))
      doumask((mode_t)strtol(chp,(char**)0,8));
   else if(!strcmp(buf,includerc))
-     pushrc(chp);
+   { if(rc>=0)				 /* INCLUDERC and SWITCHRC only work */
+	pushrc(chp);					   /* inside rcfiles */
+   }					      /* and not on the command line */
   else if(!strcmp(buf,switchrc))
-     changerc(chp);
+   { if(rc>=0)
+	changerc(chp);
+   }
   else if(!strcmp(buf,host))
    { const char*name;
      if(strcmp(chp,name=hostname()))
@@ -525,11 +518,7 @@ void asenv(chp)const char*const chp;
 	if(!strcmp(buf,strenvvar[i].name))
 	   strenvvar[i].val=renvint(strenvvar[i].val,chp);
      while(i--);
-     i=MAXvarstrs;
-     do						 /* several text assignments */
-	if(!strcmp(buf,strenstr[i].sname))
-	   strenstr[i].sval=chp;
-     while(i--);
+     asenvtext(chp);			    /* delegate the text assignments */
    }
 }
 
@@ -537,23 +526,26 @@ long renvint(i,env)const long i;const char*const env;
 { const char*p;long t;
   t=strtol(env,(char**)&p,10);			  /* parse like a decimal nr */
   if(p==env)
-   { for(;;p++)					  /* skip leading whitespace */
+     for(;;p++)
       { switch(*p)
-	 { case '\t':case ' ':
-	      continue;
+	 { case ' ':case '\t':case '\n':case '\v':case '\f':case '\r':
+	      continue;				  /* skip leading whitespace */
+	   case 'o':case 'O':
+	      if(!strnIcmp(p+1,"n",(size_t)1))
+	   case 'y':case 'Y':case 't':case 'T':case 'e':case 'E':
+		 t=1;
+	      else if(!strnIcmp(p+1,"ff",(size_t)2))
+	   case 'n':case 'N':case 'f':case 'F':case 'd':case 'D':
+		 t=0;
+	      else
+	   default:
+		 t=i;
+	      break;
+	   case 'a':case 'A':t=2;
+	      break;
 	 }
 	break;
       }
-     t=i;
-     if(!strnIcmp(p,"a",(size_t)1))
-	t=2;
-     else if(!strnIcmp(p,"on",(size_t)2)||!strnIcmp(p,"y",(size_t)1)||
-      !strnIcmp(p,"t",(size_t)1)||!strnIcmp(p,"e",(size_t)1))
-	t=1;
-     else if(!strnIcmp(p,"off",(size_t)3)||!strnIcmp(p,"n",(size_t)1)||
-      !strnIcmp(p,"f",(size_t)1)||!strnIcmp(p,"d",(size_t)1))
-	t=0;
-   }
   return t;
 }
 
@@ -618,150 +610,6 @@ const char*newdynstring(adrp,chp)struct dynstring**const adrp;
 void rcst_nosgid P((void))
 { if(!rcstate)
      rcstate=rc_NOSGID;
-}
-
-			     /* lifted out of main() to reduce main()'s size */
-int screenmailbox(chp,egid,Deliverymode)
- char*chp;const gid_t egid;const int Deliverymode;
-{ char ch;struct stat stbuf;
- /*
-  *	  do we need sgidness to access the mail-spool directory/files?
-  */
-  chp=lastdirsep(strcpy(buf,chp));		   /* strip off the basename */
-  if(chp<buf+3)
-     chp=buf+1;
-  else if(!chp[0]||(chp[0]==chCURDIR&&!chp[1]))		/* take into account */
-     for(chp-=2;chp>buf+1&&!strchr(dirsep,*chp--););/* folder type indicator */
-  ch=*chp;*chp='\0';sgid=gid;
-  if(!stat(buf,&stbuf))
-   { unsigned wwsdir;
-     if(accspooldir=(wwsdir=			/* world writable spool dir? */
-	   (stbuf.st_mode&(S_IWGRP|S_IXGRP|S_IWOTH|S_IXOTH))==
-	   (S_IWGRP|S_IXGRP|S_IWOTH|S_IXOTH))
-	  <<1|						 /* note it in bit 1 */
-	 uid==stbuf.st_uid)	   /* we own the spool dir, note it in bit 0 */
-#ifdef TOGGLE_SGID_OK
-	;
-#endif
-	rcst_nosgid();			     /* we don't *need* setgid privs */
-     if(uid!=stbuf.st_uid&&		 /* we don't own the spool directory */
-	(stbuf.st_mode&S_ISGID||!wwsdir))	  /* it's not world writable */
-      { if(stbuf.st_gid==egid)			 /* but we have setgid privs */
-	   doumask(GROUPW_UMASK);		   /* make it group-writable */
-	goto keepgid;
-      }
-     else if(stbuf.st_mode&S_ISGID)
-keepgid:			   /* keep the gid from the parent directory */
-	if((sgid=stbuf.st_gid)!=egid)
-	   setgid(sgid);     /* we were started nosgid, but we might need it */
-   }
-  else				/* panic, mail-spool directory not available */
-   { setids();mkdir(buf,NORMdirperm);	     /* try creating the last member */
-   }
-  *chp=ch;
- /*
-  *	  check if the default-mailbox-lockfile is owned by the
-  *	  recipient, if not, mark it for further investigation, it
-  *	  might need to be removed
-  */
-  if(*(chp=buf))
-     chp=strchr(buf,'\0')-1;
-  for(;;)
-   { ;{ int defaulttype=foldertype(chp,0,0,&stbuf);   /* what type of folder */
-	if(defaulttype==to_NOTYET)				 /* is this? */
-	 { if(errno!=EACCES||(setids(),lstat(buf,&stbuf)))
-	      goto nobox;
-	 }
-	else if(!to_checkcloser(defaulttype))
-	 { setids();
-	   if(defaulttype<0)
-	      goto fishy;
-	   goto nl;					   /* no lock needed */
-	 }
-      }
-    /*
-     *	  check if the original/default mailbox of the recipient
-     *	  exists, if it does, perform some security checks on it
-     *	  (check if it's a regular file, check if it's owned by
-     *	  the recipient), if something is wrong try and move the
-     *	  bogus mailbox out of the way, create the
-     *	  original/default mailbox file, and chown it to
-     *	  the recipient
-     */
-     ;{ int checkiter=1;
-	for(;;)
-	 { if(stbuf.st_uid!=uid||		      /* recipient not owner */
-	      !(stbuf.st_mode&S_IWUSR)||	     /* recipient can write? */
-	      S_ISLNK(stbuf.st_mode)||			/* no symbolic links */
-	      (S_ISDIR(stbuf.st_mode)?	      /* directories, yes, hardlinks */
-		!(stbuf.st_mode&S_IXUSR):stbuf.st_nlink!=1))	       /* no */
-	     /*
-	      * If another procmail is about to create the new
-	      * mailbox, and has just made the link, st_nlink==2
-	      */
-	      if(checkiter--)		    /* maybe it was a race condition */
-		 suspend();		 /* close eyes, and hope it improves */
-	      else			/* can't deliver to this contraption */
-	       { int i=lastdirsep(buf)-buf;
-		 strncpy(buf2,buf,i);buf2[i]='\0';
-		 if(rnmbogus(buf,&stbuf,i,1))
-		    goto fishy;
-		 goto nobox;
-	       }
-	   else
-	      break;
-	   if(lstat(buf,&stbuf))
-	      goto nobox;
-	 }					/* SysV type autoforwarding? */
-	if(Deliverymode&&(stbuf.st_mode&S_ISUID||
-	 !S_ISDIR(stbuf.st_mode)&&stbuf.st_mode&S_ISGID))
-	 { nlog("Autoforwarding mailbox found\n");
-	   exit(EX_NOUSER);
-	 }
-	else
-	 { if(!(stbuf.st_mode&OVERRIDE_MASK)&&
-	      stbuf.st_mode&cumask&
-	       (accspooldir?~(mode_t)0:~(S_IRGRP|S_IWGRP)))	/* hold back */
-	    { static const char enfperm[]=
-	       "Enforcing stricter permissions on";
-	      nlog(enfperm);logqnl(buf);
-	      syslog(LOG_NOTICE,slogstr,enfperm,buf);setids();
-	      chmod(buf,stbuf.st_mode&=~cumask);
-	    }
-	   break;				  /* everything is just fine */
-	 }
-      }
-nobox:
-     if(!(accspooldir&1))	     /* recipient does not own the spool dir */
-      { if(!xcreat(buf,NORMperm,(time_t*)0,doCHOWN|doCHECK))	   /* create */
-	   break;		   /* mailbox... yes we could, fine, proceed */
-	if(!lstat(buf,&stbuf))			     /* anything in the way? */
-	   continue;			       /* check if it could be valid */
-      }
-     setids();						   /* try some magic */
-     if(!xcreat(buf,NORMperm,(time_t*)0,doCHECK))		/* try again */
-	break;
-     if(lstat(buf,&stbuf))			      /* nothing in the way? */
-fishy:
-      { nlog("Couldn't create");logqnl(buf);
-	return 0;
-      }
-   }
-  if(!S_ISDIR(stbuf.st_mode))
-   { int isgrpwrite=stbuf.st_mode&S_IWGRP;
-     strcpy(chp=strchr(buf,'\0'),lockext);
-     defdeflock=tstrdup(buf);
-     if(!isgrpwrite&&!lstat(defdeflock,&stbuf)&&stbuf.st_uid!=uid&&
-      stbuf.st_uid!=ROOT_uid)
-      { int i=lastdirsep(buf)-buf;
-	strncpy(buf2,buf,i);buf2[i]='\0';     /* try & rename bogus lockfile */
-	rnmbogus(defdeflock,&stbuf,i,0);		   /* out of the way */
-      }
-     *chp='\0';
-   }
-  else
-nl:  defdeflock=empty;					   /* no lock needed */
-  return 1;
 }
 
 			     /* lifted out of main() to reduce main()'s size */
@@ -958,7 +806,8 @@ jinregs:		regsp=regs;		/* start over and look again */
 copyrest:	  strcpy(buf,chp2);
 		  continue;
 	       case '?':pwait=2;metaparse(chp);inittmout(buf);ignwerr=1;
-		   pipin(buf,lstartchar,ltobesent);
+		   pipin(buf,lstartchar,ltobesent,0);
+		   resettmout();
 		   if(scoreany&&lexitcode>=0)
 		    { int j=lexitcode;
 		      if(negate)

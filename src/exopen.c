@@ -1,12 +1,14 @@
 /************************************************************************
  *	Collection of NFS resistant exclusive creat routines		*
  *									*
- *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1997, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1999-2001, Philip Guenther, The United States	*
+ *							of America	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: exopen.c,v 1.37 1999/11/16 06:32:55 guenther Exp $";
+ "$Id: exopen.c,v 1.37.2.4 2001/07/15 09:27:13 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -18,12 +20,12 @@ static /*const*/char rcsid[]=
 
 int unique(full,p,len,mode,verbos,chownit)char*const full;char*p;
  const size_t len;const mode_t mode;const int verbos,chownit;
-{ static const char s2c[]=".,+:%@";static int serial=STRLEN(s2c);
+{ static const char s2c[]=".,+%";static int serial=STRLEN(s2c);
   static time_t t;char*dot,*end=full+len,*op,*ldp;struct stat filebuf;
   int nicediff,i,didnice,retry=RETRYunique;
   if(chownit&doCHOWN)		  /* semi-critical, try raising the priority */
    { nicediff=nice(0);SETerrno(0);nicediff-=nice(-NICE_RANGE);
-     didnice=errno;
+     didnice=!errno;
    }
   *(end=len?full+len-1:p+UNIQnamelen-1)='\0';
   *(op=p)=UNIQ_PREFIX;dot=ultoan((long)thepid,p+1);
@@ -63,7 +65,7 @@ in:	p=ultoan((long)t,dot+1);
   while((!i||errno!=ENOENT||	      /* casually check if it already exists */
 	 (0>(i=ropen(full,O_WRONLY|O_CREAT|O_EXCL,mode))&&errno==EEXIST))&&
 	(i= -1,retry--));
-  if(didnice)
+  if(chownit&doCHOWN&&didnice)
      nice(nicediff);		   /* put back the priority to the old level */
   if(i<0)
    { if(verbos)			      /* this error message can be confusing */

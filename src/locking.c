@@ -6,13 +6,14 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: locking.c,v 1.54 1999/10/20 04:42:47 guenther Exp $";
+ "$Id: locking.c,v 1.54.2.2 2001/07/15 09:27:21 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
 #include "shell.h"
 #include "misc.h"
 #include "pipes.h"
+#include "foldinfo.h"
 #include "exopen.h"
 #include "locking.h"
 #include "lastdirsep.h"
@@ -40,7 +41,7 @@ void lockit(name,lockp)char*name;char**const lockp;
 #endif
 	;
    }
-  for(lcking|=lck_LOCKFILE;;)
+  for(lcking|=lck_DELAYSIG;;)
    { yell("Locking",name);	    /* in order to cater for clock skew: get */
      if(!xcreat(name,LOCKperm,&t,locktype))    /* time t from the filesystem */
       { *lockp=name;				   /* lock acquired, hurray! */
@@ -96,7 +97,7 @@ term: { free(name);			     /* drop the preallocated buffer */
    }
   if(rcstate==rc_NORMAL)			   /* we already set our ids */
      setegid(gid);		      /* we put back our regular permissions */
-  lcking&=~lck_LOCKFILE;
+  lcking&=~lck_DELAYSIG;
   if(nextexit)
      elog(whilstwfor),elog("lockfile"),logqnl(name),Terminate();
 }
@@ -120,7 +121,7 @@ void lcllock P((void))				    /* lock a local lockfile */
 }
 
 void unlock(lockp)char**const lockp;
-{ lcking|=lck_LOCKFILE;
+{ onguard();
   if(*lockp)
    { if(!strcmp(*lockp,defdeflock))    /* is it the system mailbox lockfile? */
 	setegid(sgid);		       /* try and get some extra permissions */

@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmailrc.man,v 1.75 1999/11/23 06:08:57 guenther Exp $
+.Id $Id: procmailrc.man,v 1.75.2.6 2001/07/15 09:27:03 guenther Exp $
 .TH PROCMAILRC 5 \*(Dt BuGless
 .na
 .SH NAME
@@ -64,7 +64,7 @@ and
 .B recipes
 can be freely intermixed in the rcfile. If any environment variable has
 a special meaning to procmail, it will be used appropriately the moment
-it is parsed (i.e. you can change the current directory whenever you
+it is parsed (i.e., you can change the current directory whenever you
 want by specifying a new
 .BR MAILDIR ,
 switch lockfiles by specifying a new
@@ -141,7 +141,7 @@ following recipes with the '@ELSE_DO@' flag.  This allows you to specify
 .B @ERROR_DO@
 This recipe only executes if the immediately preceding recipe
 .IR failed
-(i.e. the action line was attempted, but resulted in an error).
+(i.e., the action line was attempted, but resulted in an error).
 .TP
 .B @PASS_HEAD@
 Feed the header to the pipe, file or mail destination (default).
@@ -173,7 +173,7 @@ Has the same meaning as the `@WAIT_EXIT@' flag, but will suppress any
 `Program failure' message.
 .TP
 .B @IGNORE_WRITERR@
-Ignore any write errors on this recipe (i.e. usually due to an early closed
+Ignore any write errors on this recipe (i.e., usually due to an early closed
 pipe).
 .TP
 .B @RAW_NONL@
@@ -272,6 +272,17 @@ hardlinks).
 .TP 2.2i
 .B "LOGNAME, HOME and SHELL"
 Your (the recipient's) defaults
+.TP
+.B PATH
+.na
+\&@DEFpath@
+(Except
+.ad
+during the processing of an @ETCRC@ file, when it will be set
+to
+.na
+`\&@DEFspath@'.)
+.ad
 .TP
 .B SHELLMETAS
 \&@DEFshellmetas@
@@ -420,7 +431,7 @@ of the machine, processing of the current
 will immediately cease. If other rcfiles were specified on the
 command line, processing will continue with the next one.  If all rcfiles
 are exhausted, the program will terminate, but will not generate an error
-(i.e. to the mailer it will seem that the mail has been delivered).
+(i.e., to the mailer it will seem that the mail has been delivered).
 .TP
 .B UMASK
 The name says it all (if it doesn't, then forget about this one :\-).
@@ -446,7 +457,7 @@ If you're not using the
 facility don't worry about this one.  It specifies the program being
 called to forward any mail.
 .br
-It gets invoked as: $SENDMAIL $SENDMAILFLAGS "$@";
+It gets invoked as: "$SENDMAIL" $SENDMAILFLAGS "$@";
 .TP
 .B NORESRETRY
 Number of retries that are to be made if any `\fBprocess table full\fP',
@@ -454,14 +465,14 @@ Number of retries that are to be made if any `\fBprocess table full\fP',
 `\fBout of swap space\fP' error should occur.  If this number is negative,
 then procmail will retry indefinitely; if not specified, it defaults to
 @DEFnoresretry@ times.  The retries occur with a $SUSPEND second interval.  The
-idea behind this is, that if e.g. the
+idea behind this is that if, e.g., the
 .I swap
 .I space
 has been exhausted or the
 .I process
 .I table
 is full, usually several other programs will either detect this as well
-and abort or crash 8-), thereby freeing valuable
+and abort or crash 8\-), thereby freeing valuable
 .I resources
 for procmail.
 .TP
@@ -484,10 +495,11 @@ be a binary file for that matter.  See also PROCMAIL_OVERFLOW.
 .B DELIVERED
 If set to `yes' procmail will pretend (to the mail agent) the mail
 has been delivered.  If mail cannot be delivered after having met this
-assignment (set to `yes'), the mail will be lost (i.e. it will not bounce).
+assignment (set to `yes'), the mail will be lost (i.e., it will not bounce).
 .TP
 .B TRAP
-When procmail terminates it will execute the contents of this variable.
+When procmail terminates of its own accord and not because it
+received a signal, it will execute the contents of this variable.
 A copy of the mail can be read from stdin.  Any output produced by this
 command will be appended to $LOGFILE.  Possible uses for TRAP are: removal
 of temporary files, logging customised abstracts, etc.  See also
@@ -496,13 +508,19 @@ and
 .BR LOGABSTRACT .
 .TP
 .B EXITCODE
-When procmail terminates and this variable has been set to a positive numeric
-value, procmail will use this as the exitcode.  If this variable is set but
-empty, procmail will set the exitcode to whatever the
+By default, procmail returns an exitcode of zero (success) if it
+successfully delivered the message or if the
+.B HOST
+variable was misset and there were no more rcfiles on the command
+line; otherwise it returns failure.  Before doing so, procmail
+examines the value of this variable.  If it is set to a positive
+numeric value, procmail will instead use that value as its exitcode.
+If this variable is set but empty and
 .B TRAP
-program returns.
-If this variable has not been set, procmail will set it shortly before calling
-up the
+is set, procmail will set the exitcode to whatever the
+.B TRAP
+program returns.  If this variable is not set, procmail will set
+it shortly before calling up the
 .B TRAP
 program.
 .TP
@@ -533,7 +551,9 @@ descriptors).  As no checking is done on the permissions or ownership
 of the rcfile, users of
 .B INCLUDERC
 should make sure that only trusted users have write access to the included
-rcfile or the directory it is in.
+rcfile or the directory it is in.  Command line assignments to
+.B INCLUDERC
+have no effect.
 .TP
 .B SWITCHRC
 Names an rcfile (relative to the current directory) to which processing
@@ -545,7 +565,8 @@ rcfile will be aborted and the named rcfile started.  Unsetting
 aborts processing of the current rcfile as if it had ended at the
 assignment.  As with
 .BR INCLUDERC ,
-no checking is done on the permissions or ownership of the rcfile.
+no checking is done on the permissions or ownership of the rcfile
+and command line assignments have no effect.
 .TP
 .B PROCMAIL_VERSION
 The version number of the running procmail binary.
@@ -657,6 +678,11 @@ override the defaults, you either have to put them in the
 .B rcfile
 or on the command line as arguments.
 .PP
+The @ETCRC@ file cannot change the PATH setting seen by user rcfiles
+as the value is reset when procmail finishes the @ETCRC@ file.  While
+future enhancements are expected in this area, recompiling procmail
+with the desired value is currently the only correct solution.
+.PP
 Environment variables set
 .B inside
 the shell-interpreted-`|' action part of a recipe will
@@ -701,16 +727,19 @@ whereby $\ename will be substituted by the
 all-magic-regular-expression-characters-disarmed
 equivalent of $name, $_ by the name of the current rcfile, $\- by
 $LASTFOLDER and $= will contain the score of the last recipe.
-When the
+Furthermore, the result of $\ename substitution will never be split on
+whitespace.  When the
 .B \-@ARGUMENTOPT@
 or
 .B \-@MAILFILTOPT@
-options are used, "$@" will expand to respectively the specified argument
-(list); but only when passed as in the argument list to a program, and
-then only one such occurence will be expanded.
+options are used, $# will expand to the number of arguments so
+specified and "$@" (the quotes are required) will expand to the
+specified arguments.  However, "$@" will only be expanded when
+used in the argument list to a program, and
+then only one such occurrence will be expanded.
 .PP
 Unquoted variable expansions performed by procmail are always split on
-whitespace; the IFS variable is not used internally.
+space, tab, and newline characters; the IFS variable is not used internally.
 .PP
 Procmail does not support the expansion of `~'.
 .PP
@@ -747,6 +776,10 @@ block does not work as expected.
 .PP
 When capturing stdout from a recipe into an environment variable, exactly
 one trailing newline will be stripped.
+.PP
+Some non-optimal and non-obvious regexps set MATCH to an incorrect
+value.  The regexp can be made to work by removing one or more unneeded
+'*', '+', or '?' operator on the left-hand side of the \e/ token.
 .SH MISCELLANEOUS
 If the regular expression contains `\fB@TO_key@\fP' it will be substituted by
 .na
@@ -810,7 +843,8 @@ The current behavior of assignments on the command line to
 .B INCLUDERC
 and
 .B SWITCHRC
-is not guaranteed and may be changed or removed in future releases.
+is not guaranteed, has been changed once already, and may be changed
+again or removed in future releases.
 .PP
 For
 .I really
