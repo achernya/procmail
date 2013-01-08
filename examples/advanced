@@ -1,0 +1,51 @@
+For users that have crossmounted mailboxes (i.e. you can access the very
+same mail from a whole bunch of different workstations), but on machines
+with differing architectures (i.e. you need different executables), and they
+have to explicitly use (i.e. the system administrator did not arrange,
+for example, /usr/local/bin/procmail to have exactly the right contents
+depending on from which machine it is called) two executables of procmail,
+I have the following suggestion to use as a .forward file (examples are for
+sparc and sun3 architectures):
+
+"|IFS=' ';if /usr/bin/sparc;then exec /home/berg/bin.sun4/procmail;else exec /home/berg/bin.sun3/procmail;fi"
+
+or alternatively:
+
+"|IFS=' ';exec /home/berg/bin.`/usr/bin/arch`/procmail"
+
+------------------------------------------------------------------------------
+To use procmail as a local delivery agent (replacement for /bin/mail)
+use the following lines for in sendmail.rc:
+procmail /dev/null MAILDIR=/usr/spool/mail DEFAULT=$u ORGMAIL=$u \
+LOCKFILE=$u.lock
+------------------------------------------------------------------------------
+# Now follows an example of what you can do in a procmailrc file
+HELLO=oneword
+HELLO="two words"
+HELLO='two words'	HELLO  =	one\
+word
+HELLO=two\ words
+HELLO=two\ `echo words`
+HELLO=			# empty
+HELLO			# This will wipe "HELLO" from the environment
+HELLO    =    "three words"\ yes
+HELLO	=	"$HELLO `cat somefile`  "	# Trailing blanks
+HELLO = "wheeee`date`${HELLO} this works too"    HELLO = 'But so does this!'
+
+# As you can see, every trick in the book of /bin/sh programming can be used
+# (and more).
+
+LOCALLOCKFILE = llf
+
+::$LOCALLOCKFILE
+grep for this
+|$HELLO			# calls up a program named "But" with 3 arguments
+
+:
+or for this
+|"$HELLO"		# tries to call up a program named "But so does this!"
+
+:
+and this
+|$HELLO \
+there		# lines can be continued

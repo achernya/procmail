@@ -2,10 +2,10 @@
 # are not.
 
 PATH=$HOME/bin:/usr/bin:/global/bin:/usr/ucb:/bin:/usr/local/bin:
-MAILDIR=$HOME/Mail	# You'd better make sure it exists
-DEFAULT=$MAILDIR/mbox
-LOGFILE=$MAILDIR/from
-LOCKFILE=$HOME/.lockmail
+MAILDIR =	$HOME/Mail	# You'd better make sure it exists
+DEFAULT =	$MAILDIR/mbox
+LOGFILE =	$MAILDIR/from
+LOCKFILE=	$HOME/.lockmail
 
 			# This will create a local lockfile named todd.lock
 ::			# *if* the condition matches

@@ -1,12 +1,24 @@
 # Please check if all the paths in PATH are reachable, remove the ones that
 # are not.
 
-PATH=$HOME/bin:/usr/bin:/global/bin:/usr/ucb:/bin:/usr/local/bin:
+PATH=$HOME/bin:/usr/bin:/usr/ucb:/bin:/usr/local/bin:
 MAILDIR=$HOME/Mail	# You'd better make sure it exists
 DEFAULT=$MAILDIR/mbox
-LOGFILE=$MAILDIR/from
-			# We don't use a global lockfile here now
-			# Instead we use local lockfiles everywhere
+			# We don't use a global lockfile here now.
+			# Instead we use local lockfiles everywhere.
+			# This allows mail to arrive in all mailboxes
+			# concurrently, or allows you to read one mailbox
+			# while mail arrives in another.
+
+# The next recipe will split up Digests into their individual messages.
+# Don't do this if you use a global lockfile before this recipe (deadlock)
+
+:
+^Subject:.*Digest
+|formail +1 -d -s procmail
+
+LOGFILE=$MAILDIR/from		# Put it here, in order to avoid logging
+				# the arrival of the digest.
 
 # Notice the double : in the next recipe, this will cause a lockfile
 # named "$MAILDIR/todd.lock" to be used if and only if this mail is going
@@ -26,7 +38,7 @@ uunetbox			# will go to $MAILDIR/uunetbox
 
 # And here the lockfile will be $MAILDIR/henries.lock of course.
 
-:I:				# Anything from Henry or henry (ignore case)
+::				# Anything from Henry
 ^From.*henry
 henries				# will go to $MAILDIR/henries
 
@@ -42,7 +54,7 @@ toread				# $MAILDIR/toread
 # BUT, since we have not specified any global lock file because we
 # were working with local lock files, and since we are sending the mail to
 # $DEFAULT now, we need to specify a lockfile for that too.  We use
-# a global lockfile for that  (it won't be created until procmail 
+# a global lockfile for that  (it won't be created until procmail
 # has parsed (needed to parse) up till here.
 
 LOCKFILE=$DEFAULT.lock

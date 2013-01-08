@@ -1,21 +1,31 @@
 Makefile	We all know what that is.
 README		Important, read it.
+INSTALL		A description of what has to be done to install procmail.
 HISTORY		Recent and ancient changes (or bugs) documented.
-lockfile.1	Man page for lockfile.
-lockfile.c	You guessed it.
-Manifest	Right again.
-procmail.1	Yes, the man page for procmail (writing man pages gobbles up
-		sooo much time, here you can see why :-).
+FEATURES	A summary of all the things procmail is particularly good at.
+STYLE		A short explanation of why the source looks so "awkward"
+lockfile.c	main program for lockfile
+formail.c	main program for formail
+Manifest	You guessed it.
 procmail.c	main program for procmail.
 nonint.c	Collection of routines that don't return ints.
 retint.c	Collection of routines that return ints.
+goodies.c	Some real nice routines, deserve to be put in a library.
+common.c	Some routines that are used by procmail and formail.
+exopen.c	Collection of routines about an NFS secure excl. open.
+exopen.h	The very same.
 procmail.h	Include file with all declarations.
 
 includes.h	System include files are all referenced here.
 config.h	The file to edit if you want to change, yes, the configuration.
+autoconf	The shell script that seizes your compiler and machine,
+		and then creates a file called autoconf.h describing the
+		kludges that are going to be applied for your installation.
 
 shell.h		Defines a few 'shell' macros for malloc and the like.
-sysexits.h	Standard exit codes.
+man/*		Yes, the man pages (made in a labour camp).
+include/*	A few files that are supposed to fool your compiler into
+		thinking that it has ANSI and POSIX conforming include files.
 examples/?procmailrc
 		Sample .procmailrc files.
 examples/?rmail
@@ -24,3 +34,7 @@ examples/?rmail
 		as soon as you exit the mail program).
 examples/forward
 		A sample .forward file.
+examples/advanced
+		Some extra info for network mounted mailboxes, examples of
+		advanced .procmailrc expressions and using procmail as
+		a local delivery agent.

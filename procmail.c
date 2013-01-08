@@ -1,119 +1,130 @@
 /************************************************************************
  *	procmail.c	an autonomous mail processor			*
  *									*
- *	Version 1.30 1991-03-01						*
  *	Seems to be relatively bug free.				*
  *									*
  *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
- *	See the accompanying README file for more info.			*
+ *	#include "README"						*
  *									*
- *	Don't complain about the formatting, I know it's		*
- *	unconventional, but it's my standard format (I have my		*
- *	reasons).  If you don't like it, feed it through your		*
- *	favourite C beautifier.	 The program has been tested on		*
- *	SUN's, but should work on almost every *NIX system that		*
- *	has a fork() and execvp() command.  The only things that	*
- *	might need some changes are the include files.			*
- *	There might be one problem if your system doesn't know		*
- *	fsync(fd).  Define NOfsync in that case.			*
+ *	#include "STYLE"						*
  *									*
- *	If you have had to make major changes in order to get it	*
- *	running on a different machine, please send me the patches.	*
- *	That way I might include them in a future version.		*
- *									*
- *	Please note that this program essentially is supposed to be	*
- *	static, that means no extra features (IMHO no more are		*
- *	needed) are supposed to be added (though any usefull		*
- *	suggestions will be appreciated and evaluated if time permits). *
  ************************************************************************/
+#ifdef	RCS
+static char rcsid[]="$Id: procmail.c,v 2.3 1991/06/12 10:23:06 berg Rel $";
+#endif
 #include "config.h"
 #define MAIN
 #include "procmail.h"
-#include "sysexits.h"
 #include "shell.h"
 
-#define VERSION "Procmail v1.30 1991-03-01 written by Stephen R.van den Berg\n"
-#define VERSIONOPT	"-v"			/* option to display version */
+#define VERSION "procmail v2.02 1991/06/12 written by Stephen R.van den Berg\n\
+\t\t\t\tberg@messua.informatik.rwth-aachen.de\n\
+\t\t\t\tberg@physik.tu-muenchen.de\n"
 
-char buf[BFSIZ],buf2[BFSIZ],maildir[]="MAILDIR",defaultf[]="DEFAULT",
- logfile[]="LOGFILE",lockfile[]="LOCKFILE",grep[]="GREP",host[]="HOST",
- locksleep[]="LOCKSLEEP",orgmail[]="ORGMAIL",eumask[]="UMASK",
- shellmetas[]="SHELLMETAS",shellflags[]="SHELLFLAGS",shell[]="SHELL",
- sendmail[]="SENDMAIL",lockext[]="LOCKEXT",locktimeout[]="LOCKTIMEOUT",
- devnull[]="/dev/null",newline[]="\n",binsh[]="/bin/sh",home[]="HOME",
- tmp[]="/tmp",user[]="USER",nomemretry[]="NOMEMRETRY",*rcfile=PROCMAILRC,
- **gargv,*globlock,*loclock,*tolock;
-int retval=EX_CANTCREAT,flaggerd=1,verrgrandchild,sh,pwait,secur,lcking,
- nextexit,locknext;
-pid_t mother;
-FILE*rc;
+char*buf,*buf2,*globlock,*loclock,*tolock,*lastfolder;
+const char grep[]="GREP",shellflags[]="SHELLFLAGS",shell[]="SHELL",
+ shellmetas[]="SHELLMETAS",lockext[]="LOCKEXT",newline[]="\n",binsh[]=BinSh,
+ unexpeof[]="Unexpected EOL\n",*const*gargv,*sgetcp,*rcfile=PROCMAILRC,
+ dirsep[]=DIRSEP,msgprefix[]="MSGPREFIX",devnull[]=DevNull,
+ executing[]="Executing",oquote[]=" \"",cquote[]="\"\n",
+ whilstwfor[]=" whilst waiting for ";
+static const char linebufs[]="LINEBUF",tokey[]=TOkey,eumask[]="UMASK",
+ tosubstitute[]=TOsubstitute,lockfile[]="LOCKFILE",defaultf[]="DEFAULT",
+ maildir[]="MAILDIR",couldnread[]="Couldn't read",logfile[]="LOGFILE",
+ orgmail[]="ORGMAIL",user[]="USER",tmp[]=Tmp,home[]="HOME",sfolder[]=FOLDER,
+ sendmail[]="SENDMAIL",host[]="HOST";
+struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
+ {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
+ {"NORESRETRY",DEFnoresretry}};
+long lastdump;
+int retval=EX_CANTCREAT,sh,pwait,lcking,locknext,verbose,linebuf=DEFlinebuf,
+ rc= -1;
+volatile int flaggerd=2,nextexit;
+pid_t thepid;
 
-main(argc,argv)char*argv[];{static char flags[10];int i;
- char*themail,*thebody,*chp,*startchar,*chp2;long tobesent,filled,rcoffset;
- if((chp=argv[1])&&!strcmp(chp,VERSIONOPT)){
-   log(VERSION);return EX_OK;}
- mother=getpid();setbuf(stdin,(void*)0);umask(077);
- sprintf(buf,"%u",i=getuid());setpwent();
+main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];int i;
+ char*themail,*thebody,*chp,*startchar,*chp2;long tobesent,filled;
+ if((chp=(char*)argv[argc=1])&&*chp=='-'&&*++chp&&!chp[1])
+   switch(*chp){		     /* these options are mutually exclusive */
+      case VERSIONOPT:log(VERSION);return EX_OK;
+      case DEBUGOPT:verbose=1;
+      default:*environ=0;
+      case PRESERVOPT:argc++;}
+ else
+   *environ=0;					     /* drop the environment */
+ gargv=argv+argc;umask(077);thepid=getpid();fclose(stdout);fclose(stderr);
+ rclose(STDOUT);rclose(STDERR);		    /* don't trust the stdio library */
+ if(0>opena(devnull)||0>opena(console))
+   return EX_OSFILE;
+ setbuf(stdin,(char*)0);buf=malloc(linebuf);buf2=malloc(linebuf);chdir(tmp);
+ ultostr(0,(unsigned long)(i=getuid()),buf);
+ setpwent();
  {struct passwd*pass;
  if(pass=getpwuid(i)){			/* find user defaults in /etc/passwd */
    setdef(home,pass->pw_dir);chdir(pass->pw_dir);
    setdef(user,pass->pw_name?pass->pw_name:buf);setdef(shell,pass->pw_shell);}
  else{			 /* user could not be found, set reasonable defaults */
-   setdef(home,tmp);chdir(tmp);setdef(user,buf);setdef(shell,binsh);}}
+   setdef(home,tmp);setdef(user,buf);setdef(shell,binsh);}}
  endpwent();setdef(shellmetas,DEFshellmetas);setdef(shellflags,DEFshellflags);
  setdef(maildir,DEFmaildir);setdef(defaultf,DEFdefault);
  setdef(orgmail,DEForgmail);setdef(grep,DEFgrep);setdef(sendmail,DEFsendmail);
- setdef(lockext,DEFlockext);setdef(locksleep,DEFlocksleeps);
- setdef(locktimeout,DEFlocktimeout);setdef(nomemretry,DEFnomemretry);
- chdir(getenv(maildir));fdreopena(devnull,STDERR);fdreopena(devnull,STDOUT);
- gargv=argv+1;nextrcfile();
- thebody=themail=malloc(argc=1);filled=rcoffset=0;
+ setdef(lockext,DEFlockext);setdef(msgprefix,DEFmsgprefix);
+ chdir(getenv(maildir));nextrcfile();thebody=themail=malloc(1);filled=0;
+ signal(SIGTERM,sterminate);signal(SIGINT,sterminate);
+ signal(SIGHUP,sterminate);signal(SIGQUIT,flagger);
 changedmail:
  themail=readdyn(themail,&filled);			 /* read in the mail */
 onlyhead:
  startchar=filled+(thebody=themail);
  while(thebody<startchar&&*thebody++=='\n');	     /* skip leading garbage */
- thebody=findel(thebody,startchar);	 /* find the end of the header	     */
- chp=thebody;
- do{					 /* search for bogus headers	     */
-   if(startchar-chp<8)			 /* we're looking for:		     */
-      break;				 /* "\n\nFrom +[^\t\n ]+ +[^\n\t]"   */
-   if(0>=sscanf(chp,"From%1[ ]",buf))	 /* thats the regular expression     */
-      continue;				 /* that defines the start of a mail */
-   chp2=chp;chp+=5;			 /* message.			     */
-#define SKIPWHILE(x)	while(x){ if(++chp>=startchar) break;}
-   SKIPWHILE(*chp==' ')
-   SKIPWHILE((i=*chp)&&i!=' '&&i!='\t'&&i!='\n')
-   SKIPWHILE(*chp==' ')
-   if((i=*chp)&&i!='\n'&&i!='\t'){	   /* insert '>' before bogus header */
-      i=startchar[-1];tmemmove(chp2+1,chp2,(startchar-chp2)-1);
-      *chp2='>';themail=realloc(chp2=themail,++filled);
+ while(thebody<startchar&&startchar>(thebody=findnl(thebody,startchar)))
+   switch(*thebody++){
+      case '\n':goto eofheader;		   /* empty line marks end of header */
+      case '\t':case ' ':thebody[-2]=' ';}  /* concatenate continuated lines */
+eofheader:
+ if((chp=thebody)<startchar){
+   goto firstel;				 /* search for bogus headers */
+   do{
+      if(*chp++!='\n'||chp==startchar)		/* is the line really empty? */
+	 continue;
+firstel:
+      *startchar='\0';		   /* put a terminator at the end for sscanf */
+      if(0>=sscanf(chp,FromSCAN,buf)){
+	 chp--;continue;}		  /* no match, back up, and on we go */
+      tmemmove(chp+1,chp,startchar++-chp);*chp='>';	/* insert '>' before */
+      themail=realloc(chp2=themail,++filled+1);		     /* bogus header */
 #define ADJUST(x)	((x)=themail+((x)-chp2))
-      ADJUST(thebody);ADJUST(startchar);ADJUST(chp);*startchar++=i;}}
- while(startchar>(chp=findel(chp,startchar)));
- waitflagger();		 /* if we're a child, wait for the parental guidance */
-changerc:
- rc=fopen(strcat(cat(getenv(home),"/"),rcfile),"r");
- fseek(rc,rcoffset,SEEK_SET);signal(SIGINT,sterminate);
- signal(SIGQUIT,sterminate);signal(SIGTERM,sterminate);signal(SIGHUP,SIG_IGN);
-goon:
- while(unlock(&loclock),!feof(rc)||argv[argc]){
-   while(chp=argv[argc]){	       /* interpret command line specs first */
-      argc++;strcpy(buf2,chp);
-      if(chp=strchr(buf2,'=')){
-	 chp++;goto argenv;}}
-   if(tscrc(" %1[:]",flags)){			       /* check for a recipe */
-      skipblanks();i=sh=1;
-      if(tscrc("%[0-9]",buf2)){
-	 sscanf(buf2,"%d",&sh);skipblanks();}
-      *flags='\0';scrc("%9[HBIhbfcws]",flags);skipblanks();
+      ADJUST(thebody);ADJUST(startchar);ADJUST(chp);}/* find next empty line */
+ while(startchar>(chp=findnl(chp,startchar)));}
+do{					     /* main rcfile interpreter loop */
+   while(chp=(char*)argv[argc]){       /* interpret command line specs first */
+      argc++;strcpy(buf,chp);
+      if(chp=strchr(buf,'=')){
+	 strcpy(sgetcp=buf2,++chp);readparse(chp,sgetc,0);goto argenv;}}
+   if(rc<0)						 /* open new rc file */
+      while(*buf='\0',0>bopen(strcat(
+	 strchr(dirsep,*rcfile)?buf:cat(tgetenv(home),MCDIRSEP),rcfile))){
+	 log(couldnread);logqnl(buf);
+	 if(!nextrcfile())		      /* not available? try the next */
+	    goto nomore_rc;}
+   unlock(&loclock);	/* unlock any local lockfile after every parsed line */
+   do skipspace();					  /* skip whitespace */
+   while(testb('\n'));
+   if(testb(':')){				       /* check for a recipe */
+      readparse(buf,getb,2);i=sh=1;*buf2='\0';
+      if(0>=sscanf(buf,"%d%[^\n]",&sh,buf2))		 /* nr of conditions */
+	 strcpy(buf2,buf);
+      *buf= *flags='\0';
+      if(0>=sscanf(buf2,RECFLAGS,flags,buf))		   /* read the flags */
+	 strcpy(buf,buf2);
       if(tolock)		 /* clear temporary buffer for lockfile name */
 	 free(tolock);
-      tolock=0;
-      if((locknext=(tscrc("%1[:]",buf)))&&
-	 (skipblanks(),tscrc("%[^ \t\n#]",buf2))){
-	 parse();tolock=tstrdup(buf);}
+      tolock=0;*buf2='\0';
+      if((locknext=':'==*buf)&&0<sscanf(buf,": %[^ \t\n] %[^\n]",buf,buf2))
+	 tolock=tstrdup(buf);		    /* yep, local lockfile specified */
+      if(*buf2)
+	 skipped(buf2);				    /* display any leftovers */
       startchar=themail;tobesent=thebody-themail;
       if(strchr(flags,'B'))		/* what needs to be piped into grep? */
 	 if(strchr(flags,'H'))
@@ -121,107 +132,161 @@ goon:
 	 else{
 	    startchar=thebody;tobesent=filled-tobesent;}
       while(sh--){				    /* any conditions (left) */
-	 skiptoeol();scrc("%[^\n]",buf2);
-	 if(!strncmp(buf2,TOkey,TOkeylen))
-	    cat(TOsubstitute,buf2+TOkeylen);
+	 getbl(buf2);
+	 if(!strncmp(buf2,tokey,STRLEN(tokey)))		     /* magic TOkey? */
+	    cat(tosubstitute,buf2+STRLEN(tokey));
+	 else if(*buf=='!'&&!strncmp(buf2+1,tokey,STRLEN(tokey))) /* !TOkey? */
+	    strcat(cat("!",tosubstitute),buf2+1+STRLEN(tokey));
 	 else
 	    strcpy(buf,buf2);
-	 if(i)					 /* check out all conditions */
-	    i=!grepin(buf,startchar,tobesent,!strchr(flags,'I'));}
+	 if(i){					 /* check out all conditions */
+	    i=!grepin((*buf=='!'||*buf=='\\')+buf,startchar,tobesent,
+	       !!strchr(flags,'D'))^*buf=='!';
+	    if(verbose){
+	       log(i?"M":"No m");log("atch on");logqnl(buf);}}}
       startchar=themail;tobesent=filled;	    /* body, header or both? */
       if(strchr(flags,'h')){
 	 if(!strchr(flags,'b'))
 	    tobesent=thebody-themail;}
       else if(strchr(flags,'b'))
 	 tobesent-=(startchar=thebody)-themail;
-      chp=buf+strlen(cat(getenv(sendmail)," "));sh=0;
-      pwait=!!strchr(flags,'w');secur=!!strchr(flags,'s');
-      if(tscrc(" ! %[^\n]",chp)){			 /* forward the mail */
+      chp=strchr(strcpy(buf,tgetenv(sendmail)),'\0');sh=0;
+      pwait=!!strchr(flags,'w');
+      if(testb('!')){					 /* forward the mail */
+	 readparse(chp+1,getb,0);
 	 if(i)
 	    goto forward;}
-      else if(tscrc("| %[^\n]",buf2)){			    /* pipe the mail */
+      else if(testb('|')){				    /* pipe the mail */
+	 getbl(buf2);
+	 for(chp=buf2;*(chp=strchr(chp,'\0')-1)=='\\'&&getbl(chp););
 	 if(i){
-	    if(sh=!!strpbrk(buf2,getenv(shellmetas)))
-	       strcpy(buf,buf2);
-	    else
-	       parse();
+	    if(sh=!!strpbrk(buf2,tgetenv(shellmetas)))
+	       strcpy(buf,buf2);	 /* copy literally, shell will parse */
+	    else{
+	       sgetcp=buf2;readparse(buf,sgetc,0);}	/* parse it yourself */
 	    chp=buf;*buf2='\0';
-	    while(i=*chp)      /* find the implicit lockfile name ('>>name') */
+	    while(i= *chp)     /* find the implicit lockfile name ('>>name') */
 	      if(chp++,i=='>'&&*chp=='>'){
-		 while((i=*++chp)==' '||i=='\t');
-		 sscanf(chp,"%[^ \t\n#'\");|<>]",buf2);break;}
+		 while((i= *++chp)==' '||i=='\t');
+		 sscanf(chp,EOFName,buf2);break;}
 	    lcllock();
 	    if(strchr(flags,'f')){
 	       if(startchar==themail&&tobesent!=filled){      /* if only 'h' */
-		  char*dest;long dfilled=0;
+		  long dfilled=0;
 		  if(pipthrough(buf,startchar,tobesent))
-		     goto goon;
-		  dest=readdyn(malloc(1),&dfilled);filled-=tobesent;
-		  if(tobesent<dfilled)	 /* adjust buffer size (only bigger) */
+		     continue;
+		  chp=readdyn(malloc(1),&dfilled);filled-=tobesent;
+		  if(tobesent<dfilled)	   /* adjust buffer size (grow only) */
 		     themail=realloc(themail,dfilled+filled);
-		  tmemmove(themail+dfilled,themail+tobesent,filled);
-		  tmemmove(themail,dest,dfilled);free(dest);
-		  themail=realloc(themail,filled+=dfilled);
-		  goto onlyhead;}	   /* and determine the header again */
-	       rcoffset=ftell(rc);    /* needed because we have to fclose it */
+		  tmemmove(themail+dfilled,thebody,filled);
+		  tmemmove(themail,chp,dfilled);free(chp);
+		  themail=realloc(themail,1+(filled+=dfilled));goto onlyhead;}
 	       if(pipthrough(buf,startchar,tobesent))
-		  goto goon;
+		  continue;
 	       filled=startchar-themail;goto changedmail;}
 forward:    if(!pipin(buf,startchar,tobesent)&&!strchr(flags,'c'))
 	       goto mailed;}}
-      else{					/* append the mail to a file */
-	 scrc("%s",buf2);skipcomment();
+      else{		   /* dump the mail into a mailbox file or directory */
+	 readparse(buf,getb,0);chp2=chp=strchr(buf,'\0')+1;
+	 while(*chp!=TMNATE){		  /* concatenate all other arguments */
+	    while(*chp++);
+	    chp[-1]=' ';}
+	 *chp=chp[-1]='\0';
+	 if(*chp2)
+	    skipped(chp2);			     /* report any leftovers */
 	 if(i){
-	    parse();strcpy(buf2,buf);lcllock();
-	    if(!dump(opena(buf),startchar,tobesent)&&!strchr(flags,'c'))
-	       goto mailed;}}}
-   else if(tscrc("%[A-Z_a-z0-9] = ",buf)){  /* then it must be an assignment */
-      *(chp=buf+strlen(buf))='=';*++chp='\0';scrc("%[^\t\n#]",chp);
-      for(chp2=chp+strlen(chp);*--chp2==' ';);	     /* skip trailing blanks */
-      chp2[1]='\0';skipcomment();strcpy(buf2,buf);
+	    strcpy(buf2,buf);lcllock();strcpy(buf2,buf);
+	    if(!dump(deliver(buf2),startchar,tobesent)&&!strchr(flags,'c'))
+	       goto mailed;
+	    writeerr(buf);}}}
+   else if(testb('#'))					   /* no comment :-) */
+      getbl(buf);
+   else{				    /* then it must be an assignment */
+      for(*(chp=buf)='\0';;){			    /* get the variable name */
+	 switch(i=getb()){
+	    case ' ':case '\t':skipspace();i=testb('=')?'=':0;
+	    case '\n':case '=':case EOF:
+	       *chp='\0';goto eofvarname;}
+	 if(!alphanum(*chp++=i))
+	    for(;;*chp++=i)			 /* it was garbage after all */
+	       switch(i=getb()){
+		  case ' ':case '\t':case '\n':case EOF:*chp='\0';
+		     skipped(buf);goto mainloop;}}
+eofvarname:
+      if(i!='='){				   /* removal or assignment? */
+	 sputenv(buf);continue;}
+      *chp='=';readparse(++chp,getb,1);
 argenv:
-      parse();sputenv(buf);chp[-1]='\0';
-      if(!strcmp(buf,maildir))
-	 chdir(chp);
-      else if(!strcmp(buf,logfile))
-	 fdreopena(chp,STDERR);
+      sputenv(buf);chp[-1]='\0';
+      if(!strcmp(buf,linebufs)){
+	 if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
+	    linebuf=MINlinebuf+XTRAlinebuf;	       /* check minimum size */
+	 free(buf);free(buf2);buf=malloc(linebuf);buf2=malloc(linebuf);}
+      else if(!strcmp(buf,maildir)){
+	 if(chdir(chp)){
+	    log("Couldn't chdir to");logqnl(chp);}}
+      else if(!strcmp(buf,logfile)){
+	 close(STDERR);
+	 if(0>opena(chp))
+	    if(0>opena(console))
+	       retval=EX_OSFILE;	  /* bad news, but can't tell anyone */
+	    else
+	       writeerr(chp);}
       else if(!strcmp(buf,lockfile))
 	 lockit(chp,&globlock);
       else if(!strcmp(buf,eumask)){
 	 sscanf(chp,"%o",&i);umask(i);}
       else if(!strcmp(buf,host)){
-#ifndef NOuname
-	 struct utsname name;
-	 uname(&name);
-	 if(strcmp(chp,name.nodename)){
-#else
-	 *buf2='\0';gethostname(buf2,BFSIZ);
-	 if(strcmp(chp,buf2)){
-#endif
-	    if(nextrcfile()){
-	       fclose(rc);rcoffset=0;goto changerc;}
-	    retval=EX_OK;terminate();}}}
-   else if(!skipcomment()){			/* either comment or garbage */
-      scrc("%[^\n] ",buf);log("Skipped:");logqnl(buf);}}
- if(dump(opena(chp=getenv(defaultf)),themail,filled)){	 /* default maildest */
-   writeerr(chp);	    /* if it fails, don't panic, try the last resort */
-   if(dump(opena(chp=getenv(orgmail)),themail,filled))
-      writeerr(chp);goto mailerr;}			/* now you can panic */
+	 if(strcmp(chp,chp2=(char*)hostname())){
+	    yell("HOST mismatched",chp2);
+	    if(rc<0||!nextrcfile()){		  /* if no rcfile opened yet */
+	       retval=EX_OK;terminate();}	  /* exit gracefully as well */
+	    rclose(rc);rc= -1;}}
+      else{
+	 i=MAXvarvals;
+	 do				      /* several numeric assignments */
+	    if(!strcmp(buf,strenvvar[i].name)){
+	       strenvvar[i].val=renvint(strenvvar[i].val,chp);break;}
+	 while(i--);}}
+mainloop:
+    ;}
+ while(rc<0||!testb(EOF));			    /* main interpreter loop */
+nomore_rc:
+ if(dump(deliver(tgetenv(defaultf)),themail,filled)){		  /* default */
+   writeerr(buf);	    /* if it fails, don't panic, try the last resort */
+   if(dump(deliver(tgetenv(orgmail)),themail,filled))
+      writeerr(buf);goto mailerr;}			/* now you can panic */
 mailed:
  retval=EX_OK;				  /* we're home free, mail delivered */
 mailerr:
  unlock(&loclock);			/* any local lock file still around? */
- do{
+ for(;themail<thebody;){
    chp=buf-1;
-   while(themail<thebody&&chp<buf+BFSIZ-1&&(*++chp=*themail++)!='\n');
+   while(themail<thebody&&chp<buf+linebuf-1&&(*++chp= *themail++)!='\n');
    if(chp<buf)
       chp++;
    *chp='\0';
-   if(0<sscanf(buf,"From%*1[^:]%[^\n]",buf2)){
-      log("From ");goto foundsorf;}
-   else if(0<sscanf(buf,"Subject:%[^\n]",buf2)){
-      log(" Subject:");
+   if(0<sscanf(buf,SFROM_S,buf2)){	      /* find case sensitive "From " */
+      log(SFROM);goto foundsorf;}
+   else if(0<sscanf(buf,SSUBJECT_S,buf2)){  /* case insensitive "Subject:" ? */
+      log(SSUBJECT);
 foundsorf:
-      log(buf2);log(newline);}}				 /* log it's arrival */
- while(themail<thebody);
- terminate();}
+      log(buf2);log(newline);}}				  /* log its arrival */
+ log(sfolder);i=strlen(strncpy(buf,lastfolder,MAXfoldlen))+STRLEN(sfolder);
+ buf[MAXfoldlen]='\0';
+ while(chp=strchr(buf,'\t'))
+   *chp=' ';						/* take out all tabs */
+ log(buf);i-=i%TABWIDTH;		     /* tell where we last dumped it */
+ do log(TABCHAR);
+ while((i+=TABWIDTH)<LENoffset);
+ ultostr(7,lastdump,buf);log(buf);log(newline);terminate();}
+
+dirmail(){struct stat stbuf;		/* directory name is expected in buf */
+ strcpy(buf2,strcat(buf,MCDIRSEP));
+ if(unique(buf2,strchr(buf2,'\0'),0666)){
+   stat(buf2,&stbuf);
+   ultoan((unsigned long)stbuf.st_ino,	      /* filename with i-node number */
+      strchr(strcat(buf,tgetenv(msgprefix)),'\0'));
+   if(!myrename(buf2,buf))	       /* rename it, we need the same i-node */
+       return opena(buf);}
+ return -1;}

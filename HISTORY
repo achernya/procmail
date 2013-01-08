@@ -1,26 +1,26 @@
-1990-12-07: v1.00
+1990/12/07: v1.00
 	    First release (after 2 weeks of coding and testing)
-1990-12-12: v1.01
+1990/12/12: v1.01
 	    Added fsync to procmail.c
 	    Removed longjmp in lockfile.c out of the signal handler
 		(not portable, so I'm told)
-1991-02-04: v1.02
+1991/02/04: v1.02
 	    Changes to procmail.c:
 	       Added physical-write-error check
 	       Altered egrep invocation (left out the -s flag, not supported
 		  on all machines; this didn't change functionality though)
 	       Avoided the 'dirty' allocation of one more byte than needed by
 		  rewriting the bogus_header_replace routine
-	       Made the finding bogus headers more robust
+	       Made the search for bogus headers more robust
 	    Added sysV lines in Makefile
-1991-02-13: v1.10
+1991/02/13: v1.10
 	    Changes to procmail.c:
 	       Fixed slight error in parsing the recipe when 'h' and 'b' where
 		  specified
 	       Started using the official exit codes
 	       Made sure that the procmail is not influenced by falsely
 		  set environment variables like LOCKSLEEP
-1991-02-21: v1.20
+1991/02/21: v1.20
 	    Changes to procmail.c:
 	       Removed library conflict on some machines for 'locking'
 	       Added uname call as alternative for gethostname
@@ -34,7 +34,7 @@
 		  how brain damaged this library function is :-)
 	       Changed environment variable assignment to skip trailing blanks
 		  only, and allow intermediate blanks (parsing like make)
-1991-02-22: v1.21
+1991/02/22: v1.21
 	    Split up procmail.c in procmail.c, nonint.c, retint.c, procmail.h,
 	       config.h, sysexits.h, shell.h
 	    Changes to lockfile.c:
@@ -42,7 +42,7 @@
 	    Moved virtually all configuration stuff from Makefile into
 	       config.h
 	    Added -v option to procmail
-1991-03-01: v1.30
+1991/03/01: v1.30
 	    Added out of memory/swap space immunity  (NOMEMRETRY)
 	    Made forced terminations of procmail more reliable and verbose
 	       (previously, procmail would display erroneous error messages
@@ -52,3 +52,66 @@
 	    Included more example files
 	    Made sure that variable substitution works in locallockfile-
 	       specifications too
+1991/03/15: v1.35
+	    Fixed the problem when no rcfile was found (rc!=NULL)
+	    Made my memmove replacement ANSI compatible
+	    Fixed up the Makefile (include file dependencies were incorrect)
+	    Started using RCS to manage the source
+1991/06/04: v1.99
+	    Changed NOMEMRETRY into NORESRETRY, now all machine limitations
+	       are caught
+	    Beefed up the parsing routine, now supports virtually complete
+	       /bin/sh syntax (*all* quotes and escapes are understood)
+	    Cleaned up the code, arranged for all remotely configuration-
+	       dependent looking values to be in config.h
+	    Created an include directory to catch missing include files
+	    Created an autoconf script that determines all installation
+	       specifics (all the user has to do now is make)
+	    Threw out (the last?) BSD specific library routines
+	    ANSI'fied the code, it's now as close as you can get to 'native'
+	       ANSI while maintaining compatibility with K&R
+	    Stopped using the %i identifier from sscanf
+	    Improved the diagnostic messages when procmail is killed (tells
+	       you what it was waiting for)
+	    Made the file locking mechanism RELIABLE over NFS
+	    Procmail now is able to deliver to directories too (AMS --
+	       Andrew Mail System), it creates a uniquely named new file for
+	       every new mail
+	    Threw out the 's' and 'I' options in rcfiles, introduced 'D'
+	    Completely rewrote the filter code, made sure that the pid number
+	       off procmail does not change anymore while filtering
+	    Threw out the stdio library (out of procmail) to avoid the hidden
+	       malloc on fopen (I want to catch all mallocs), reliability
+	       was improved, binary size did not shrink because the getpwent
+	       library links in the stdio library (aargh!)
+	    Procmail ditches the environment completely now upon startup
+	    Provided a -p flag to preserve the environment
+	    Provided a -d flag for debugging purposes (debugging rc scripts)
+	    Improved logfile format, now logs a third entry on mail arrival:
+	       which folder the mail finally went to and how long it was
+	    Made logfile output line buffered to get a cleaner logfile if
+	       several programs write it concurrently
+	    Changes to lockfile.c:
+	       Added -s flag to maintain step with procmail
+	    Created formail.c:
+	       A new (the third) program
+	    Rearranged the routines a bit, so that two object files could be
+	       shared between the three programs
+1991/06/10: v2.00
+	    Changed all "ambiguous assignments" to have a space inserted
+	       (preserves compatibility with older compilers)
+	    Made some more entries in the config.h file
+	    Changes to formail.c:
+	       Added strstr library replacement
+	       Added the option to split digests
+	    Updated the manual files (I hate doing this)
+	    Updated the example files
+1991/06/11: v2.01
+	    Fixed up includes.h and autoconf to be more POSIX compliant
+	    Fixed up small bug in readparse() (goodies.c) that caused trouble
+	       with recursively nested backquotes (nobody will probably ever
+	       use this, but I was testing worst case behaviour)
+	    Documented the $$ environment variable in procmail.1
+1991/06/12: v2.02
+	    Fixed typo in strstr replacement
+	    Fixed runaway line while logging long folder names

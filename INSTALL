@@ -1,0 +1,60 @@
+To install procmail, lockfile and formail: edit Makefile accordingly (if need
+be, config.h as well) and type 'make install'.
+
+'make install' will:
+      - execute autoconf (a shell script that repeatedly calls the C compiler
+	to determine if certain features/symbols are supported), which will
+	create a file named autoconf.h
+      - compile the *.c files, create the three binaries: procmail, lockfile,
+	formail
+      - copy these binaries to $(BINDIR)
+      - copy the man pages to $(MANDIR)
+
+
+Minimal requirements:
+
+procmail must be installed.
+lockfile needs only to be installed if you plan to read several mailboxes
+	with one of the standard mailers.
+formail needs only to be installed if mail sometimes arrives in nonstandard
+	mailbox format (or if you want to generate auto replies, split up
+	mailboxes/digests etc., see the man page of formail for more info).
+
+
+If things don't compile automagically, I suggest you take a look at:
+autoconf, autoconf.h, config.h, includes.h
+
+The program is supposed to be fully ANSI and K&R compliant.
+
+If you run procmail by hand and pipe in some sample mail, then make
+sure that if you kill procmail, you use "kill pid" and NOT "kill -9 pid".
+Should procmail seem to hang, check if the $LOCKFILE is still present.
+If you kill procmail with "kill pid" it will clean up the $LOCKFILE
+itself.
+
+Suggested command line for a test run: "procmail -d LOGFILE=/dev/tty"
+(now type in a mail message).
+
+Every user that wants to use procmail should have a .forward and a
+.procmailrc file in his HOME directory.	 For starters, you can look
+at the supplied example files in "examples".
+(BTW, be sure to make .forward *world* readable).
+
+For more info about the program, see the man page.
+
+------------------------------------------------------------------------------
+-----------------------Frequently Asked Questions-----------------------------
+------------------------------------------------------------------------------
+
+1. Why does the logfile have lines containing "file -i not found"?
+
+	Your egrep doesn't understand the -i option (ignore case).  Either
+	use a different grep (e.g. set GREP to /bin/grep), or be sure
+	to specify the 'D' option on every recipe.
+
+2. I installed procmail (i.e. typed 'make install'), but how am I supposed to
+   use it?  When I type procmail on the command line it simply does nothing.
+
+	You're not supposed to start procmail from the command line.
+	Be sure to have a .forward and a .procmailrc file in your home
+	directory (see the examples subdirectory or the man page).

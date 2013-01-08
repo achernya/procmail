@@ -1,27 +1,43 @@
+/*$Id: procmail.h,v 2.0 1991/06/10 14:35:35 berg Rel $*/
+
 #include "includes.h"
 
-#ifdef	NOsync			/* If you don't want syncs at all define */
-# define fsync(fd) 0		/* NOsync.  Only recommended if procmail */
-# define sync() 0		/* isn't used in a networked environment */
-#else
-# ifdef NOfsync			/* If you don't have fsync, define NOfsync */
-#  define fsync(fd) 0		/* sync will be used instead.  Is a bit	   */
-# endif				/* slower, but works nevertheless	   */
+typedef unsigned char uchar;
+
+#ifndef console
+#define console devnull
 #endif
 
-#define PREAD	(poutfd[0])
-#define PWRITE	(poutfd[1])
-#define tscrc(a,b)	(0<fscanf(rc,a,b))
-#define scrc(a,b)	fscanf(rc,a,b)
+#define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
+#define TMNATE		'\377'		     /* terminator (see readoarse()) */
+
+#define PRDO	poutfd[0]
+#define PWRO	poutfd[1]
+#define PRDI	pinfd[0]
+#define PWRI	pinfd[1]
+#define PRDB	pbackfd[0]
+#define PWRB	pbackfd[1]
+#define LENoffset	(TABWIDTH*LENtSTOP)
+#define MAXfoldlen	(LENoffset-STRLEN(sfolder)-1)
+#define MCDIRSEP	(dirsep+STRLEN(dirsep)-1)      /* most common DIRSEP */
+
+struct varval{const char*const name;long val;};
+#define locksleep	(strenvvar[0].val)
+#define locktimeout	(strenvvar[1].val)
+#define suspendv	(strenvvar[2].val)
+#define noresretry	(strenvvar[3].val)
+#define MAXvarvals	maxindex(strenvvar)
 
 #ifndef MAIN
-extern char buf[],buf2[],maildir[],defaultf[],logfile[],lockfile[],grep[],
- host[],locksleep[],orgmail[],eumask[],shellmetas[],shellflags[],shell[],
- sendmail[],lockext[],locktimeout[],devnull[],newline[],binsh[],home[],
- tmp[],user[],nomemretry[],*rcfile,**gargv,*globlock,*loclock,*tolock;
-extern retval,flaggerd,verrgrandchild,sh,pwait,secur,lcking,nextexit,locknext;
-extern pid_t mother;
-extern FILE*rc;
+extern char*buf,*buf2,*globlock,*loclock,*tolock,*lastfolder;
+extern const char grep[],shellflags[],shell[],lockext[],newline[],binsh[],
+ unexpeof[],shellmetas[],*const*gargv,*sgetcp,*rcfile,dirsep[],msgprefix[],
+ devnull[],executing[],oquote[],cquote[],whilstwfor[];
+extern struct varval strenvvar[];
+extern long lastdump;
+extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc;
+extern volatile flaggerd,nextexit;
+extern pid_t thepid;
 #endif
 
 #ifdef NOmemmove
@@ -30,6 +46,8 @@ void*memmove();
 
 void*tmalloc(),*trealloc();
 pid_t sfork();
-void sterminate(),flagger(),errgrandchild();
-long dump(),pipin();
-char*readdyn(),*cat(),*findel(),*tstrdup();
+void sterminate(),stermchild(),flagger(),errgrandchild();
+long dump(),pipin(),renvint();
+char*readdyn(),*fromprog(),*cat(),*findnl(),*tstrdup(),*cstr();
+const char*tgetenv(),*hostname();
+int sgetc(),getb();

@@ -1,50 +1,63 @@
-/*#define SYSV		/* you guessed it, uncomment if sysV machine	*/
+/*$Id: config.h,v 2.0 1991/06/10 14:35:35 berg Rel $*/
 
-#define NOmemmove	/* if your library has it, comment this line	*/
+/*#define console	"/dev/console"	/* uncomment if you want procmail to
+					   use the console (or any other
+	terminal) to print any error messages that could not be dumped in the
+	"logfile".  (Only recommended for debugging purposes, if you have
+	trouble creating a "logfile") */
 
-/*#define NO_ANSI_PROT	/* uncomment if you don't have ANSI headers	*/
+/************************************************************************
+ * Only edit below this line if you *think* you know what you are doing *
+ ************************************************************************/
 
-/*#define void char	/* uncomment if your compiler is brain damaged	*/
- 
-#ifdef SYSV
-# define NOfsync	/* in my experience no sysV machine has it	*/
-#else
-# define NOuname	/* some BSD machines seem to have it anyway	*/
-#endif
-
-/*#define NOfsync	/* if you don't want to use it or don't have it */
-
-#ifndef t_buf		/* should not be a macro anyway			*/
-typedef unsigned t_buf; /* comment out if already defined		*/
-			/* when in doubt, please check if this is the	*/
-			/* correct type for your library as the size	*/
-			/* argument to malloc, realloc and memmove	*/
-			/* this is important, since it determines the	*/
-			/* maximum message length that can be processed */
-			/* by procmail					*/
-#endif
-
-/* If need be, you can change some of the defines below, for most
-   people these defaults should do however				*/
-
-#define BFSIZ		2048			 /* max expanded line length */
-#define BLKSIZ		(1<<14)		  /* blocksize while reading/writing */
+#define DEFlinebuf	2048		 /* default max expanded line length */
+#define BLKSIZ		16384		  /* blocksize while reading/writing */
+#define STDBUF		1024		     /* blocksize for emulated stdio */
+#define HOSTNAMElen	8	  /* nr of significant chararacters for HOST */
 #define PROCMAILRC	".procmailrc"
-#define SUSPENSION	16		 /* multi-purpose 'idle loop' period */
+#define DEFsuspend	16		 /* multi-purpose 'idle loop' period */
 #define DEFlocksleep	8
-#define DEFlocksleeps	"8"
 #define TOkey		"^TO"
-#define TOkeylen	3			/* should be length of TOkey */
 #define TOsubstitute	"^(To|Cc|Apparently-To):.*"
-#define DEFshellmetas	"\"'`&#{}()[]*?|<>~;!\\"    /* never put '$' in here */
+#define DEFshellmetas	"&()[]*?|<>~;:"		    /* never put '$' in here */
 #define DEFmaildir	"$HOME"
 #define DEFdefault	"$MAILDIR/.mailbox"
-#define DEForgmail	"/var/spool/mail/$USER"
+#define DEFmsgprefix	"msg."
+#define DEForgmail	"/usr/spool/mail/$USER"
 #define DEFgrep		"/usr/bin/egrep"
 #define DEFsendmail	"/usr/lib/sendmail"
 #define DEFlockext	".lock"
 #define DEFshellflags	"-c"
-#define DEFlocktimeout	"3600"			     /* defaults to one hour */
-#define iDEFnomemretry	2	    /* standard nr of retries if no mem left */
-				    /* valid as soon as procmail runs */
-#define DEFnomemretry	"2"
+#define DEFlocktimeout	3600			     /* defaults to one hour */
+#define DEFnoresretry	2      /* default nr of retries if no resources left */
+
+#define NRRECFLAGS	(9+1)
+#define RECFLAGS	" %9[HBDIhbfcws] %[^\n]" /* 'I' and 's' are obsolete */
+#define BinSh		"/bin/sh"
+#define Tmp		"/tmp"
+#define DevNull		"/dev/null"
+#define DIRSEP		"/"		 /* directory separator symbols, the */
+				   /* last one should be the most common one */
+
+/* the regular expression we use to look for bogus headers
+	(which I took from /usr/ucb/mail) is:
+					      "\n\nFrom +[^\t\n ]+ +[^\n\t]" */
+
+#define FromSCAN	"From%*[ ]%*[^\t\n ]%*[ ]%1[^\n\t]"
+#define EOFName		"%[^ \t\n#'\")};]"
+
+#define VERSIONOPT	'v'			/* option to display version */
+#define PRESERVOPT	'p'
+#define DEBUGOPT	'd'
+
+#define MINlinebuf	128    /* minimal LINEBUF length (don't change this) */
+#define SFROM		"From "
+#define SFROM_S		"From%*[ ]%74[^\n]"
+#define SSUBJECT	" Subject:"
+#define SSUBJECT_S	\
+		"%*1[Ss]%*1[Uu]%*1[Bb]%*1[Jj]%*1[Ee]%*1[Cc]%*1[Tt]:%70[^\n]"
+#define FOLDER		"  Folder: "
+#define LENtSTOP	9 /* tab stop at which message length will be logged */
+
+#define TABCHAR		"\t"
+#define TABWIDTH	8

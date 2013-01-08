@@ -1,213 +1,197 @@
-/************************************************************************ 
+/************************************************************************
  *	Collection of routines that return an int (sort of anyway :-)	*
- *									* 
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	* 
- *	The sources can be freely copied for non-commercial use.	* 
- *	See the accompanying README file for more info.			* 
  *									*
- *	Don't complain about the formatting, I know it's		* 
- *	unconventional, but it's my standard format (I have my		* 
- *	reasons).  If you don't like it, feed it through your		* 
- *	favourite C beautifier.						*
+ *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	The sources can be freely copied for non-commercial use.	*
+ *	#include "README"						*
+ *									*
+ *	#include "STYLE"						*
+ *									*
  ************************************************************************/
-
+#ifdef	RCS
+static char rcsid[]="$Id: retint.c,v 2.0 1991/06/10 14:35:35 berg Rel $";
+#endif
 #include "config.h"
 #include "procmail.h"
-#include "sysexits.h"
 #include "shell.h"
 
-setdef(name,contents)char*name,*contents;{
- strcat(strcat(strcpy(buf2,name),"="),contents);parse();sputenv(buf);}
+setdef(name,contents)const char*const name,*const contents;{
+ strcat(strcat(strcpy(sgetcp=buf2,name),"="),contents);
+ readparse(buf,sgetc,0);sputenv(buf);}
 
-skipblanks(){
- fscanf(rc,"%*[ \t]");}
+char*backblock;		/* what is to be recovered in case of filter failure */
+long backlen;						       /* its length */
+pid_t pidfilt,pidchild;
+int pbackfd[2];				       /* the emergency backpipe :-) */
 
-skiptoeol(){
- fscanf(rc,"%*[^\n]");return fgetc(rc);}
-
-skipcomment(){char i[2];				   /* no comment :-) */
- if(tscrc("%1[\n]",i))
-   return 1;
- skipblanks();return scrc("%1[#]",i)?skiptoeol():feof(rc);}
-
-pipthrough(line,source,len)char*line,*source;long len;{pid_t pidf,pid;
+pipthrough(line,source,len)char*line,*source;const long len;{
  int pinfd[2],poutfd[2];
-#define PWR2 (pinfd[1])
-#define PRD2 (pinfd[0])
- pipe(poutfd);pipe(pinfd);
- if(!(pidf=sfork())){			       /* the filter is started here */
-   rclose(PWRITE);redirect(PREAD);rclose(STDOUT);dup(PWR2);rclose(PWR2);
-   rclose(PRD2);callnewprog(line);}
- rclose(PREAD);rclose(PWR2);
- if(forkerr(pidf,line)){
-   rclose(PRD2);return 1;}
- flaggerd=0;signal(SIGHUP,flagger);
- if(!(pid=sfork())){	    /* this process will read back the filtered mail */
-   rclose(PWRITE);signal(SIGHUP,flagger);kill(getppid(),SIGHUP);redirect(PRD2);
-   if(!pwait&&mother){	       /* if the wait chain ends here, notify mother */
-      kill(mother,SIGHUP);mother=0;}  /* everything ok mam, go ahead and die */
-   return 0;}		/* we will go ahead however (with or without mother) */
- rclose(PRD2);
- if(forkerr(pid,"procmail")){	 /* An ingenious signal communication system */
-   kill(pidf,SIGTERM);return 1;} /* will ensure that NO lock file and	     */
- if(dump(PWRITE,source,len)){	 /* NO mail gets lost.			     */
-   kill(pidf,SIGTERM);kill(pid,SIGTERM);writeerr(line);return 1;}
- waitflagger();verrgrandchild=flaggerd=0;signal(SIGQUIT,errgrandchild);
- if(pwait){
-   if(waitfor(pidf)!=EX_OK){	/* if pipe fails, we will continue ourselves */
-      progerr(line);kill(pid,SIGTERM);return 1;}
-   for(kill(pid,SIGHUP),loclock=0;;sleep(SUSPENSION)){
-      if(flaggerd)
-	 break;
-      if(verrgrandchild){    /* Check if one of my grandchildren has paniced */
-	 signal(SIGQUIT,sterminate);return 1;}}}
- else
-   kill(pid,SIGHUP);	  /* if we don't wait, signal that we're bailing out */
- exit(EX_OK);}				 /* go ahead child, you have control */
+ rpipe(pbackfd);rpipe(pinfd);flaggerd=0;		 /* main pipes setup */
+ if(!(pidchild=fork())){			/* create a sending procmail */
+   backblock=source;backlen=len;signal(SIGTERM,stermchild);
+   signal(SIGINT,stermchild);signal(SIGHUP,stermchild);
+   signal(SIGQUIT,stermchild);rclose(rc);rclose(PRDI);rclose(PRDB);
+   rpipe(poutfd);rclose(STDOUT);
+   if(!(pidfilt=fork())){				/* create the filter */
+      rclose(PWRO);rclose(PWRB);rdup(PWRI);rclose(PWRI);getstdin(PRDO);
+      callnewprog(line);}
+   rclose(PWRI);rclose(PRDO);
+   if(forkerr(pidfilt,line)){
+      rclose(PWRO);stermchild();}
+   if(dump(PWRO,source,len)){		  /* send in the text to be filtered */
+      writeerr(line);stermchild();}
+   if(pwait&&waitfor(pidfilt)!=EX_OK){	 /* check the exitcode of the filter */
+      progerr(line);stermchild();}
+   rclose(PWRB);kill(thepid,SIGQUIT);exit(EX_OK);} /* tell parent to proceed */
+ rclose(PWRI);rclose(PWRB);getstdin(PRDI);
+ if(forkerr(pidchild,"procmail"))
+    return 1;
+ return 0;}		    /* we stay behind to read back the filtered text */
 
-waitflagger(){
+waitflagger(){				      /* wait for SIGQUIT from child */
  while(!flaggerd)
-   sleep(SUSPENSION);}
+   suspend();}					       /* to prevent polling */
 
-grepin(expr,source,len,casesens)char*expr,*source;long len;{pid_t pid;
- int poutfd[2];static char*newargv[5]={0,"-e"};
- newargv[3]=casesens?(char*)0:"-i";*newargv=getenv(grep);newargv[2]=expr;
- pipe(poutfd);
- if(!(pid=sfork())){
-   rclose(PWRITE);redirect(PREAD);shexec(newargv);}
- rclose(PREAD);dump(PWRITE,source,len);
- if(!forkerr(pid,*newargv))
-    return waitfor(pid)!=EX_OK;
- return 127;}
+grepin(expr,source,len,casesens)const char*const expr,*const source;long len;{
+ pid_t pid;int poutfd[2];static const char*newargv[5]={0,"-e"};
+ newargv[3]=casesens?(char*)0:"-i";*newargv=tgetenv(grep);newargv[2]=expr;
+ rpipe(poutfd);
+ if(!(pid=sfork())){					       /* start grep */
+   rclose(PWRO);rclose(rc);getstdin(PRDO);shexec(newargv);}
+ rclose(PRDO);len=dump(PWRO,source,len);
+ if(!forkerr(pid,*newargv)){
+    if(len)
+       writeerr(*newargv);
+    else
+       return waitfor(pid)!=EX_OK;}			     /* did it grep? */
+ return EX_UNAVAILABLE;}
 
-waitfor(pid)pid_t pid;{int i;
+waitfor(pid)const pid_t pid;{int i;	      /* wait for a specific process */
  while(pid!=wait(&i)||(i&127)==127);
  return i>>8&255;}
 
-redirect(pip){
- getstdinpipe(pip);fclose(rc);}
+getstdin(pip)const int pip;{
+ rclose(STDIN);rdup(pip);rclose(pip);}
 
-getstdinpipe(pip){
- rclose(STDIN);dup(pip);rclose(pip);}
+callnewprog(newname)const char*const newname;{
+ if(sh){const char*newargv[4];			 /* should we start a shell? */
+   yell(executing,newname);newargv[3]=0;newargv[2]=newname;
+   newargv[1]=tgetenv(shellflags);*newargv=tgetenv(shell);shexec(newargv);}
+ {register const char*p;int argc;const char**newargv;
+ argc=1;p=newname;	     /* If no shell, chop up the arguments ourselves */
+ if(verbose){
+    log(executing);log(oquote);goto no_1st_comma;}
+ do{					     /* show chopped up command line */
+   if(verbose){
+      log(",");
+no_1st_comma:
+      log(p);}
+   while(*p++);}
+ while(argc++,*p!=TMNATE);
+ if(verbose)
+   log(cquote);
+ newargv=malloc(argc*sizeof*newargv);p=newname;argc=0;	 /* alloc argv array */
+ do{
+   newargv[argc++]=p;
+   while(*p++);}
+ while(*p!=TMNATE);
+ newargv[argc]=0;shexec(newargv);}}
 
-callnewprog(newname)char*newname;{int argc;char*endp,**newargv;
- register char*p;
- p=newname;
- if(sh){char*newargv[4];			 /* should we start a shell? */
-   newargv[3]=0;newargv[2]=p;newargv[1]=getenv(shellflags);
-   *newargv=getenv(shell);shexec(newargv);}
- argc=2;
- while(*p){    /* If no shell, we'll have to chop up the arguments ourselves */
-   if(*p==' '||*p=='\t'){
-      argc++;*p='\0';
-      while(*++p==' '||*p=='\t')
-	 *p='\0';
-      continue;}
-   p++;}
- endp=p;*(newargv=malloc(argc*sizeof*newargv))=p=newname;argc=1;
- for(;;){
-   while(*p)
-      p++;
-   while(!*p){
-      if(p==endp){
-	 newargv[argc]=0;shexec(newargv);}
-      p++;}
-   newargv[argc++]=p;}}
-
-parse(){int i;char*org,*dest,*bd;      /* Implicitly copies from buf2 to buf */
- dest=buf;org=buf2;
- while(i=*org++)
-   if(i!='$')
-      *dest++=i;
-   else{					  /* substitute the thing... */
-      bd=buf2;
-      while((i=*org)>='A'&&i<='Z'||i>='a'&&i<='z'||i>='0'&&i<='9'||i=='_'){
-	 *bd++=i;org++;}
-      *bd='\0';
-      if(bd=getenv(buf2)){
-	 strcpy(dest,bd);
-	 while(*dest)
-	    dest++;}}
- *dest='\0';}
-
-writeerr(line)char*line;{
+writeerr(line)const char*const line;{
  log("Error while writing to");logqnl(line);}
 
-forkerr(pid,a)pid_t pid;char*a;{
+forkerr(pid,a)const pid_t pid;const char*const a;{
  if(pid==-1){
    log("Failed forking");logqnl(a);return 1;}
  return 0;}
 
-progerr(line)char*line;{
+progerr(line)const char*const line;{
  log("Program failure of");logqnl(line);}
 
-log(a)char*a;{char*b;
- b=a-1;
- while(*++b);
- rwrite(STDERR,a,b-a);}
+opena(a)const char*const a;{
+ lastfolder=cstr(lastfolder,a);yell("Opening",a);
+ return ropen(a,O_WRONLY|O_APPEND|O_CREAT,0666);}
 
-opena(a)char*a;{
-return open(a,O_WRONLY|O_APPEND|O_CREAT,0666);}
+yell(a,b)const char*const a,*const b;{		     /* log if -d option set */
+ if(verbose){
+   log(a);logqnl(b);}}
 
-fdreopena(a,fd)char*a;{			   /* Currently only works for 0,1,2 */
- rclose(fd);return opena(a);}
-
-shexec(argv)char**argv;{int i;char**newargv,**p;
- execvp(*argv,argv);	 /* if this one fails, we retry it as a shell script */
- for(p=argv,i=1;i++,*p++;);
- newargv=malloc(i*sizeof*p);
- for(*(p=newargv)=binsh;*++p=*++argv;);
- execve(*newargv,newargv,environ);	      /* no shell script? -> trouble */
- log("Failed to execute");logqnl(*argv);exit(EX_UNAVAILABLE);}
-
-unlock(lockp)char**lockp;{
+unlock(lockp)const char**const lockp;{
  lcking=1;
  if(*lockp){
+   yell("Unlocking",*lockp);
    if(unlink(*lockp)){
-      log("Couldn't unlink");logqnl(*lockp);}
+      log("Couldn't unlock");logqnl(*lockp);}
    free(*lockp);*lockp=0;}
  if(nextexit==1){	    /* make sure we are not inside terminate already */
    log(newline);terminate();}
  lcking=0;}
 
 nomemerr(){
- log("Out of memory\nbuffer 0: \"");log(buf);log("\"\nbuffer 1:");
- logqnl(buf2);retval=EX_OSERR;terminate();}
+ log("Out of memory\nbuffer 0: \"");buf[linebuf-1]=buf2[linebuf-1]='\0';
+ log(buf);log("\"\nbuffer 1:");logqnl(buf2);retval=EX_OSERR;terminate();}
 
-logqnl(a)char*a;{
- log(" \"");log(a);log("\"\n");}
+logqnl(a)const char*const a;{
+ log(oquote);log(a);log(cquote);}
 
-nextrcfile(){char*p;   /* find the next rcfile specified on the command line */
- while(p=*gargv){
+nextrcfile(){const char*p;	/* next rcfile specified on the command line */
+ while(p= *gargv){
    gargv++;
    if(!strchr(p,'=')){
       rcfile=p;return 1;}}
  return 0;}
 
-rclose(fd){int i;		      /* a sysV secure close (signal immune) */
+rclose(fd)const int fd;{int i;	      /* a sysV secure close (signal immune) */
  while((i=close(fd))&&errno==EINTR);
  return i;}
 
-rwrite(fd,a,len)void*a;{int i;	      /* a sysV secure write (signal immune) */
- while(0>(i=write(fd,a,len))&&errno==EINTR);
+rwrite(fd,a,len)const int fd,len;void*const a;{int i; /* a sysV secure write */
+ while(0>(i=write(fd,a,(size_t)len))&&errno==EINTR);
  return i;}
 
-lockit(name,lockp)char*name,**lockp;{int i;struct stat stbuf;
- unlock(lockp);			  /* unlock any previous lockfile FIRST	     */
+rread(fd,a,len)const int fd,len;void*const a;{int i;   /* a sysV secure read */
+ while(0>(i=read(fd,a,(size_t)len))&&errno==EINTR);
+ return i;}
+
+ropen(name,mode,mask)const char*const name;const mode_t mask;{int i,r;
+ for(r=noresretry;0>(i=open(name,mode,mask));)	       /* a sysV secure open */
+   if(errno!=EINTR)
+      if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
+	 break;		 /* survives a temporary "file table full" condition */
+ return i;}
+
+rdup(p)const int p;{int i,r;
+ for(r=noresretry;0>(i=dup(p));)		  /* catch "file table full" */
+    if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
+       break;
+ return i;}
+
+rpipe(fd)int fd[2];{int i,r;
+ for(r=noresretry;0>(i=pipe(fd));)		  /* catch "file table full" */
+    if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--))){
+       *fd=fd[1]= -1;break;}
+ return i;}
+
+lockit(name,lockp)char*name;const char**const lockp;{int i;struct stat stbuf;
+ unlock(lockp);			       /* unlock any previous lockfile FIRST */
+ if(!*name)
+   return;
  for(lcking=1;;){		  /* to prevent deadlocks (I hate deadlocks) */
-   if(0<=(i=open(name,O_WRONLY|O_CREAT|O_EXCL|O_SYNC,0))){
-      rclose(i);*lockp=tstrdup(name);
+   yell("Locking",name);
+   if(!NFSxopen(name)){
+      *lockp=tstrdup(name);			   /* lock acquired, hurray! */
 term: if(nextexit){
-	 log(" whilst waiting for lockfile");logqnl(name);terminate();}
-      lcking=0;return;}
-   if(errno==EEXIST){		   /* check if it's time for a lock override */
-      if((i=renvint(0,locktimeout))&&!stat(name,&stbuf)&&
-	 i<time((time_t*)0)-stbuf.st_mtime){
-	 log("Forcing lock on");logqnl(name);
-	 if(unlink(name)){
-	    log("Forced unlock denied on");logqnl(name);}}}
+	 log(whilstwfor);log("lockfile");logqnl(name);terminate();}
+      lcking=0;return;}		   /* check if it's time for a lock override */
+   if(errno==EEXIST&&!stat(name,&stbuf)&&!stbuf.st_size){time_t t;
+      if(locktimeout&&(t=time((time_t*)0),!stat(name,&stbuf)))	/* from stat */
+	 if(locktimeout<t-stbuf.st_mtime){   /* till unlink should be atomic */
+	 if(unlink(name)){			 /* but can't guarantee that */
+	    log("Forced unlock denied on");logqnl(name);}
+	 else{
+	    log("Forcing lock on");logqnl(name);suspend();}}}
    else{		       /* maybe filename too long, shorten and retry */
-      if(0<(i=strlen(name)-1)&&name[i-1]!='/'){
+      if(0<(i=strlen(name)-1)&&!strchr(dirsep,(name[i-1]))){
 	 name[i]='\0';continue;}
       log("Lockfailure on");logqnl(name);return;}
    sleep(DEFlocksleep,locksleep);
@@ -219,54 +203,64 @@ lcllock(){				   /* lock a local file (if need be) */
    if(tolock)
       lockit(tolock,&loclock);
    else
-      lockit(strcat(buf2,getenv(lockext)),&loclock);}
-
-sputenv(a)char*a;{	      /* smart putenv, the way it was supposed to be */
- static struct lienv{struct lienv*next;char name[255];}*myenv;
- static alloced;int i,remove;char*split,**preenv;struct lienv*curr,**last;
- remove=0;a=strdup(a);					/* make working copy */
- if(!(split=strchr(a,'='))){			   /* assignment or removal? */
-    remove=1;i=strlen(a);*(split=i+(a=realloc(a,i+2)))='=';
-    split[1]='\0';}
- i=++split-a;
- for(curr=*(last=&myenv);curr;curr=*(last=&curr->next))
-   if(!strncmp(a,curr->name,i)){	     /* is it one I created earlier? */
-      split=curr->name;*last=curr->next;free(curr);
-      for(preenv=environ;*preenv!=split;preenv++);
-      goto wipenv;}
- for(preenv=environ;*preenv;preenv++)
-   if(!strncmp(a,*preenv,i)){	       /* is it in the standard environment? */
-wipenv:
-      while(*preenv=preenv[1])	   /* wipe this entry out of the environment */
-	 preenv++;
-      break;}
- if(alloced)		   /* have we ever alloced the environ array before? */
-   environ=realloc(environ,(preenv-environ+2)*sizeof*environ);
- else{
-   alloced=1;i=(preenv-environ+2)*sizeof*environ;
-   environ=tmemmove(malloc(i),environ,i-sizeof*environ);}
- if(!remove){		  /* if not remove, then add it to both environments */
-   for(preenv=environ;*preenv;preenv++);
-   curr=malloc(curr->name-(char*)curr+strlen(a)+1);
-   strcpy(*preenv=curr->name,a);free(a);preenv[1]=0;curr->next=myenv;
-   myenv=curr;}}
-
-renvint(init,env)char*env;{int i;
- i=init;
- if(env=getenv(env))			      /* check if the env var exists */
-   sscanf(env,"%i",&i);			       /* parse it like a C constant */
- return i;}
+      lockit(strcat(buf2,tgetenv(lockext)),&loclock);}
 
 terminate(){
  nextexit=2;			/* prevent multiple invocations of terminate */
- unlock(&loclock);		 /* local lock files are removed in any case */
- if(mother&&mother!=getpid())
-   if(retval!=EX_OK) /* tell mam we're in trouble, let her clean up the mess */
-      kill(mother,SIGQUIT);		 /* don't try this at home, kids :-) */
-   else{
-      kill(mother,SIGHUP);goto allok;} /* You can go home mam, everything ok */
- else  
-allok:					/* global lockfile should be removed */
-   unlock(&globlock);			/* by the last surviving procmail    */
- sync();	 /* sorry, but this is mail we're dealing with, safety first */
- exit(retval);}
+ if(retval!=EX_OK)
+   log("Mail bounced\n");
+ unlock(&loclock);unlock(&globlock);exit(retval);}
+
+suspend(){
+ sleep((unsigned)suspendv);}
+
+skipspace(){
+ while(testb(' ')||testb('\t'));}
+
+sgetc(){					/* a fake fgetc for a string */
+ return *sgetcp?*(uchar*)sgetcp++:EOF;}
+
+skipped(x)const char*const x;{
+ log("Skipped");logqnl(x);}
+
+static uchar rcbuf[STDBUF],*rcbufp,*rcbufend;	 /* buffers for custom stdio */
+static ungetb;						 /* pushed back char */
+
+bopen(name)const char*const name;{				 /* my fopen */
+ rcbufp=rcbufend=0;ungetb= -1;yell("Rcfile:",name);
+ return rc=ropen(name,O_RDONLY);}
+
+getbl(p)char*p;{int i;char*q;					  /* my gets */
+ for(q=p;;){
+   switch(i=getb()){
+      case '\n':case EOF:
+	 *p='\0';return p!=q;}		     /* did we read anything at all? */
+   *p++=i;}}
+
+getb(){								 /* my fgetc */
+ if(ungetb>=0){int i;				    /* anything pushed back? */
+   i=ungetb;ungetb= -1;return i;}
+ if(rcbufp==rcbufend){
+   rcbufend=rcbuf+rread(rc,rcbufp=rcbuf,STDBUF);}		   /* refill */
+ return rcbufp<rcbufend?*rcbufp++:EOF;}
+
+testb(x)const int x;{int i;	   /* fgetc that only succeeds if it matches */
+ if((i=getb())==x)
+   return 1;
+ ungetb=i;return 0;}
+
+alphanum(c)const int c;{
+ return c>='0'&&c<='9'||c>='a'&&c<='z'||c>='A'&&c<='Z'||c=='_';}
+				       /* open file or new file in directory */
+deliver(boxname)char*const boxname;{struct stat stbuf;
+ strcpy(buf,boxname);			 /* boxname can be found back in buf */
+ return stat(buf,&stbuf)||!S_ISDIR(stbuf.st_mode)?opena(buf):dirmail();}
+
+#include "exopen.h"
+					/* an NFS secure exclusive file open */
+NFSxopen(name)char*name;{char*p,*q;int j= -1,i;
+ for(q=name;p=strpbrk(q,dirsep);q=p+1);			 /* find last DIRSEP */
+ i=q-name;strncpy(p=malloc(i+UNIQnamelen),name,i);
+ if(unique(p,p+i,0))
+   j=myrename(p,name);		 /* try and rename it, fails if nonexclusive */
+ free(p);return j;}

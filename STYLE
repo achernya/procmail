@@ -1,0 +1,20 @@
+Don't complain about the formatting of my C code.  I know it's unconventional,
+but it's my standard format.  If you don't like it, feed it through your
+favourite C beautifier.
+
+Yes, I do have my reasons for formatting it this way:
+1. consistent, functional indenting
+2. I got used to it
+3. the C compiler doesn't mind at all
+4. I get more program text on my screen when editing, hence I don't have to
+   scroll as often to see other parts of the program while working, (you won't
+   believe this, I know) and therefore it helps to get a better overview of
+   the program
+5. I hate it when I have to scroll back the screen those 5 lines just to see
+   the top of the loop (and then back down to look at the end again, etc.)
+
+And, now don't start flaming me about "bad practice", I don't consider this
+formatting method bad practice (it's properly indented).
+
+I consider "bad practice" to be unportable or non-ANSI code, which my code is
+certainly not.

@@ -1,1 +1,1 @@
-"|exec /global/bin/procmail"
+"|IFS=' ';exec /global/bin/procmail"
