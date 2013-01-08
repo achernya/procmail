@@ -1,6 +1,6 @@
 #! /bin/sh
 :
-#$Id: mansed,v 1.24 1994/08/23 14:47:18 berg Exp $
+#$Id: mansed,v 1.29 1998/11/18 11:36:19 srb Exp $
 
 if test -z "$IFS"
 then IFS=" \
@@ -19,10 +19,12 @@ DEST="$3"
 RM="$4"
 DEVNULL=$5
 export SHELL SRC DEST RM DEVNULL
+TMPF0=/tmp/_mansed.0.$$
+TMPF1=/tmp/_mansed.1.$$
 
 if test ! -f "$DEST"
 then
- trap "$RM \"$DEST\";exit 1" 1 2 3 15
+ trap "$RM \"$DEST\" $TMPF0 $TMPF1;exit 1" 1 2 3 15
 fi
 
 (cat <<\HERE
@@ -79,9 +81,9 @@ expr "X$DEST" : '.*[18]$' >$DEVNULL && cat <<HERE
 .Sh SOURCE
 This program is part of the
 .I procmail mail-processing-package
-(@PM_VERSION@) available at your nearest USENET comp.sources.misc archive, or
-at ftp.informatik.rwth-aachen.de as
-.BR pub/packages/procmail/procmail.tar.gz .
+(v@PM_VERSION@) available at http://www.procmail.org/ or
+ftp.procmail.org in
+.BR pub/procmail/ .
 .Sh MAILINGLIST
 There exists a mailinglist for questions relating to any program in the
 procmail package:
@@ -94,28 +96,60 @@ for submitting questions/answers.
 .RS
 for subscription requests.
 .RE
+.PP
 .RE
+If you would like to stay informed about new versions and official patches send
+a subscription request to
+.RS
+procmail-announce-request@procmail.org
+.RE
+(this is a readonly list).
 HERE
 cat <<HERE
-.Sh AUTHOR
-Stephen R. van den Berg at RWTH-Aachen, Germany
-.Rs
+.SH AUTHOR
+Stephen R. van den Berg
+.RS
 @MY_MAIL_ADDR@
 .\" @MY_ALT_MAIL_ADDR@
-.Re
+.RE
 .\".if n .pl -(\n(.tu-1i)
+.rm SH
+.rn Sh SH
+.rm SS
+.rn Ss SS
+.rm TP
+.rn Tp TP
+.rm RS
+.rn Rs RS
+.rm RE
+.rn Re RE
 HERE
- )| sed -f man.sed |
- if test -f man.sed.1
- then
-   sed -f man.sed.0 | sed -f man.sed.1
- else
-   sed -f man.sed.0
- fi >"$DEST"
+ )| sed -f man.sed.0000 >$TMPF0
 
-if test -f "$DEST"
+if test $? != 0
 then
- exit 0
-else
- exit 1
+  $RM $TMPF0
+  exit 1
 fi
+
+for a in man.sed.[0-9]*
+do
+  case $a in
+     man.sed.0000) ;;
+     man.sed.????)
+	mv $TMPF0 $TMPF1
+	if sed -f $a <$TMPF1 >$TMPF0
+	then
+	:
+	else
+	   $RM $TMPF1 $TMPF0
+	   exit 1
+	fi
+  esac
+done
+
+cat $TMPF0 >"$DEST"
+result=$?
+
+$RM $TMPF0 $TMPF1
+exit $result

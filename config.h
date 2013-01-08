@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.63 1994/10/26 19:36:57 berg Exp $*/
+/*$Id: config.h,v 1.82 1999/02/26 21:11:54 guenther Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -30,7 +30,13 @@
  * any side effects (like setting the umask after an assignment to UMASK) will
  * *not* take place
  */
-#define PRESTENV	{"IFS","ENV","PWD",DEFPATH,"USER=$LOGNAME",0}
+#define PRESTENV	{"IFS","ENV","PWD",DEFPATH,0}
+
+/*#define GROUP_PER_USER			/* uncomment this if each
+						   user has his or her own
+	group and procmail can therefore trust a $HOME/.procmailrc that
+	is group writable or contained in a group writable home directory
+	if the group involved is the user's default group. */
 
 /************************************************************************
  * Only edit below this line if you have viewed/edited this file before *
@@ -43,26 +49,28 @@
    >From_ field will be added in the header */
 
 #define TRUSTED_IDS	{"root","daemon","uucp","mail","x400","network",\
-			 "list","lists","news",0}
-
-/*#define NO_USER_TO_LOWERCASE_HACK	/* uncomment if your getpwnam() is
-					   case insensitive or if procmail
-	will always be supplied with the correct case in the explicit
-	delivery mode argument(s) */
+			 "list","slist","lists","news",0}
 
 /*#define NO_fcntl_LOCK		/* uncomment any of these three if you	     */
 /*#define NO_lockf_LOCK		/* definitely do not want procmail to make   */
 /*#define NO_flock_LOCK		/* use of those kernel-locking methods	     */
 
+/*#define RESTRICT_EXEC 100	/* uncomment to prevent users with uids equal
+				   or higher than RESTRICT_EXEC from
+	executing programs from within their .procmailrc files (this
+	restriction does not apply to /etc/procmailrc and /etc/procmailrcs
+	files) */
+
 /*#define NO_NFS_ATIME_HACK	/* uncomment if you're definitely not using
 				   NFS mounted filesystems and can't afford
-	procmail to sleep for 1 sec. before writing a mailbox */
+	procmail to sleep for 1 sec. before writing a regular mailbox
+	(under heavy load procmail automatically suppresses this) */
 
-/*#define SYSTEM_MBOX	"$HOME/.mail"	/* uncomment and/or change if the
-					   preset default mailbox is *not*
-	suitable or if you want standard mail delivery to take place in a
-	different file from the normal mail-spool-file.
-	(it will supersede the value of SYSTEM_MAILBOX in autoconf.h) */
+/* This usually allowed you to define SYSTEM_MBOX.  This has changed.
+   If you want mail delivery to custom mail-spool-files, edit the
+   src/authenticate.c file and change the content of:  auth_mailboxname()
+   (either directly, or through changing the definitions in the same file
+   of MAILSPOOLDIR, MAILSPOOLHASH or MAILSPOOLHOME) */
 
 /*#define DEFsendmail	"/bin/mail"	/* uncomment and/or change if the
 					   autoconfigured default SENDMAIL is
@@ -71,7 +79,8 @@
 #define PROCMAILRC	"$HOME/.procmailrc"	/* default rcfile for every
 						   recipient;  if this file
 	is not found, maildelivery will proceed as normal to the default
-	system mailbox. */
+	system mailbox.	 This must be an absolute path or bad things will
+	happen. */
 
 #define ETCRC	"/etc/procmailrc"	/* optional global procmailrc startup
 					   file (will only be read if procmail
@@ -118,24 +127,32 @@
 #define STDBUF		128
 #endif /* SMALLHEAP */
 #define FAKE_FIELD	">From "
-#define HOSTNAMElen	9	  /* determines hostname-ID-len on tempfiles */
+#define HOSTNAMElen	8	  /* determines hostname-ID-len on tempfiles */
 #define BOGUSprefix	"BOGUS."	     /* prepended to bogus mailboxes */
 #define DEFsuspend	16		 /* multi-purpose 'idle loop' period */
 #define DEFlocksleep	8
-#define TOkey		"^TO"
+#define TO_key		"^TO_"				    /* for addresses */
+#define TO_substitute	"(^((Original-)?(Resent-)?(To|Cc|Bcc)|\
+(X-Envelope|Apparently(-Resent)?)-To):(.*[^-a-zA-Z0-9_.])?)"
+#define TOkey		"^TO"					/* for words */
 #define TOsubstitute	"(^((Original-)?(Resent-)?(To|Cc|Bcc)|\
 (X-Envelope|Apparently(-Resent)?)-To):(.*[^a-zA-Z])?)"
 #define FROMDkey	"^FROM_DAEMON"		     /* matches most daemons */
-#define FROMDsubstitute "(^(Precedence:.*(junk|bulk|list)|\
-(((Resent-)?(From|Sender)|X-Envelope-From):|>?From )(.*[^(.%@a-z0-9])?(\
-Post(ma?(st(e?r)?|n)|office)|(send)?Mail(er)?|daemon|mmdf|root|n?uucp|smtp|\
-response|LISTSERV|owner|request|bounce|serv(ices?|er)|Admin(istrator)?)\
-([^).!:a-z0-9].*)?$[^>]))"
+#define FROMDsubstitute "(^(Mailing-List:|Precedence:.*(junk|bulk|list)|\
+To: Multiple recipients of |\
+(((Resent-)?(From|Sender)|X-Envelope-From):|>?From )([^>]*[^(.%@a-z0-9])?(\
+Post(ma?(st(e?r)?|n)|office)|(send)?Mail(er)?|daemon|m(mdf|ajordomo)|n?uucp|\
+LIST(SERV|proc)|NETSERV|o(wner|ps)|r(e(quest|sponse)|oot)|b(ounce|bs\\.smtp)|\
+echo|mirror|s(erv(ices?|er)|mtp(error)?|ystem)|\
+A(dmin(istrator)?|MMGR|utoanswer)\
+)(([^).!:a-z0-9][-_a-z0-9]*)?[%@>	 ][^<)]*(\\(.*\\).*)?)?$([^>]|$)))"
 #define FROMMkey	"^FROM_MAILER"	      /* matches most mailer-daemons */
 #define FROMMsubstitute "(^(((Resent-)?(From|Sender)|X-Envelope-From):|\
->?From )(.*[^(.%@a-z0-9])?(Post(ma(st(er)?|n)|office)|(send)?Mail(er)?|daemon|\
-mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
-)([^).!:a-z0-9].*)?$[^>])"
+>?From )([^>]*[^(.%@a-z0-9])?(\
+Post(ma(st(er)?|n)|office)|(send)?Mail(er)?|daemon|mmdf|n?uucp|ops|\
+r(esponse|oot)|(bbs\\.)?smtp(error)?|s(erv(ices?|er)|ystem)|A(dmin(istrator)?|\
+MMGR)\
+)(([^).!:a-z0-9][-_a-z0-9]*)?[%@>	 ][^<)]*(\\(.*\\).*)?)?$([^>]|$))"
 #define DEFshellmetas	"&|<>~;?*["		    /* never put '$' in here */
 #define DEFdefault	"$ORGMAIL"
 #define DEFmsgprefix	"msg."
@@ -145,7 +162,8 @@ mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
 #define DEFtimeout	(DEFlocktimeout-64)	   /* 64 seconds to clean up */
 #define DEFnoresretry	4      /* default nr of retries if no resources left */
 #define nfsTRY		(7+1) /* nr of times+1 to ignore spurious NFS errors */
-#define MATCHVAR	"MATCH="
+#define MATCHVAR	"MATCH"
+#define AMATCHVAR	"MATCH="
 #define DEFlogabstract	-1    /* abstract by default, but don't mail it back */
 #define COMSAThost	"localhost"    /* where the biff/comsat daemon lives */
 #define COMSATservice	"biff"	    /* the service name of the comsat daemon */
@@ -177,6 +195,7 @@ mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
 #define ALTFROMWHOPT	'r'		/* alternate and obsolete form of -f */
 #define OVERRIDEOPT	'o'		     /* do not generate >From_ lines */
 #define BERKELEYOPT	'Y'    /* Berkeley format, disregard Content-Length: */
+#define ALTBERKELEYOPT	'y'			/* same effect as -Y, kludge */
 #define ARGUMENTOPT	'a'					   /* set $1 */
 #define DELIVEROPT	'd'		  /* deliver mail to named recipient */
 #define PM_USAGE	\
@@ -206,7 +225,8 @@ mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
 \n\th  deliver header (default)\tb  deliver body (default)\
 \n\tf  filter\t\t\ti  ignore write errors\
 \n\tc  carbon copy or clone message\
-\n\tw  wait for a program\t\tr	raw mode, mail as is\
+\n\tw  wait for a program\t\tr\
+  raw mode, mail as is\
 \n\tW  same as 'w', but suppress 'Program failure' messages\n"
 
 #define MINlinebuf	128    /* minimal LINEBUF length (don't change this) */
@@ -281,14 +301,16 @@ mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
 #define FM_FIRST_UNIQ	'u'		    /* preserve the first occurrence */
 #define FM_LAST_UNIQ	'U'		     /* preserve the last occurrence */
 #define FM_ReNAME	'R'				   /* rename a field */
+#define FM_VERSION	VERSIONOPT		/* option to display version */
 #define FM_USAGE	"\
-Usage: formail [-bczfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
+Usage: formail [-vbczfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
 \t[-xXaAiIuU field] [-R ofield nfield]\n\
-   Or: formail [+nnn] [-nnn] [-bczfrktnedqBY] [-D nnn idcache] [-p prefix]\n\
-\t[-m nnn] [-l folder] [-xXaAiIuU field] [-R ofield nfield]\n\
+   Or: formail [+nnn] [-nnn] [-bczfrktedqBY] [-D nnn idcache] [-p prefix]\n\
+\t[-n [nnn]] [-m nnn] [-l folder] [-xXaAiIuU field] [-R ofield nfield]\n\
 \t-s [prg [arg ...]]\n"	    /* split up FM_HELP, token too long for some ccs */
 #define FM_HELP		\
- " -b\t\tdon't escape bogus mailbox headers\
+ " -v\t\tdisplay the version number and exit\
+\n -b\t\tdon't escape bogus mailbox headers\
 \n -Y\t\tBerkeley format mailbox, disregard Content-Length:\
 \n -c\t\tconcatenate continued header-fields\
 \n -z\t\tzap whitespace and empty header-fields\
@@ -301,7 +323,7 @@ Usage: formail [-bczfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
 \n -s prg arg\tsplit the mail, startup prg for every message\n"
 #define FM_HELP2	\
  " +nnn\t\tskip the first nnn\t-nnn\toutput at most nnn messages\
-\n -n\t\tdon't serialise splits\t-e\tempty lines are optional\
+\n -n [nnn]\tdon't serialise splits\t-e\tempty lines are optional\
 \n -d\t\taccept digest format\t-B\texpect BABYL rmail format\
 \n -q\t\tbe quiet\t\t-p prefix\tquotation prefix\
 \n -m nnn \tmin fields threshold (default 2) for start of message\

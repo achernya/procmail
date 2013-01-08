@@ -1,12 +1,12 @@
 /************************************************************************
  *	Custom standard-io library					*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: cstdio.c,v 1.28 1994/10/20 18:14:27 berg Exp $";
+ "$Id: cstdio.c,v 1.36 1999/02/16 21:13:34 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -20,10 +20,11 @@ struct dynstring*incnamed;
 
 void pushrc(name)const char*const name;		      /* open include rcfile */
 { struct stat stbuf;					   /* only if size>0 */
+  stbuf.st_mode=0;
   if(*name&&(stat(name,&stbuf)||!S_ISREG(stbuf.st_mode)||stbuf.st_size))
    { app_val(&inced,rcbufp?(off_t)(rcbufp-rcbuf):(off_t)0);	 /* save old */
      app_val(&inced,blasttell);app_val(&inced,(off_t)rc);   /* position & fd */
-     if(bopen(name)<0)			      /* and try to open the new one */
+     if(S_ISDIR(stbuf.st_mode)||bopen(name)<0)	  /* try to open the new one */
 	readerr(name),poprc();		       /* we couldn't, so restore rc */
    }
 }
@@ -83,13 +84,15 @@ int bopen(name)const char*const name;				 /* my fopen */
   return rc;
 }
 
-int getbl(p)char*p;						  /* my gets */
-{ int i;char*q;
-  for(q=p;;)
+int getbl(p,end)char*p,*end;					  /* my gets */
+{ int i,overflow=0;char*q;
+  for(q=p,end--;;)
    { switch(i=getb())
       { case '\n':case EOF:*q='\0';
-	   return p!=q;			     /* did we read anything at all? */
+	   return overflow?-1:p!=q;	     /* did we read anything at all? */
       }
+     if(q==end)	    /* check here so that a trailing backslash won't be lost */
+	q=p,overflow=1;
      *q++=i;
    }
 }
@@ -108,7 +111,7 @@ void ungetb(x)const int x;	/* only for pushing back original characters */
      rcbufp--;							   /* backup */
 }
 
-int testb(x)const int x;	   /* fgetc that only succeeds if it matches */
+int testB(x)const int x;	   /* fgetc that only succeeds if it matches */
 { int i;
   if((i=getb())==x)
      return 1;
@@ -122,15 +125,38 @@ int sgetc P((void))				/* a fake fgetc for a string */
 
 int skipspace P((void))
 { int any=0;
-  while(testb(' ')||testb('\t'))
+  while(testB(' ')||testB('\t'))
      any=1;
   return any;
 }
 
-void getlline(target)char*target;
-{ char*chp2;
-  for(;getbl(chp2=target)&&*(target=strchr(target,'\0')-1)=='\\';
-   *target++='\n')					   /* read line-wise */
-     if(chp2!=target)					  /* non-empty line? */
-	target++;			      /* then preserve the backslash */
+void skipline P((void))
+{ for(;;)					/* skip the rest of the line */
+     switch(getb())
+      { default:
+	   continue;
+	case '\n':case EOF:
+	   return;
+      }
+}
+
+int getlline(target)char*target;
+{ char*chp2,*end;int overflow;
+  for(end=target+linebuf,overflow=0;;*target++='\n')
+     switch(getbl(chp2=target,end))			   /* read line-wise */
+      { case -1:overflow=1;
+	case 1:
+	   if(*(target=strchr(target,'\0')-1)=='\\')
+	    { if(chp2!=target)				  /* non-empty line? */
+		 target++;		      /* then preserve the backslash */
+	      if(target>end-2)			  /* space enough for getbl? */
+		 target=end-linebuf,overflow=1;		/* toss what we have */
+	      continue;
+	    }
+	case 0:
+	   if(overflow)
+	    { nlog(exceededlb);setoverflow();
+	    }
+	   return overflow;
+      }
 }

@@ -1,12 +1,12 @@
 /************************************************************************
  *	Miscellaneous routines used by formail				*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formisc.c,v 1.31 1994/09/20 19:31:56 berg Exp $";
+ "$Id: formisc.c,v 1.40 1999/02/16 21:13:37 guenther Exp $";
 #endif
 #include "includes.h"
 #include "formail.h"
@@ -16,7 +16,7 @@ static /*const*/char rcsid[]=
 #include "ecommon.h"
 #include "formisc.h"
 
-static char*skipcomment(start)char*start;
+static const char*skipcomment(start)const char*start;
 { for(;;)
      switch(*++start)
       { case '\0':start--;
@@ -28,8 +28,8 @@ static char*skipcomment(start)char*start;
 }
 
 char*skipwords(start)char*start;		 /* skips an RFC 822 address */
-{ int delim,hitspc,machref;char*target,*oldstart;
-  hitspc=machref=0;target=oldstart=start;
+{ int delim,hitspc,machref,group;char*target,*oldstart;
+  group=1;hitspc=machref=0;target=oldstart=start;
   if(*start=='<')
      start++,machref=1;
   for(;;)
@@ -40,11 +40,16 @@ char*skipwords(start)char*start;		 /* skips an RFC 822 address */
 	      goto inc;
 	    }
 	   goto ret;
-	case '(':start=skipcomment(start);			  /* comment */
+	case '(':start=(char*)skipcomment(start);		  /* comment */
 	case ' ':case '\t':case '\n':hitspc|=1;	       /* linear white space */
 inc:	   start++;
 	   continue;
-	case ',':case ';':	      /* sendmail extended RFC-822 behaviour */
+	case ';':
+	   if(group==2)
+	      start[1]='\0';			      /* terminate the group */
+	case ',':
+	   if(group==2)
+	      goto special;				/* part of the group */
 	   if(machref)		 /* allow embedded ,; in a machine reference */
 	    { machref=2;
 	      goto special;
@@ -64,7 +69,12 @@ ret:	      return start;
 	      *target++='\\',start++;
 	   hitspc=2;
 	   goto normal;					      /* normal word */
-	case '@':case ':':case '.':
+	case ':':
+	   if(group==1)
+	      group=2;						/* groupies! */
+	case '@':case '.':
+	   if(group==1)
+	      group=0;	   /* you had your chance, and you blew it, no group */
 special:   hitspc=0;
 normal:	   *target++= *start++;
 	   continue;
@@ -86,7 +96,7 @@ normal:	   *target++= *start++;
 
 void loadsaved(sp)const struct saved*const sp;	     /* load some saved text */
 { switch(*sp->rexp)
-   { default:loadchar(' ');	       /* make sure it has leading whitspace */
+   { default:loadchar(' ');	      /* make sure it has leading whitespace */
      case ' ':case '\t':;
    }
   loadbuf(sp->rexp,sp->rexl);
@@ -130,14 +140,14 @@ void tputssn(a,l)const char*a;size_t l;
 
 void ltputssn(a,l)const char*a;size_t l;
 { if(logsummary)
-     totallen+=l;
+     Totallen+=l;
   else
      putssn(a,l);
 }
 
 void lputcs(i)const int i;
 { if(logsummary)
-     totallen++;
+     Totallen++;
   else
      putcs(i);
 }
@@ -151,7 +161,7 @@ void startprog(argv)const char*Const*const argv;
   dup(oldstdout);
   if(*argv)			    /* do we have to start a program at all? */
    { int poutfd[2];
-     static children;
+     static int children;
      if(lenfileno>=0)
       { long val=initfileno++;char*chp;
 	chp=ffileno+LEN_FILENO_VAR;
@@ -162,15 +172,16 @@ void startprog(argv)const char*Const*const argv;
 	   *chp++='0';
       }
      pipe(poutfd);
-     ;{ int maxchild=(unsigned long)children*CHILD_FACTOR,excode;
+     ;{ int maxchild=childlimit?childlimit:
+	 (unsigned long)children*CHILD_FACTOR,excode;
 	while(children&&waitpid((pid_t)-1,&excode,WNOHANG)>0)
 	   if(!WIFSTOPPED(excode))		      /* collect any zombies */
 	    { children--;
 	      if((excode=WIFEXITED(excode)?
 		  WEXITSTATUS(excode):-WTERMSIG(excode))!=EXIT_SUCCESS)
 		 retval=excode;
-	    }
-	while((child=fork())==-1&&children)	       /* reap some children */
+	    }					       /* reap some children */
+	while(childlimit&&children>=childlimit||(child=fork())==-1&&children)
 	   for(--children;(excode=waitfor((pid_t)0))!=NO_PROCESS;)
 	    { if(excode!=EXIT_SUCCESS)
 		 retval=excode;
@@ -199,7 +210,7 @@ void nofild P((void))
 }
 
 void nlog(a)const char*const a;
-{ elog(NAMEPREFIX);elog(a);
+{ elog(formailn);elog(": ");elog(a);
 }
 
 void logqnl(a)const char*const a;

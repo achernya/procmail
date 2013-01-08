@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 1.30 1994/09/28 19:58:59 berg Exp $*/
+/*$Id: procmail.h,v 1.38 1999/02/26 21:11:56 guenther Exp $*/
 
 #include "includes.h"
 
@@ -8,16 +8,21 @@
 #define DEFverbose 0
 #endif
 
+#ifdef GROUP_PER_USER
+#define NO_CHECK_stgid 0
+#else
+#define NO_CHECK_stgid 1
+#endif
+
 #ifndef DEFsendmail
 #define DEFsendmail SENDMAIL
+#endif
+#ifndef DEFflagsendmail
+#define DEFflagsendmail "-oi"
 #endif
 
 #ifndef DEFPATH
 #define DEFPATH		defPATH
-#endif
-
-#ifndef SYSTEM_MBOX
-#define SYSTEM_MBOX	SYSTEM_MAILBOX
 #endif
 
 #ifndef ETCRC
@@ -64,8 +69,10 @@ extern struct varstr{const char*const sname,*sval;}strenstr[];
 #define scomsat		(strenstr[3].sval)
 #define traps		(strenstr[4].sval)
 #define shellflags	(strenstr[5].sval)
-#define fdefault	(strenstr[6].sval)
+#define fdefault	(*(const char*volatile*)&strenstr[6].sval)
 #define sendmail	(strenstr[7].sval)
+#define flagsendmail	(strenstr[8].sval)
+/* #define PM_version	(strenstr[9].sval) */
 
 int
  eqFrom_ P((const char*const a));
@@ -74,12 +81,13 @@ extern char*buf,*buf2,*loclock,*tolock,*Stdout,*themail,*thebody;
 extern const char shell[],lockfile[],newline[],binsh[],unexpeof[],*const*gargv,
  *const*restargv,*sgetcp,pmrc[],*rcfile,dirsep[],devnull[],lgname[],
  executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],host[],
- *defdeflock,*argv0,errwwriting[],slogstr[],conflicting[],orgmail[];
+ *defdeflock,*argv0,errwwriting[],slogstr[],conflicting[],orgmail[],
+ exceededlb[];
 extern long filled,lastscore;
 extern int sh,pwait,retval,retvl2,lcking,rcstate,rc,ignwerr,lexitcode,
- asgnlastf,accspooldir,crestarg,skiprc,savstdout,berkeley;
+ asgnlastf,accspooldir,crestarg,skiprc,savstdout,berkeley,mailfilter,restrict;
 extern size_t linebuf;
-extern volatile nextexit;
+extern volatile int nextexit;
 extern pid_t thepid;
 extern uid_t uid;
 extern gid_t gid,sgid;

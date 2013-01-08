@@ -1,12 +1,13 @@
 #define VERSION "\
-procmail v3.10 1994/10/31 written and created by Stephen R. van den Berg\n\
-\t\t\t\tberg@pool.informatik.rwth-aachen.de\n\
+ v3.12 1999/03/02, Copyright (c) 1999, Stephen R. van den Berg\n\
+\t\t\t\t\t\t\t<srb@cuci.nl>\n\
 \n\
 Submit questions/answers to the procmail-related mailinglist by sending to:\n\
-\tprocmail@informatik.rwth-aachen.de\n\
+\t<procmail-users@procmail.org>\n\
 \n\
 And of course, subscription and information requests for this list to:\n\
-\tprocmail-request@informatik.rwth-aachen.de\n"
+\t<procmail-users-request@procmail.org>\n"
 
 /* If the formatting or number of newlines of VERSION substantially changes,
-   src/manconf.c needs to be changed as well */
+   src/autoconf and src/manconf.c need to be changed as well.  And yes,
+   there is supposed to be a leading space */

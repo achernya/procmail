@@ -1,4 +1,4 @@
-/*$Id: misc.h,v 1.32 1994/09/29 18:43:52 berg Exp $*/
+/*$Id: misc.h,v 1.37 1999/02/12 05:54:01 guenther Exp $*/
 
 struct dyna_long{size_t filled,tspace;off_t*offs;};
 struct dynstring{struct dynstring*enext;char ename[255];};
@@ -27,6 +27,7 @@ void
  suspend P((void)),
  app_val P((struct dyna_long*const sp,const off_t val)),
  setmaildir P((const char*const newdir)),
+ setoverflow P((void)),
  srequeue P((void)),
  slose P((void)),
  sbounce P((void)),
@@ -37,13 +38,14 @@ void
  asenv P((const char*const chp)),
  concatenate P((char*p)),
  squeeze P((char*target)),
- initdefenv P((void));
+ initdefenv P((void)),
+ rcst_nosgid P((void));
 int
  forkerr Q((const pid_t pid,const char*const a)),
  nextrcfile P((void)),
  asenvcpy P((char*src)),
  alphanum P((const unsigned c)),
- enoughprivs Q((const struct passwd*const passinvk,const uid_t euid,
+ enoughprivs Q((const auth_identity*const passinvk,const uid_t euid,
   const gid_t egid,const uid_t uid,const gid_t gid)),
  screenmailbox Q((char*chp,char*const chp2,const gid_t egid,
   const Deliverymode)),
@@ -54,15 +56,13 @@ char
  *tstrdup P((const char*const a)),
  *pmrc2buf P((void)),
  *cstr P((char*const a,const char*const b)),
- *gobenv P((char*chp)),
+ *gobenv P((char*chp,char*end)),
  *egrepin P((char*expr,const char*source,const long len,int casesens));
 const char
  *tgetenv P((const char*const a)),
  *newdynstring P((struct dynstring**const adrp,const char*const chp));
 long
  renvint P((const long i,const char*const env));
-const struct passwd
- *savepass Q((struct passwd*const spass,const uid_t uid));
 
 extern const char lastfolder[],maildir[];
 extern int didchd;

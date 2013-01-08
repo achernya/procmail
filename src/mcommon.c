@@ -1,17 +1,17 @@
 /************************************************************************
  *	Some common routines to all programs but formail		*
  *									*
- *	Copyright (c) 1993-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1993-1997, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mcommon.c,v 1.1 1994/04/05 15:35:01 berg Exp $";
+ "$Id: mcommon.c,v 1.5 1997/04/03 01:58:45 srb Exp $";
 #endif
 #include "includes.h"
 #include "mcommon.h"
 
-static volatile gotsig;
+static volatile int gotsig;
 
 static void fakehandler P((void))
 { gotsig=1;

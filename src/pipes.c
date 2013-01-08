@@ -1,12 +1,12 @@
 /************************************************************************
  *	Routines related to setting up pipes and filters		*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: pipes.c,v 1.37 1994/10/14 18:43:43 berg Exp $";
+ "$Id: pipes.c,v 1.57 1999/02/16 21:13:45 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -29,7 +29,7 @@ volatile int toutflag;
 static char*lastexec,*backblock;
 static long backlen;	       /* length of backblock, filter recovery block */
 static pid_t pidfilt;
-static pbackfd[2];			       /* the emergency backpipe :-) */
+static int pbackfd[2];			       /* the emergency backpipe :-) */
 int pipw;
 
 void inittmout(progname)const char*const progname;
@@ -74,7 +74,15 @@ static void getstdin(pip)const int pip;
 }
 
 static void callnewprog(newname)const char*const newname;
-{ if(sh)					 /* should we start a shell? */
+{
+#ifdef RESTRICT_EXEC
+  if(mailfilter!=2&&restrict&&uid>=RESTRICT_EXEC)
+   { syslog(LOG_ERR,slogstr,"Attempt to execute",newname);
+     nlog("No permission to execute");logqnl(newname);
+     return;
+   }
+#endif
+  if(sh)					 /* should we start a shell? */
    { const char*newargv[4];
      yell(executing,newname);newargv[3]=0;newargv[2]=newname;
      newargv[1]=shellflags;*newargv=tgetenv(shell);shexec(newargv);
@@ -206,7 +214,9 @@ long pipin(line,source,len)char*const line;char*source;long len;
      rclose(PWRO),shutdesc(),getstdin(PRDO),callnewprog(line);
   rclose(PRDO);
   if(forkerr(pidchild,line))
+   { rclose(PWRO);
      return -1;					    /* dump mail in the pipe */
+   }
   if((len=dump(PWRO,source,len))&&(!ignwerr||(len=0)))
      writeerr(line);		       /* pipe was shut in our face, get mad */
   ;{ int excode;			    /* optionally check the exitcode */
@@ -225,25 +235,36 @@ builtin:
 }
 
 char*readdyn(bf,filled)char*bf;long*const filled;
-{ int i;long oldsize;
-  oldsize= *filled;
-  goto jumpin;
-  do
-   { *filled+=i;				/* change listed buffer size */
-jumpin:
+{ int blksiz=BLKSIZ;long oldsize= *filled;unsigned shift=EXPBLKSIZ;char*np;
+  for(;;)
+   {
 #ifdef SMALLHEAP
-     if((size_t)*filled>=(size_t)(*filled+BLKSIZ))
+     if((size_t)*filled>=(size_t)(*filled+blksiz))
 	lcking|=lck_MEMORY,nomemerr();
-#endif
-     bf=realloc(bf,*filled+BLKSIZ);    /* dynamically adjust the buffer size */
+#endif				       /* dynamically adjust the buffer size */
+		       /* use the real realloc so that we can retry failures */
+     while(EXPBLKSIZ&&(np=0,blksiz>BLKSIZ)&&!(np=(realloc)(bf,*filled+blksiz)))
+	blksiz>>=1;				  /* try a smaller increment */
+     bf=EXPBLKSIZ&&np?np:realloc(bf,*filled+blksiz);		 /* last try */
 jumpback:;
+     ;{ int got,left=blksiz;
+	do
+	   if(0>=(got=rread(STDIN,bf+*filled,left)))		/* read mail */
+	      goto eoffound;
+	while(*filled+=got,left-=got);		/* change listed buffer size */
+      }
+     if(EXPBLKSIZ&&shift)				 /* room for growth? */
+      { int newbs=blksiz;newbs<<=shift--;	/* capped exponential growth */
+	if(blksiz<newbs)				  /* no overflowing? */
+	   blksiz=newbs;				    /* yes, take me! */
+      }
    }
-  while(0<(i=rread(STDIN,bf+*filled,BLKSIZ)));			/* read mail */
+eoffound:
   if(pidchild>0)
    { if(!Stdout)
       { getstdin(PRDB);			       /* filter ready, get backpipe */
 	if(1==rread(STDIN,buf,1))		      /* backup pipe closed? */
-	 { bf=realloc(bf,(*filled=oldsize+1)+BLKSIZ);bf[oldsize]= *buf;
+	 { bf=realloc(bf,(*filled=oldsize+1)+blksiz);bf[oldsize]= *buf;
 	   Stdout=buf;pwait=2;		      /* break loop, definitely reap */
 	   goto jumpback;		       /* filter goofed, rescue data */
 	 }
@@ -252,7 +273,7 @@ jumpback:;
 	pipw=waitfor(pidchild);		      /* reap your child in any case */
    }
   pidchild=0;					/* child must be gone by now */
-  return realloc(bf,*filled+1);	     /* minimise+1 for housekeeping purposes */
+  return (np=(realloc)(bf,*filled+1))?np:bf;  /* minimise+1 for housekeeping */
 }
 
 char*fromprog(name,dest,max)char*name;char*const dest;size_t max;
@@ -296,22 +317,21 @@ void exectrap(tp)const char*const tp;
       }
    }
   if(*tp)
-   { metaparse(tp);concon('\n');inittmout(buf);
+   { int poutfd[2];
+     metaparse(tp);concon('\n');rpipe(poutfd);inittmout(buf);
      if(!(pidchild=sfork()))	     /* connect stdout to stderr before exec */
-      { int poutfd[2];
-	Stdout=buf;childsetup();rpipe(poutfd);rclose(STDOUT);pidfilt=thepid;
-	getstdin(PRDO);
-	if(!(pidchild=sfork()))			/* fork off sending procmail */
-	 { rclose(STDIN);rclose(STDERR);dump(PWRO,themail,filled);
-	   exit(lexitcode);		/* finished dumping to stdin of TRAP */
-	 }					 /* call up the TRAP program */
-	rclose(PWRO);rdup(STDERR);forkerr(pidchild,buf);callnewprog(buf);
+      { rclose(PWRO);getstdin(PRDO);rclose(STDOUT);rdup(STDERR);
+	callnewprog(buf);			      /* trap your heart out */
       }
-     ;{ int newret;
-	if(!forkerr(pidchild,buf)&&
-	   (newret=waitfor(pidchild))!=EXIT_SUCCESS&&
-	   forceret==-2)
+     rclose(PRDO);					     /* neat & clean */
+     if(!forkerr(pidchild,buf))
+      { int newret;
+	dump(PWRO,themail,filled);	      /* try and shove down the mail */
+	if((newret=waitfor(pidchild))!=EXIT_SUCCESS&&forceret==-2)
 	   retval=newret;		       /* supersede the return value */
+	pidchild=0;
       }
+     else
+	rclose(PWRO);
    }
 }

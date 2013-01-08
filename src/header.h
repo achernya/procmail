@@ -9,7 +9,7 @@
  *	it in the next release.						*
  *									*
  ************************************************************************/
-/*$Id: header.h,v 1.36 1994/09/29 18:43:46 berg Exp $*/
+/*$Id: header.h,v 1.43 1998/11/06 05:35:32 guenther Exp $*/
 
 X(returnpath,		"Return-Path:")				  /* RFC 822 */
 X(received,		"Received:")				/* ditto ... */
@@ -21,7 +21,7 @@ X(res_from,		"Resent-From:")
 X(res_sender,		"Resent-Sender:")
 X(date,			"Date:")
 X(res_date,		"Resent-Date:")
-X(to,			"To:")
+X(To,			"To:")
 X(res_to,		"Resent-To:")
 X(cc,			"Cc:")
 X(res_cc,		"Resent-Cc:")
@@ -35,6 +35,11 @@ X(keywords,		"Keywords:")
 X(subject,		"Subject:")
 X(scomments,		"Comments:")
 X(ncrypted,		"Encrypted:")
+X(notrequpdelry,	"Notice-Requested-Upon-Delivery-To:")	      /* DSN */
+X(finrecipient,		"Final-Recipient:")			/* ditto ... */
+X(remmta,		"Remote-MTA:")
+X(diagcode,		"Diagnostic-Code:")
+X(lastattemptdate,	"Last-Attempt-Date:")
 X(errorsto,		"Errors-To:")		       /* sendmail extension */
 X(retreceiptto,		"Return-Receipt-To:")			/* ditto ... */
 X(precedence,		"Precedence:")
@@ -46,6 +51,8 @@ X(text,			"Text:")
 X(via,			"Via:")
 X(apparentlyto,		"Apparently-To:")
 X(apresto,		"Apparently-Resent-To:")
+X(dliveredto,		"Delivered-To:")		  /* qmail extension */
+X(mlinglist,		"Mailing-List:")			/* ditto ... */
 X(autforwarded,		"Autoforwarded:")		  /* X.400 extension */
 X(cntidentifier,	"Content-Identifier:")			/* ditto ... */
 X(conversion,		"Conversion:")
@@ -62,6 +69,7 @@ X(language,		"Language:")
 X(latdeliverytime,	"Latest-Delivery-Time:")
 X(msgtype,		"Message-Type:")
 X(obsoletes,		"Obsoletes:")
+X(supersedes,		"Supersedes:")			      /* depreciated */
 X(orgencodedinfts,	"Original-Encoded-Information-Types:")
 X(orgnreturnaddress,	"Originator-Return-Address:")
 X(priority,		"Priority:")
@@ -73,8 +81,14 @@ X(x400mtsidentifier,	"X400-MTS-Identifier:")
 X(x400originator,	"X400-Originator:")
 X(x400received,		"X400-Received:")
 X(x400rcipients,	"X400-Recipients:")
-X(altrecipient,		"Alternate-Recipient:")				/* ? */
-X(ppwarning,		"Pp-Warning:")					/* ? */
+X(x400trace,		"X400-Trace:")
+X(altrecipient,		"Alternate-Recipient:")
+X(prevnondeliveryrep,	"Prevent-Nondelivery-Report:")
+X(gendeliveryrep,	"Generate-Delivery-Report:")
+X(discloserecipients,	"Disclose-Recipients:")
+X(cntreturn,		"Content-Return:")
+X(autsubmitted,		"Auto-Submitted:")
+X(ppwarning,		"PP-Warning:")					/* ? */
 X(fcc,			"Fcc:")				   /* Mush extension */
 X(resent,		"Resent:")			     /* MH extension */
 X(forwarded,		"Forwarded:")				/* ditto ... */
@@ -95,6 +109,8 @@ X(xref,			"Xref:")
 X(originator,		"Originator:")
 X(nntppostinghost,	"NNTP-Posting-Host:")
 X(submittedby,		"Submitted-by:")
+X(postdto,		"Posted-To:")
+X(mailcopiesto,		"Mail-Copies-To:")
 X(title,		"Title:")	      /* antiquated USENET extension */
 X(aRticleid,		"Article-I.D.:")			/* ditto ... */
 X(posted,		"Posted:")
@@ -117,6 +133,7 @@ X(vversion,		"Version:")
 X(derivedfrom,		"Derived-From:")
 X(cntlanguage,		"Content-Language:")
 X(cost,			"Cost:")
+X(srver,		"Server:")
 X(wwwlink,		"WWW-Link:")			 /* or is it Link: ? */
 X(acknowledgeto,	"Acknowledge-To:")		   /* MMDF extension */
 X(transportoptions,	"Transport-Options:")	    /* SysV mailer extension */
@@ -133,6 +150,20 @@ X(orgaforwfrom,		"Original-Auto-Forwarded-From:")
 X(orgdate,		"Original-Date:")
 X(notdeliveredto,	"Not-Delivered-To:")
 X(reportversion,	"Report-Version:")
+X(orgreceived,		"Original-Received:")				/* ? */
 X(status,		"Status:")			 /* mailer extension */
 X(mailfrom,		"Mail-from:")		    /* emacs BABYL extension */
+X(retrreqsted,		"Return-Receipt-Requested:")	/* cc:Mail extension */
+X(mrreceived,		"MR-Received:")			  /* ORION extension */
+X(apmesgid,		"App-Message-ID:")		  /* MRIF? extension */
+X(hopcount,		"Hop-count:")
+X(fromwarning,		"From-warning:")
+X(reqremailingto,	"Request-Remailing-To:")       /* remailer extension */
+X(anonsendto,		"Anon-Send-To:")
+X(latenttime,		"Latent-Time:")
+X(cutmarks,		"Cutmarks:")
+X(postto,		"Post-To:")
+X(anonpostto,		"Anon-Post-To:")
+X(encrkey,		"Encrypt-Key:")
 X(readreceiptto,	"Read-Receipt-To:")	  /* miscellaneous extension */
+X(fakesender,		"Fake-Sender:")

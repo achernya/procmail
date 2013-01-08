@@ -8,30 +8,31 @@
  *									*
  *	Seems to be relatively bug free.				*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: lockfile.c,v 1.30 1994/10/14 18:43:30 berg Exp $";
+ "$Id: lockfile.c,v 1.39 1999/02/16 21:13:39 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1994/10/14 18:43:30 $";
+static /*const*/char rcsdate[]="$Date: 1999/02/16 21:13:39 $";
 #include "includes.h"
 #include "sublib.h"
 #include "exopen.h"
 #include "mcommon.h"
+#include "authenticate.h"
+#include "../patchlevel.h"
 
 #ifndef SYSTEM_MBOX
 #define SYSTEM_MBOX	SYSTEM_MAILBOX
 #endif
 
-static volatile exitflag;
+static volatile int exitflag;
 pid_t thepid;
 uid_t uid;
 gid_t sgid;
-static char systm_mbox[]=SYSTEM_MBOX;
 static const char dirsep[]=DIRSEP,lockext[]=DEFlockext,
- nameprefix[]="lockfile: ",lgname[]="LOGNAME",home[]="HOME";
+ nameprefix[]="lockfile: ",lgname[]="LOGNAME";
 
 static void failure P((void))				      /* signal trap */
 { exitflag=2;					       /* merely sets a flag */
@@ -58,52 +59,13 @@ void nlog(a)const char*const a;
 { elog(nameprefix);elog(a);  /* decent error messages should start with this */
 }
 
-static size_t parsecopy(dest,org,pass)char*const dest;const char*org;
- const struct passwd*const pass; /* try and digest the mailbox-lockfile name */
-{ size_t len;const char*chp;char*p;unsigned i;
-  for(p=dest,len=STRLEN(lockext)+1;;)
-   { switch(*org)
-      { case '$':					    /* we substitute */
-	   if(!strncmp(++org,lgname,STRLEN(lgname)))
-	      org+=STRLEN(lgname),chp=pass->pw_name;	     /* $LOGNAME and */
-	   else if(!strncmp(org,home,STRLEN(home)))
-	      org+=STRLEN(home),chp=pass->pw_dir;		    /* $HOME */
-	   else
-	      goto capac;			     /* no other fancy stuff */
-	   if((i= *org)-'a'<='z'-'a'||i-'A'<='Z'-'A'||numeric(i)||i=='_')
-	      goto capac;
-	   if(p)
-	      p+=strlen(strcpy(p,chp));			      /* paste it in */
-	   len+=strlen(chp);
-	   continue;
-	default:
-	   if(p)
-	      *p++= *org;		      /* simply copy everything else */
-	   len++;org++;
-	   continue;		     /* except suspicious looking characters */
-	case '\'':case '`':case '"':case '\\':case '{':
-	   goto capac;
-	case '\0':;
-      }
-     if(p)
-      { if(p==dest||!strchr(dirsep,*dest))	     /* absolute path wanted */
-capac:	 { nlog("Sorry, but turning this mess into a useable mailbox \
-exceeds my humble\ncapacities");
-	   return 0;
-	 }
-	strcpy(p,lockext);
-      }
-     return len;
-   }
-}
-
 static PROGID;
 
 main(argc,argv)const char*const argv[];
 { const char*const*p;char*cp;uid_t uid;
   int sleepsec,retries,invert,force,suspend,retval=EXIT_SUCCESS,virgin=1;
-  static const char usage[]="Usage: lockfile -nnn | -r nnn | -l nnn | -s nnn \
-| -! | -ml | -mu | file ...\n";
+  static const char usage[]="Usage: lockfile -v | -nnn | -r nnn | -l nnn \
+| -s nnn | -! | -ml | -mu | file ...\n";
   if(argc<=1)			       /* sanity check, any argument at all? */
      goto usg;
   sleepsec=DEFlocksleep;retries= -1;suspend=DEFsuspend;thepid=getpid();force=0;
@@ -133,9 +95,12 @@ again:
 		       suspend=i;
 		       goto checkrdec;
 		  }
+	      case VERSIONOPT:elog("lockfile");elog(VERSION);
+		  goto xusg;
 	      case HELPOPT1:case HELPOPT2:elog(usage);
 		 elog(
- "\t-nnn\twait nnn seconds between locking attempts\
+ "\t-v\tdisplay the version number and exit\
+\n\t-nnn\twait nnn seconds between locking attempts\
 \n\t-r nnn\tmake at most nnn retries before giving up on a lock\
 \n\t-l nnn\tset locktimeout to nnn seconds\
 \n\t-s nnn\tsuspend nnn seconds after a locktimeout occurred\
@@ -157,22 +122,23 @@ xusg:		       retval=EX_USAGE;
 		    strtol(cp2,&cp,10);		   /* and discard the number */
 		 continue;
 	      case 'm':		  /* take $LOGNAME as a hint, check if valid */
-	       { struct passwd*pass;static char*ma;size_t alen;
+	       { auth_identity*pass;static char*ma;
 		 if(*cp&&cp[1]||ma&&sleepsec>=0)	     /* second pass? */
 		    goto eusg;
 		 if(!ma)			/* ma initialised last time? */
-		  { if(!((ma=(char*)getenv(lgname))&&(pass=getpwnam(ma))&&
-		     pass->pw_uid==uid||(pass=getpwuid(uid))))
+		  { if(!((ma=(char*)getenv(lgname))&&
+		      (pass=auth_finduser(ma,0))&&
+		      auth_whatuid(pass)==uid||
+		     (pass=auth_finduid(uid,0))))
 		     { nlog("Can't determine your mailbox, who are you?\n");
 		       goto nfailure;	 /* panic, you're not in /etc/passwd */
 		     }
-		    if(!(alen=parsecopy((char*)0,systm_mbox,pass)))
-		     { cp=systm_mbox;
-		       goto lfailure;			  /* couldn't digest */
-		     }						  /* mailbox */
-		    if(!(ma=malloc(alen)))	       /* ok, make some room */
-		       goto outofmem;
-		    parsecopy(ma,systm_mbox,pass);	  /* and fill her up */
+		    ;{ const char*p;
+		       if(!*(p=auth_mailboxname(pass))||
+			!(ma=malloc(strlen(p)+STRLEN(lockext)+1)))
+			  goto outofmem;
+		       strcat(strcpy(ma,p),lockext);
+		     }
 		  }
 		 switch(*cp)
 		  { default:
@@ -231,7 +197,7 @@ outofmem:	 retval=EX_OSERR,nlog("Out of memory");
 #ifdef EDQUOT
 	      case EDQUOT:
 #endif
-	      case ENOENT:case ENOTDIR:case EIO:case EACCES:
+	      case ENOENT:case ENOTDIR:case EIO:/*case EACCES:*/
 		 if(!--permanent)	 /* NFS sporadically generates these */
 		  { sleep(sleepsec);	/* unwarranted, so ignore them first */
 		    continue;
@@ -297,4 +263,8 @@ int rclose(fd)const int fd;					     /* stub */
 
 void writeerr(a)const char*const a;				     /* stub */
 {
+}
+
+char*cstr(a,b)char*const a;const char*const b;			     /* stub */
+{ return 0;
 }

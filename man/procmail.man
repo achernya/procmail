@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmail.man,v 1.64 1994/10/20 18:14:22 berg Exp $
+.Id $Id: procmail.man,v 1.75 1999/02/26 01:00:41 guenther Exp $
 .TH PROCMAIL 1 \*(Dt BuGless
 .na
 .SH NAME
@@ -9,6 +9,7 @@ procmail \- autonomous mail processor
 .B procmail
 .RB [ \-@PRESERVOPT@@TEMPFAILOPT@@OVERRIDEOPT@@BERKELEYOPT@ ]
 .RB [ "\-@FROMWHOPT@ \fIfromwhom\fP" ]
+.if n .ti +0.5i
 .RI [ "parameter\fB=\fPvalue " | " rcfile" ]
 \&.\|.\|.
 .br
@@ -16,6 +17,7 @@ procmail \- autonomous mail processor
 .RB [ \-@TEMPFAILOPT@@OVERRIDEOPT@@BERKELEYOPT@ ]
 .RB [ "\-@FROMWHOPT@ \fIfromwhom\fP" ]
 .RB [ "\-@ARGUMENTOPT@ \fIargument\fP" ]
+.if n .ti +0.5i
 .B \-@DELIVEROPT@
 .I recipient
 \&.\|.\|.
@@ -151,10 +153,9 @@ This turns on explicit delivery mode, delivery will be to the local user
 .IR recipient .
 This, of course, only is possible if procmail has root
 privileges@SETRUID@.
-Procmail will setuid to the intended recipients and shall
-.I only
-read the recipient's @PROCMAILRC@ file (if present, if not, delivery is like
-ordinary mail).  This option is incompatible with
+Procmail will setuid to the intended recipients and delivers the mail as
+if it were invoked by the recipient with no arguments (i.e. if no rcfile
+is found, delivery is like ordinary mail).  This option is incompatible with
 .BR \-@PRESERVOPT@ .
 .TP
 .B \-@MAILFILTOPT@
@@ -207,7 +208,7 @@ already present `local' mailer that starts up procmail).  To create such a
 `procmail' mailer I'd suggest something like:
 .Sx 2
 Mprocmail, P=@BINDIR@/procmail, F=mSDFMhun, S=11, R=21,
-        A=procmail \-@MAILFILTOPT@ $h $f $u
+        A=procmail \-@MAILFILTOPT@ $h $g $u
 .Ex
 This enables you to use rules like the following (most likely in ruleset 0)
 to filter mail through the procmail mailer (please note the leading tab
@@ -235,7 +236,7 @@ be creating an endless mail loop.
 .B /etc/passwd
 to set the recipient's LOGNAME, HOME and SHELL variable defaults
 .TP
-.B @SYSTEM_MBOX@
+.B @MAILSPOOLDIR@$LOGNAME
 system mailbox; both the system mailbox and the immediate directory
 it is in will be created everytime procmail starts and either one is
 not present@ETCRC_files@@ETCRCS_files@
@@ -243,9 +244,9 @@ not present@ETCRC_files@@ETCRCS_files@
 .B @PROCMAILRC@
 default rcfile
 .TP
-.B @SYSTEM_MBOX@@DEFlockext@
+.B @MAILSPOOLDIR@$LOGNAME@DEFlockext@
 lockfile for the system mailbox (not automatically used by procmail, unless
-$DEFAULT equals @SYSTEM_MBOX@ and procmail is delivering to $DEFAULT)
+$DEFAULT equals @MAILSPOOLDIR@$LOGNAME and procmail is delivering to $DEFAULT)
 .TP
 .B @DEFsendmail@
 default mail forwarder
@@ -308,6 +309,10 @@ Deadlock attempted on "x"
 The locallockfile specified on this recipe is equal to a still active
 $LOCKFILE.@ETCRCS_error@
 .TP
+Descriptor "x" was not open
+As procmail was started, stdin, stdout or stderr was not connected (possibly
+an attempt to subvert security)
+.TP
 Enforcing stricter permissions on "x"
 The system mailbox of the recipient was found to be unsecured, procmail
 secured it.
@@ -316,7 +321,8 @@ Error while writing to "x"
 Nonexistent subdirectory, no write permission, pipe died or disk full.
 .TP
 Exceeded LINEBUF
-Buffer overflow detected, LINEBUF was too small, memory might be corrupted.
+Buffer overflow detected, LINEBUF was too small, PROCMAIL_OVERFLOW has
+been set.
 .TP
 Excessive output quenched from "x"
 The program or filter "x" tried to produce too much output for the current
@@ -347,8 +353,9 @@ The start of a recipe was found, but it stranded in an EOF.
 .TP
 Insufficient privileges
 Procmail either needs root privileges, or must have the
-right (e)uid and (e)gid to run in delivery mode.  Delivery will proceed
-to the invoker.
+right (e)uid
+.B and
+(e)gid to run in delivery mode.  The mail will bounce.
 .TP
 Invalid regexp "x"
 The regular expression "x" contains errors (most likely some missing or
@@ -373,6 +380,9 @@ Procmail tried to clone itself but could not find back rcfile "x" (it either
 got removed or it was a relative path and you changed directory since
 procmail opened it last time).
 .TP
+Missing action
+The current recipe was found to be incomplete.
+.TP
 Missing closing brace
 A nesting block was started, but never finished.
 .TP
@@ -388,7 +398,7 @@ rcfile as argument.
 .TP
 Missing recipient
 You specified the \-@DELIVEROPT@ option or called procmail under a different
-name, it expects one or more recipients as arguments.
+name, it expects one or more recipients as arguments.@WARN_RESTRICT_EXEC@
 .TP
 No space left to finish writing "x"
 The filesystem containing "x" does not have enough free space to permit
@@ -414,8 +424,11 @@ Skipped: "x"
 Couldn't do anything with "x" in the rcfile (syntax error), ignoring it.
 .TP
 Suspicious rcfile "x"
-The owner of the rcfile was not the recipient or root, or the directory that
-contained it was world writable (the rcfile was not used).
+The owner of the rcfile was not the recipient or root, the file was
+world writable, or the directory that contained it was world writable,
+or this was the default rcfile (@PROCMAILRC@) and either it was group
+writable or the directory that contained it was group writable (the
+rcfile was not used).
 .TP
 Terminating prematurely whilst waiting for .\|.\|.
 Procmail received a signal while it was waiting for .\|.\|.
@@ -455,7 +468,7 @@ Procmail's pid and a timestamp.  Generated whenever procmail logs a
 diagnostic and at least a second has elapsed since the last timestamp.
 .TP
 Acquiring kernel-lock
-Procmail now tries to kernel-lock the most recently opened file(descriptor).
+Procmail now tries to kernel-lock the most recently opened file (descriptor).
 .TP
 Assigning "x"
 Environment variable assignment.
@@ -543,22 +556,25 @@ it to the filter itself, not to any of the filter's children.
 A continued
 .B Content-Length:
 field is not handled correctly.
+.PP
+The embedded newlines in a continued header should be skipped when
+matching instead of being treated as a single space as they are now.
 .SH MISCELLANEOUS
 If there is an existing
 .B Content-Length:
 field in the header of the mail and the
 .B \-@BERKELEYOPT@
-flag is not specified, procmail will trim the field to report the correct
+option is not specified, procmail will trim the field to report the correct
 size.  Procmail does not change the fieldwidth.
 .PP
 If there is no
 .B Content-Length:
 field or the
 .B \-@BERKELEYOPT@
-has been specified and procmail appends to regular mailfolders, any lines in
-the body of the message that look like postmarks are prepended with `@ESCAP@'
-(disarms bogus mailheaders).  The regular expression that is used to search
-for these postmarks is:
+option has been specified and procmail appends to regular mailfolders, any
+lines in the body of the message that look like postmarks are prepended with
+`@ESCAP@' (disarms bogus mailheaders).  The regular expression that is used
+to search for these postmarks is:
 .RS
 `@FROM_EXPR@'
 .RE
@@ -574,22 +590,25 @@ When in explicit delivery mode, procmail will generate a leading `@FROM@'
 line if none is present.  If one is already present procmail will leave it
 intact.@TRUSTED_IDS@
 .PP
-For security reasons procmail will only use an absolute or $HOME-relative
-rcfile if it is either owned by the recipient or root and not world writable,
-or if the directory it is contained in is not world writable.
+For security reasons procmail will only use an absolute or
+$HOME-relative rcfile if it is owned by the recipient or root, not
+world writable, and the directory it is contained in is not world
+writable.  The @PROCMAILRC@ file has the additional constraint of not
+being group-writable or in a group-writable directory.@RESTRICT_EXEC@
 .PP
-If @SYSTEM_MBOX@ is a bogus mailbox (i.e. does not belong to the recipient,
-is unwritable, is a symbolic link or is a hard link), procmail will upon
-startup try to rename it into a file starting with `@BOGUSprefix@' and
+If @MAILSPOOLDIR@$LOGNAME is a bogus mailbox (i.e. does not belong to the
+recipient, is unwritable, is a symbolic link or is a hard link), procmail will
+upon startup try to rename it into a file starting
+with `@BOGUSprefix@$LOGNAME.' and
 ending in an inode-sequence-code.  If this turns out to be impossible,
 .B ORGMAIL
 will have
 .I no
 initial value, and hence will inhibit delivery without a proper rcfile.
 .PP
-If @SYSTEM_MBOX@ already is a valid mailbox, but has got too loose permissions
-on it, procmail will correct this.  To prevent procmail from doing this make
-sure the u+x bit is set.
+If @MAILSPOOLDIR@$LOGNAME already is a valid mailbox, but has got too loose
+permissions on it, procmail will correct this.  To prevent procmail from doing
+this make sure the u+x bit is set.
 .PP
 When delivering to directories (or to MH folders) you
 .B don't
@@ -632,6 +651,14 @@ Procmail is NFS-resistant and eight-bit clean.
 Calling up procmail with the \-@HELPOPT1@ or \-@HELPOPT2@ options will cause
 it to display a command-line help and recipe flag quick-reference page.
 .PP
+There exists an excellent newbie FAQ about mailfilters (and procmail
+in particular), it is being maintained by Nancy McGough <nancym@ii.com>
+and can be obtained by sending a mail to mail-server@rtfm.mit.edu with
+the following in the body:
+.RS
+send usenet/news.answers/mail/filtering-faq
+.RE
+.PP
 @CF_procmail@
 In this case your $HOME/@DOT_FORWARD@ (beware, it
 .B has
@@ -660,15 +687,15 @@ or whenever you start reading mail):
 .Sx 17
 #!/bin/sh
 
-ORGMAIL=@SYSTEM_MBOX@
+ORGMAIL=@MAILSPOOLDIR@$LOGNAME
 
 if cd $HOME &&
  test \-s $ORGMAIL &&
- lockfile \-r0 \-l3600 .newmail.lock 2>/dev/null
+ lockfile \-r0 \-l@DEFlocktimeout@ .newmail.lock 2>/dev/null
 then
-  trap "rm \-f .newmail.lock" 1 2 3 15
+  trap "rm \-f .newmail.lock" 1 2 3 13 15
   umask 077
-  lockfile \-l3600 \-ml
+  lockfile \-l@DEFlocktimeout@ \-ml
   cat $ORGMAIL >>.newmail &&
    cat /dev/null >$ORGMAIL
   lockfile \-mu

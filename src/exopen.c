@@ -1,12 +1,12 @@
 /************************************************************************
  *	Collection of NFS resistant exclusive creat routines		*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: exopen.c,v 1.23 1994/06/28 16:56:05 berg Exp $";
+ "$Id: exopen.c,v 1.31 1999/02/21 19:37:12 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -18,14 +18,16 @@ static /*const*/char rcsid[]=
 int unique(full,p,mode,verbos,chownit)const char*const full;char*p;
  const mode_t mode;const int verbos,chownit;
 { unsigned long retry=mrotbSERIAL;int i;struct stat filebuf;
-  int nicediff,didnice=0;
+  int nicediff,didnice=0;char*orig;
   if(chownit&doCHOWN)		  /* semi-critical, try raising the priority */
    { nicediff=nice(0);SETerrno(0);nicediff-=nice(-NICE_RANGE);
      if(!errno)
 	didnice=1;
    }
+  *p=UNIQ_PREFIX;orig=p+1;
   do						  /* create unique file name */
-   { *p=UNIQ_PREFIX;p=ultoan(maskSERIAL&(retry-=irotbSERIAL)+(long)thepid,p+1);
+   { p=ultoan(maskSERIAL&(retry-=irotbSERIAL)+(long)thepid,orig);
+     *p++='.';
      strncpy(p,hostname(),HOSTNAMElen);p[HOSTNAMElen]='\0';
    }
 #ifndef O_CREAT
@@ -69,22 +71,39 @@ int myrename(old,newn)const char*const old,*const newn;
   i=hlink(old,newn);serrno=errno;unlink(old);SETerrno(serrno);
   return i;
 }
-		 /* hardlink with fallback for systems that don't support it */
-int hlink(old,newn)const char*const old,*const newn;
-{ if(link(old,newn))				      /* try a real hardlink */
-   { int i,serrno;struct stat stbuf;
-     serrno=errno;i=lstat(old,&stbuf);SETerrno(serrno);
-     if(i&&S_ISLNK(stbuf.st_mode))		/* no stat or symbolic link? */
-	goto retfail;				     /* yuk, don't accept it */
-     if(stbuf.st_nlink!=2)
-      { if(serrno!=EXDEV)		       /* failure due to filesystem? */
-	   goto retfail;		     /* try it by conventional means */
-#ifdef O_CREAT
-	if(0>(i=ropen(newn,O_WRONLY|O_CREAT|O_EXCL,stbuf.st_mode)))
-#endif
-retfail:   return -1;
-	rclose(i);
+
+						     /* NFS-resistant link() */
+int rlink(old,newn,st)const char*const old,*const newn;struct stat*st;
+{ if(link(old,newn))
+   { register int serrno,ret;struct stat sto,stn;
+     serrno=errno;ret= -1;
+#undef NEQ			       /* compare files to see if the link() */
+#define NEQ(what)	(sto.what!=stn.what)	       /* actually succeeded */
+     if(lstat(old,&sto)||(ret=1,lstat(newn,&stn)||
+	NEQ(st_dev)||NEQ(st_ino)||NEQ(st_uid)||NEQ(st_gid)||
+	S_ISLNK(sto.st_mode)))			    /* symlinks are also bad */
+      { SETerrno(serrno);
+	if(st&&ret>0)
+	   *st=sto;				       /* save the stat data */
+	return ret;				    /* it was a real failure */
       }
+     /*SETerrno(serrno);*/   /* we really succeeded, don't bother with errno */
    }
   return 0;
+}
+		 /* hardlink with fallback for systems that don't support it */
+int hlink(old,newn)const char*const old,*const newn;
+{ int ret;struct stat stbuf;
+  if(0<(ret=rlink(old,newn,&stbuf)))		      /* try a real hardlink */
+   { int fd;
+#ifdef O_CREAT				       /* failure due to filesystem? */
+     if(stbuf.st_nlink<2&&errno==EXDEV&&     /* try it by conventional means */
+	0<=(fd=ropen(newn,O_WRONLY|O_CREAT|O_EXCL,stbuf.st_mode)))
+      { rclose(fd);
+	return 0;
+      }
+#endif
+     return -1;
+   }
+  return ret;				 /* success, or the stat failed also */
 }

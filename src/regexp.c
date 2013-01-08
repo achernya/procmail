@@ -3,14 +3,15 @@
  *									*
  *	Seems to be perfect.						*
  *									*
- *	Copyright (c) 1991-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1991-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: regexp.c,v 1.53 1994/10/18 14:30:27 berg Exp $";
+ "$Id: regexp.c,v 1.64 1999/02/16 21:13:47 guenther Exp $";
 #endif
 #include "procmail.h"
+#include "sublib.h"
 #include "robust.h"
 #include "shell.h"
 #include "misc.h"
@@ -173,7 +174,7 @@ static void psimp(e)const struct eps*const e;
 	   goto fine;
 	 }
 	goto fine2;
-     case R_EOL:case R_SOL:		      /* match a newline (in effect) */
+     case R_SOL:			      /* match a newline (in effect) */
 	if(p[1]==R_SOL)
 	 { p++;
 	   if(e)
@@ -181,10 +182,12 @@ static void psimp(e)const struct eps*const e;
 	       goto fine;
 	    }
 	 }
-	else if(e)
-	 { r->opc='\n';
-	   goto fine;
-	 }
+	else
+     case R_EOL:
+	   if(e)
+	    { r->opc='\n';
+	      goto fine;
+	    }
 	goto fine2;
      case R_ESCAPE:					  /* quote something */
 	switch(*++p)
@@ -216,7 +219,7 @@ fine3:
 
 #define EOS(x)	(jj?Ceps e:(x))
 
-static int endgroup(p)register const char*const p;
+static int endgroup(p)register const uchar*const p;
 { switch(*p)
    { case R_OR:case R_END_GROUP:case '\0':
 	return 1;
@@ -440,7 +443,7 @@ char*bregexec(code,text,str,len,ign_case)struct eps*code;
   static struct eps sempty={OPC_SEMPTY,&sempty};
   static const struct jump nop={OPC_FILL};
   sempty.spawn= &sempty;			      /* static initialisers */
-  ign_case=!!ign_case;eom=0;stack= &sempty;initcode=code;
+  ign_case=ign_case?~(unsigned)0:0;eom=0;stack= &sempty;initcode=code;
   th1=ioffsetof(struct chclass,pos1);ot1=ioffsetof(struct chclass,pos2);
   other=Ceps&tswitch;pend=(const char*)str+len+1;	     /* two past end */
   if(str--==text||*str=='\n')
@@ -449,15 +452,17 @@ char*bregexec(code,text,str,len,ign_case)struct eps*code;
    { str++;
 begofline:
      i='\n';len++;
-     goto setups;
+     if(initcode->opc!=OPC_BOTEXT)
+	goto setups;
+     reg=initcode;initcode=Ceps&nop;thiss=Ceps&tswitch;
+     goto dobotext;
    }
   do
    { i= *++str;				 /* get the next real-text character */
-     if(ign_case&&i-'A'<='Z'-'A')
-	i+='a'-'A';			     /* transmogrify it to lowercase */
-     th1^=XOR1;ot1^=XOR1;		     /* switch this & other pc-stack */
-setups:
-     thiss=other;other=Ceps&tswitch;reg=initcode;		 /* pop from */
+     if(i-'A'<='Z'-'A')
+	i+=ign_case&'a'-'A';		     /* transmogrify it to lowercase */
+setups:					     /* switch this & other pc-stack */
+     th1^=XOR1;ot1^=XOR1;thiss=other;other=Ceps&tswitch;reg=initcode; /* pop */
      for(;;thiss=PC(reg=thiss,th1),PC(reg,th1)=0,reg=reg->next)	 /* pc-stack */
       { for(;;reg=stack->next,stack=stack->spawn)     /* pop from work-stack */
 	   for(;;)
@@ -472,6 +477,9 @@ setups:
 		    continue;
 		 case OPC_BOM-OPB:
 		    goto foundbom;
+		 case OPC_FILL-OPB:		/* nop, nothing points at it */
+		    if(thiss==Ceps&tswitch)
+		       goto nomatch;	     /* so the stack is always empty */
 		 case OPC_SEMPTY-OPB:
 		    goto empty_stack;
 		 case OPC_TSWITCH-OPB:
@@ -481,7 +489,7 @@ setups:
 		 case OPC_FIN-OPB:
 		       goto nobom;
 		 case OPC_BOTEXT-OPB:
-		    if(str<text)	       /* only at the very beginning */
+dobotext:	    if(str<text)	       /* only at the very beginning */
 		       goto yep;
 		    break;
 		 case OPC_CLASS-OPB:
@@ -491,7 +499,7 @@ setups:
 		 case OPC_DOT-OPB:			     /* dot-wildcard */
 		    if(i!='\n')
 yep:		       if(!PC(reg,ot1))		     /* state not yet pushed */
-			  PC(reg,ot1)=other,other=reg,PCp(reg,ot1)=pend;
+			  PC(reg,ot1)=other,PCp(other=reg,ot1)=pend;
 	       }
 	      break;
 	    }
@@ -504,8 +512,8 @@ pcstack_switch:;				   /* this pc-stack is empty */
   ;{ const char*start,*bom;
      do
       { i= *++str;			 /* get the next real-text character */
-	if(ign_case&&i-'A'<='Z'-'A')
-	   i+='a'-'A';			     /* transmogrify it to lowercase */
+	if(i-'A'<='Z'-'A')
+	   i+=ign_case&'a'-'A';		     /* transmogrify it to lowercase */
 	th1^=XOR1;ot1^=XOR1;start=pend;thiss=other;other=Ceps&tswitch;
 	reg=initcode;
 	for(;;							 /* pc-stack */
@@ -523,13 +531,13 @@ pcstack_switch:;				   /* this pc-stack is empty */
 		    case OPC_JUMP-OPB:reg=reg->next;
 		       continue;
 		    case OPC_BOM-OPB:
-		       if(eom)			       /* extended behaviour */
-			  goto setmatch;
-foundbom:	       reg=epso(reg,sizeof(union seps));start=(const char*)str;
+		       if(!eom)
+foundbom:		  start=(const char*)str;
+		       reg=epso(reg,sizeof(union seps));
 		       continue;
 		    case OPC_FILL-OPB:		/* nop, nothing points at it */
 		       if(thiss==Ceps&tswitch)
-			  goto setmatch;     /* so the stack is always empty */
+			  goto checkmatch;   /* so the stack is always empty */
 		    case OPC_SEMPTY-OPB:
 		       goto Empty_stack;
 		    case OPC_TSWITCH-OPB:
@@ -573,31 +581,29 @@ Pcstack_switch:;				   /* this pc-stack is empty */
      while(--len);				     /* still text to search */
 wrapup:
      switch(ign_case)
-      { case 0:case 1:ign_case=1;i='\n';		   /* just finished? */
+      { case 0:case ~(unsigned)0:ign_case=1;i='\n';	   /* just finished? */
 	case 2:ign_case++;str++;len=1;th1^=XOR1;ot1^=XOR1;start=pend;
 	   thiss=other;other=Ceps&tswitch;
 	   goto Empty_stack;			 /* check if we just matched */
       }
+checkmatch:
      if(eom)
-      { static char match[]=MATCHVAR;size_t mlen;char*q;
-setmatch:
+      { static const char match[]=MATCHVAR,amatch[]=AMATCHVAR;char*q;
 	if(bom<(char*)text)
 	   bom=(const char*)text;
 	if(eom>--pend)
 	   eom=pend;
-	mlen=eom-bom;match[STRLEN(match)-1]='\0';
+	len=eom-bom;
 	if(getenv(match)==(const char*)text)	     /* anal retentive match */
-	   tmemmove(q=(char*)text,bom,mlen),q[len]='\0',bom=q;
+	   tmemmove(q=(char*)text,bom,len),q[len]='\0',bom=q;
 	else
 	 { char*p;
-	   match[STRLEN(match)-1]='=';
-	   if(*bom=='\n')
-	      bom++;				/* strip one leading newline */
-	   primeStdout(match);p=realloc(Stdout,(Stdfilled+=mlen)+1);
-	   tmemmove(q=p+Stdfilled-(int)mlen,bom,mlen);retStdout(p);
+	   primeStdout(amatch);p=realloc(Stdout,(Stdfilled+=len)+1);
+	   tmemmove(q=p+Stdfilled-(int)len,bom,len);retbStdout(p);
 	 }
 	yell("Matched",q);
       }
    }
+nomatch:
   return (char*)eom;						   /* match? */
 }

@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmailrc.man,v 1.56 1994/10/31 18:02:12 berg Exp $
+.Id $Id: procmailrc.man,v 1.69 1999/02/26 01:00:42 guenther Exp $
 .TH PROCMAILRC 5 \*(Dt BuGless
 .na
 .SH NAME
@@ -18,7 +18,7 @@ man page.
 The rcfile can contain a mixture of environment variable assignments (some
 of which have special meanings to procmail), and recipes.  In their most
 simple appearance, the recipes are simply one line regular expressions
-that are searched for in the header of the arriving mail, the first recipe
+that are searched for in the header of the arriving mail.  The first recipe
 that matches is used to determine where the mail has to go (usually a file).
 If processing falls off the end of the rcfile, procmail will deliver the mail
 to
@@ -38,9 +38,9 @@ is found to match, processing of the rcfile will
 after the action line of this recipe has been executed.
 .PP
 Delivering recipes are those that cause header and/or body of the mail to
-be written into a file, absorbed by a program or forwarded to a mailaddress.
+be: written into a file, absorbed by a program or forwarded to a mailaddress.
 .PP
-Non-delivering recipes are those that cause the output of a program or
+Non-delivering recipes are: those that cause the output of a program or
 filter to be captured back by procmail or those that start a nesting block.
 .PP
 You can tell procmail to treat a
@@ -54,7 +54,7 @@ rcfile.
 By using any number of recipes you can presort your mail extremely
 straightforward into several mailfolders.  Bear in mind though that the mail
 can arrive concurrently in these mailfolders (if several procmail programs
-happen to run at the same time, not unlikely if a lot of mail arrives), to
+happen to run at the same time, not unlikely if a lot of mail arrives).  To
 make sure this does not result in a mess, proper use of lockfiles is highly
 recommended.
 .PP
@@ -64,7 +64,7 @@ and
 .B recipes
 can be freely intermixed in the rcfile. If any environment variable has
 a special meaning to procmail, it will be used appropriately the moment
-it is parsed. (i.e. you can change the current directory whenever you
+it is parsed (i.e. you can change the current directory whenever you
 want by specifying a new
 .BR MAILDIR ,
 switch lockfiles by specifying a new
@@ -105,7 +105,7 @@ extended regular expressions.  See also
 .BR "Extended regular expressions" .
 .PP
 Conditions are anded; if there are no conditions the result will be true
-be default.
+by default.
 .PP
 .I Flags
 can be any of the following:
@@ -121,14 +121,16 @@ Tell the internal egrep to distinguish between upper and lower case (contrary
 to the default which is to ignore case).
 .TP
 .B @ALSO_NEXT_RECIPE@
-This recipe will depend on the last preceding recipe (on the current
-block-nesting level) without the `@ALSO_NEXT_RECIPE@' or `@ALSO_N_IF_SUCC@'
-flag.  This allows you to chain actions that depend on a common condition.
+This recipe will not be executed unless the conditions on the last preceding
+recipe (on the current block-nesting level) without the `@ALSO_NEXT_RECIPE@' or
+`@ALSO_N_IF_SUCC@' flag matched as well.  This allows you to chain actions
+that depend on a common condition.
 .TP
 .B @ALSO_N_IF_SUCC@
-Has the same meaning as the `@ALSO_NEXT_RECIPE@' flag, but will depend on the
-.I successful
-completion of the immediately preceding recipe as well.
+Has the same meaning as the `@ALSO_NEXT_RECIPE@' flag, with the additional
+condition that the immediately preceding recipe must have been
+.I successfully
+completed before this recipe is executed.
 .TP
 .B @ELSE_DO@
 This recipe only executes if the immediately preceding recipe was not
@@ -138,14 +140,14 @@ following recipes with the '@ELSE_DO@' flag.  This allows you to specify
 .TP
 .B @ERROR_DO@
 This recipe only executes if the immediately preceding recipe
-.IR failed .
-This allows you to specify `error' actions.
+.IR failed
+(i.e. the action line was attempted, but resulted in an error).
 .TP
 .B @PASS_HEAD@
-Feed the header to the pipe (default).
+Feed the header to the pipe, file or mail destination (default).
 .TP
 .B @PASS_BODY@
-Feed the body to the pipe (default).
+Feed the body to the pipe, file or mail destination (default).
 .TP
 .B @FILTER@
 Consider the pipe as a filter.
@@ -158,7 +160,7 @@ of this mail.  This only makes sense on
 recipes.  The only non-delivering recipe this flag has an effect on is
 on a nesting block, in order to generate a carbon copy this will
 .B clone
-the running procmail process (lockfiles will not be inherited), whereas
+the running procmail process (lockfiles will not be inherited), whereby
 the clone will proceed as usual and the parent will jump across the block.
 .TP
 .B @WAIT_EXIT@
@@ -185,7 +187,7 @@ expressions.  To select them, the condition must start with:
 Invert the condition.
 .TP
 .B $
-Evaluate the remainder according to
+Evaluate the remainder of this condition according to
 .BR sh (1)
 substitution rules inside double quotes, skip leading whitespace,
 then reparse it.
@@ -201,9 +203,10 @@ decimal) number of bytes.
 Analogous to '<'.
 .TP
 .B "variablename \fI??\fP"
-Match the remainder against the value of this environment variable (this cannot
-be a pseudo variable).  Special cases are `B', `H', `HB' and `BH', which
-merely override the default header/body search area defined for this recipe.
+Match the remainder of this condition against the value of this environment
+variable (which cannot be a pseudo variable).  A special case is if
+variablename is equal to `B', `H', `HB' or `BH'; this merely overrides the
+default header/body search area defined by the initial flags on this recipe.
 .TP
 .B \e
 To quote any of the above at the start of the line.
@@ -228,7 +231,10 @@ of the characters $SHELLMETAS are spotted.  You can optionally prepend this
 pipe symbol with
 .IR variable= ,
 which will cause stdout of the program to be captured in the environment
-.IR variable .
+.I variable
+(procmail will
+.B not
+terminate processing the rcfile at this point).
 If you specify just this pipe symbol, without any program, then procmail will
 pipe the mail to stdout.
 .TP
@@ -246,14 +252,15 @@ the conditions leading up to the block, the flags `@PASS_HEAD@' and
 .PP
 Anything else will be taken as a mailbox name (either a filename or a
 directory, absolute or relative to the current directory (see MAILDIR)).
-If it is a (possibly yet inexistent) filename, the mail will be appended to it.
+If it is a (possibly yet nonexistent) filename, the mail will be appended to
+it.
 .PP
 If it is a directory, the mail will be delivered to a newly created, guaranteed
 to be unique file named $MSGPREFIX* in the specified directory.  If the
 directory name ends in "@MCDIRSEP@@chCURDIR@", then this directory is presumed
 to be an MH folder; i.e. procmail will use the next number it finds available.
 When procmail is delivering to directories, you can specify multiple
-directories to deliver to (using hardlinks).
+directories to deliver to (procmail will do so utilising hardlinks).
 .SS "Environment variable defaults"
 .TP 2.2i
 .B "LOGNAME, HOME and SHELL"
@@ -266,15 +273,19 @@ Your (the recipient's) defaults
 \&@DEFshellflags@
 .TP
 .BR ORGMAIL
-\&@SYSTEM_MBOX@
+\&@MAILSPOOLDIR@$LOGNAME
 .br
-(Unless \-@MAILFILTOPT@ has been specified, in which case it is unset)
+(Unless
+.B \-@MAILFILTOPT@
+has been specified, in which case it is unset)
 .TP
 .B MAILDIR
 \&@DEFmaildir@
 .br
 (Unless the name of the first successfully opened rcfile starts with
-`@chCURDIR@@MCDIRSEP@', in which case it defaults to `@chCURDIR@')
+`@chCURDIR@@MCDIRSEP@' or if
+.B \-@MAILFILTOPT@
+has been specified, in which case it defaults to `@chCURDIR@')
 .TP
 .B DEFAULT
 \&@DEFdefault@
@@ -285,6 +296,9 @@ Your (the recipient's) defaults
 .B SENDMAIL
 \&@DEFsendmail@
 .TP
+.B SENDMAILFLAGS
+\&@DEFflagsendmail@
+.TP
 .B HOST
 The current hostname
 .TP
@@ -292,6 +306,9 @@ The current hostname
 \&@DEFcomsat@
 .br
 (If an rcfile is specified on the command line)
+.TP
+.B PROCMAIL_VERSION
+\&@PM_VERSION@
 .TP
 .B LOCKEXT
 \&@DEFlockext@@PRESTENV@@LD_ENV_FIX@
@@ -422,7 +439,7 @@ If you're not using the
 facility don't worry about this one.  It specifies the program being
 called to forward any mail.
 .br
-It gets invoked as: "$SENDMAIL" "$@";
+It gets invoked as: "$SENDMAIL" "$SENDMAILFLAGS" "$@";
 .TP
 .B NORESRETRY
 Number of retries that are to be made if any `\fBprocess table full\fP',
@@ -455,7 +472,7 @@ should not exceed $LINEBUF characters before and after expansion.  If not
 specified, it defaults to @DEFlinebuf@.  This limit, of course, does
 .I not
 apply to the mail itself, which can have arbitrary line lengths, or could
-be a binary file for that matter.
+be a binary file for that matter.  See also PROCMAIL_OVERFLOW.
 .TP
 .B DELIVERED
 If set to `yes' procmail will pretend (to the mail agent) the mail
@@ -502,7 +519,20 @@ when acting as a generic mailfilter.
 .B INCLUDERC
 Names an rcfile (relative to the current directory) which will be included
 here as if it were part of the current rcfile.  Unlimited nesting is
-permitted.
+permitted.  As no checking is done on the permissions or ownership of the
+rcfile, users of
+.B INCLUDERC
+should make sure that only trusted users have write access to the included
+rcfile or the directory it is in.
+.TP
+.B PROCMAIL_VERSION
+The version number of the running procmail binary.
+.TP
+.B PROCMAIL_OVERFLOW
+This variable will be set to a non-empty value if procmail detects a
+buffer overflow.  See the
+.B BUGS
+section below for other details of operation when overflow occurs.
 .TP
 .B COMSAT
 .BR Comsat (8)/ biff (1)
@@ -514,7 +544,8 @@ to @COMSATservice@@SERV_ADDRsep@@COMSAThost@.@DROPPRIVS@
 .SS "Extended regular expressions"
 The following tokens are known to both the procmail internal egrep and the
 standard
-.BR egrep (1):
+.BR egrep (1)
+(beware that some egrep implementations include other non-standard extensions):
 .TP 1.0i
 .B ^
 Start of a line.
@@ -544,6 +575,10 @@ Either the sequence `de' or `abc'.
 .TP
 .B (abc)*
 Zero or more times the sequence `abc'.
+.TP
+.B \e.
+Matches a single dot; use \e to quote any of the magic characters to get
+rid of their special meaning.  See also $\e variable substitution.
 .PP
 These were only samples, of course, any more complex combination is valid
 as well.
@@ -628,6 +663,7 @@ lost.
 .BR aliases (5),
 .BR sendmail (8),
 .BR egrep (1),
+.BR regexp (5),
 .BR grep (1),
 .BR biff (1),
 .BR comsat (8),
@@ -638,24 +674,28 @@ lost.
 .SH BUGS
 The only substitutions of environment variables that can be handled by
 procmail itself are of the type $name, ${name}, ${name:-text}, ${name:+text},
-${name-text}, ${name+text}, $#, $n, $$, $?, $_, $\- and $=; whereas $_ will be
-substituted by the name of the current rcfile, $\- by $LASTFOLDER and $=
-will contain the score of the last recipe.
+${name-text}, ${name+text}, $\ename, $#, $n, $$, $?, $_, $\- and $=;
+whereby $\ename will be substituted by the
+all-magic-regular-expression-characters-disarmed
+equivalent of $name, $_ by the name of the current rcfile, $\- by
+$LASTFOLDER and $= will contain the score of the last recipe.
 When the
 .B \-@ARGUMENTOPT@
 or
 .B \-@MAILFILTOPT@
 options are used, "$@" will expand to respectively the specified argument
 (list); but only when passed as in the argument list to a
-program.@UPPERCASE_USERNAMES@
+program.
 .PP
 Procmail does not support the expansion of `~'.
 .PP
 A line buffer of length $LINEBUF is used when processing the
 .IR rcfile ,
-any expansions
-.B have
-to fit within this limit; if they don't, behaviour is undefined.
+any expansions that don't fit within this limit will be truncated and
+PROCMAIL_OVERFLOW will be set.  If the overflowing line is a condition
+or an action line, then it will be considered failed and procmail will
+continue processing.  If it is a variable assignment or recipe start
+line then procmail will abort the entire rcfile.
 .PP
 If the global lockfile has a
 .I relative
@@ -666,17 +706,38 @@ use
 .I absolute
 paths to specify global lockfiles).
 .PP
-A locallockfile on the recipe that marks the start of a nested block
-does not work as expected.
+If an rcfile has a
+.I relative
+path and when the rcfile is first opened
+.B MAILDIR
+contains a relative path, and if at one point procmail is instructed to
+clone itself and the current directory has changed since the rcfile was
+opened, then procmail will not be able to clone itself (remedy: use an
+.I absolute
+path to reference the rcfile or make sure MAILDIR contains an absolute
+path as the rcfile is opened).
+.PP
+A locallockfile on the recipe that marks the start of a non-forking nested
+block does not work as expected.
 .PP
 When capturing stdout from a recipe into an environment variable, exactly
 one trailing newline will be stripped.
 .SH MISCELLANEOUS
+If the regular expression contains `\fB@TO_key@\fP' it will be substituted by
+.na
+.nh
+`\fB@TO_substitute@\fP',
+which should catch all destination specifications containing a specific
+.IR address .
+.hy
+.ad
+.PP
 If the regular expression contains `\fB@TOkey@\fP' it will be substituted by
 .na
 .nh
 `\fB@TOsubstitute@\fP',
-which should catch all destination specifications.
+which should catch all destination specifications containing a specific
+.IR word .
 .hy
 .ad
 .PP
@@ -707,6 +768,9 @@ procmail accepts as true every string starting with: a non-zero value, `on',
 .PP
 If the action line of a recipe specifies a program, a sole backslash-newline
 pair in it on an otherwise empty line will be converted into a newline.
+.PP
+The regular expression engine built into procmail does not support named
+character classes.
 .SH NOTES
 Since unquoted leading whitespace is generally ignored in the rcfile you can
 indent everything to taste.
@@ -722,3 +786,7 @@ For
 complicated processing you can even consider calling
 .B procmail
 recursively.
+.PP
+In the old days, the `:0' that marks the beginning of a recipe, had to
+be changed to `:n', whereby `n' denotes the number of conditions that
+follow.

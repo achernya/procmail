@@ -1,12 +1,12 @@
 /************************************************************************
  *	Whatever is needed for (un)locking files in various ways	*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: locking.c,v 1.41 1994/08/18 13:44:59 berg Exp $";
+ "$Id: locking.c,v 1.51 1999/02/16 21:13:40 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -22,23 +22,24 @@ void lockit(name,lockp)char*name;char**const lockp;
   zombiecollect();
   if(*lockp)
    { if(!strcmp(name,*lockp))	/* compare the previous lockfile to this one */
-	return;			 /* they're equal, save yourself some effort */
+      { free(name);return;	 /* they're equal, save yourself some effort */
+      }
      unlock(lockp);		       /* unlock any previous lockfile FIRST */
    }				  /* to prevent deadlocks (I hate deadlocks) */
   if(!*name)
-     return;
+   { free(name);return;
+   }
   if(!strcmp(name,defdeflock))	       /* is it the system mailbox lockfile? */
    { locktype=doCHECK|doLOCK;
+     if(sgid!=gid&&setegid(sgid))      /* try and get some extra permissions */
 #ifndef fdlock
-     if(!accspooldir)
-      { yell("Bypassed locking",name);
-	return;
-      }
-     else
+	if(!accspooldir)
+	 { yell("Bypassed locking",name);
+	   free(name);return;
+	 }
 #endif
-	setegid(sgid);		       /* try and get some extra permissions */
+	;
    }
-  name=tstrdup(name); /* allocate now, so we won't hang on memory *and* lock */
   for(lcking|=lck_LOCKFILE;;)
    { yell("Locking",name);	    /* in order to cater for clock skew: get */
      if(!xcreat(name,LOCKperm,&t,locktype))    /* time t from the filesystem */
@@ -68,7 +69,7 @@ void lockit(name,lockp)char*name;char**const lockp;
 #ifdef EDQUOT						      /* NFS failure */
 	case EDQUOT:		      /* maybe it was a short term shortage? */
 #endif
-	case ENOENT:case ENOTDIR:case EIO:case EACCES:
+	case ENOENT:case ENOTDIR:case EIO:/*case EACCES:*/
 	   if(--permanent)
 	      goto ds;
 	   goto faillock;
@@ -103,9 +104,16 @@ term: { free(name);			     /* drop the preallocated buffer */
 void lcllock P((void))				    /* lock a local lockfile */
 { char*lckfile;			    /* locking /dev/null or | would be silly */
   if(tolock||strcmp(buf2,devnull)&&strcmp(buf2,"|"))
-   { lckfile=tolock?tolock:strcat(buf2,lockext);
+   { if(tolock)
+	lckfile=tstrdup(tolock);
+     else
+      { int len=strlen(buf2);
+	strcpy(len+strcpy(lckfile=malloc(len+strlen(lockext)+1),buf2),lockext);
+      }
      if(globlock&&!strcmp(lckfile,globlock))	 /* same as global lockfile? */
-	nlog("Deadlock attempted on"),logqnl(lckfile);
+      { nlog("Deadlock attempted on");logqnl(lckfile);
+	free(lckfile);
+      }
      else
 	lockit(lckfile,&loclock);
    }
@@ -152,7 +160,7 @@ int xcreat(name,mode,tim,chownit)const char*const name;const mode_t mode;
 #else
 #define REITflock	0
 #endif /* USEflock */
-static oldfdlock= -1;				    /* the fd we locked last */
+static int oldfdlock= -1;			    /* the fd we locked last */
 #ifndef NOfcntl_lock
 static struct flock flck;		/* why can't it be a local variable? */
 #define REITfcntl	1
@@ -175,12 +183,16 @@ int fdlock(fd)
    ssleep((unsigned)locksleep))
 #endif
    { zombiecollect();
-#ifndef NOfcntl_lock
-     flck.l_type=F_WRLCK;flck.l_whence=SEEK_SET;flck.l_len=0;
-     flck.l_start=tell(fd);
-#endif
 #ifdef USElockf
      oldlockoffset=tell(fd);
+#endif
+#ifndef NOfcntl_lock
+     flck.l_type=F_WRLCK;flck.l_whence=SEEK_SET;flck.l_len=0;
+#ifdef USElockf
+     flck.l_start=oldlockoffset;
+#else
+     flck.l_start=tell(fd);
+#endif
 #endif
      lcking|=lck_KERNEL;
 #ifndef NOfcntl_lock
@@ -227,6 +239,7 @@ ufcntl:
      oldfdlock=fd;lcking&=~lck_KERNEL;
      return ret;
    }
+  return 1;							/* timed out */
 }
 
 int fdunlock P((void))
@@ -238,7 +251,10 @@ int fdunlock P((void))
   i|=flock(oldfdlock,LOCK_UN);
 #endif
 #ifdef USElockf
-  lseek(oldfdlock,oldlockoffset,SEEK_SET);i|=lockf(oldfdlock,F_ULOCK,(off_t)0);
+  ;{ off_t curp=tell(oldfdlock);	       /* restore the position later */
+     lseek(oldfdlock,oldlockoffset,SEEK_SET);
+     i|=lockf(oldfdlock,F_ULOCK,(off_t)0);lseek(oldfdlock,curp,SEEK_SET);
+   }
 #endif
 #ifndef NOfcntl_lock
   flck.l_type=F_UNLCK;i|=fcntl(oldfdlock,F_SETLK,&flck);

@@ -1,6 +1,6 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 1.52 1994/09/27 15:03:52 berg Exp $*/
+/*$Id: manconf.c,v 1.64 1999/01/20 17:58:23 guenther Exp $*/
 
 #include "../patchlevel.h"
 #include "procmail.h"
@@ -8,7 +8,8 @@
 
 #define pn(name,val)	pnr(name,(long)(val))
 
-static char pm_version[]=VERSION,ffileno[]=DEFfileno,matchvar[]=MATCHVAR;
+static char pm_version[]=VERSION,ffileno[]=DEFfileno;
+static int lines;
 const char dirsep[]=DIRSEP,pmrc[]=PROCMAILRC;
 char pmrc2[]=PROCMAILRC;			     /* need a writable copy */
 static const char*const keepenv[]=KEEPENV,*const prestenv[]=PRESTENV,
@@ -37,17 +38,15 @@ static char*skltmark(nl,current)char**current;
 
 static void putcesc(i)
 { switch(i)
-   { case '|':case ':':printf("\\\\h'-\\\\w' 'u' ");	 /* breaking nospace */
-	break;
-     case '\\':i='e';
+   { case '\\':i='e';
 	goto twoesc;
-     case '\1':i='\n';			    /* \1 doubles for nroff newlines */
+     case '\1':i='\n';lines--;		    /* \1 doubles for nroff newlines */
 	goto singesc;
      case '\2':i='\\';			 /* \2 doubles for nroff backslashes */
 	goto singesc;
      case '\t':i='t';
 	goto fin;
-     case '\n':i='n';
+     case '\n':i='n';lines--;
 fin:	putchar('\\');putchar('\\');
 twoesc: putchar('\\');
 singesc:
@@ -57,22 +56,38 @@ singesc:
 }
 
 static void putsesc(a)const char*a;
-{ while(*a)
-     putcesc(*a++);
+{ int c,k;
+  for(c=0;;putcesc(c=k))
+     switch(k= *a++)
+      { case '\0':
+	   return;
+	case '|':case ':':
+	   if(c!=' ')	 /* only insert these if there wasn't a space before */
+	      printf("\\\\h'-\\\\w' 'u' ");		 /* breaking nospace */
+      }
 }
 
 const char*const*gargv;
 
 static void pname(name)const char*const name;
-{ static cmdcount;
-  if(!cmdcount)
-     freopen(*++gargv,"w",stdout),cmdcount=64;
-  cmdcount--;putchar('s');putchar('/');putchar('@');putsesc(name);putchar('@');
+{ static unsigned filecount;
+  static char*filebuf;
+  if(!filebuf&&!(filebuf=malloc(strlen(*gargv)+1+4+1)))
+     exit(EX_OSERR);
+  if(lines<=0)
+   { sprintf(filebuf,"%s.%04d",*gargv,filecount++);freopen(filebuf,"w",stdout);
+     lines=64;				  /* POSIX says commands are limited */
+   }		      /* some !@#$%^&*() implementations limit lines instead */
+  putchar('s');putchar('/');putchar('@');putsesc(name);putchar('@');
   putchar('/');
 }
 
 static void pnr(name,value)const char*const name;const long value;
-{ pname(name);printf("%ld/g\n",value);
+{ pname(name);printf("%ld/g\n",value);lines--;
+}
+
+static void putsg P((void))
+{ puts("/g");lines--;
 }
 
 static void plist(name,preamble,list,postamble,ifno,andor)
@@ -91,20 +106,20 @@ jin:	putsesc(*list);
      while(*++list);
      putsesc(postamble);
    }
-  puts("/g");
+  putsg();
 }
 
 static void ps(name,value)const char*const name,*const value;
-{ pname(name);putsesc(value);puts("/g");
+{ pname(name);putsesc(value);putsg();
 }
 
 static void pc(name,value)const char*const name;const int value;
-{ pname(name);putcesc(value);puts("/g");
+{ pname(name);putcesc(value);putsg();
 }
 
 main(argc,argv)const char*const argv[];
-{ char*p,*q;
-  gargv=argv;
+{ char*p;
+  gargv=argv+1;
 #ifdef CF_no_procmail_yet
   ps("CF_procmail","If procmail is\1\
 .I not\1\
@@ -117,17 +132,21 @@ yourself.");
 #endif
 #ifndef MAILBOX_SEPARATOR
   ps("DOT_FORWARD",".forward");
-  ps("FW_content","\"|IFS=' '&&exec /usr/local/bin/procmail -f-||\
+#ifdef buggy_SENDMAIL
+  ps("FW_content","\"|IFS=' '&&p=@BINDIR@/procmail&&test -f $p&&exec $p -Yf-||\
 exit 75 \2fB#\2fP\2fIYOUR_USERNAME\2fP\"");
 #else
+  ps("FW_content","\"|exec @BINDIR@/procmail\"");
+#endif
+#else
   ps("DOT_FORWARD",".maildelivery");
-  ps("FW_content","* - | ? \"IFS=' '&&exec /usr/local/bin/procmail -f-||\
-exit 75 \2fB#\2fP\2fIYOUR_USERNAME\2fP\"");
+  ps("FW_content","* - | ? \"IFS=' '&&p=@BINDIR@/procmail&&test -f $p&&\
+exec $p||exit 75 \2fB#\2fP\2fIYOUR_USERNAME\2fP\"");
 #endif
   plist("PRESTENV",
    "\1.na\1.PP\1Other cleared or preset environment variables are ",
    prestenv,".\1.ad",""," and ");
-  plist("KEEPENV",", except for the values of ",keepenv,"",""," and ");
+  plist("KEEPENV",", except for the value of ",keepenv,"",""," and ");
   plist("TRUSTED_IDS",
   "  If procmail is not invoked with one of the following user or group ids: ",
    trusted_ids,", but still has to generate or accept a new `@FROM@' line,\1\
@@ -135,22 +154,25 @@ it will generate an additional `@FAKE_FIELD@' line to help distinguish\1\
 fake mails.",""," or ");
   plist("KERNEL_LOCKING",
    "consistently uses the following kernel locking strategies:",krnllocks,"",
-   "\1doesn't use any additional kernel locking strategies","\1and");
+   "doesn't use any additional kernel locking strategies","\1and");
+#ifdef RESTRICT_EXEC
+  ps("RESTRICT_EXEC","\1.PP\1Users with userids >= @RESTRICT_EXEC_ID@ are\1\
+prevented from executing external programs from\1\
+within their own rcfiles");
+  pn("RESTRICT_EXEC_ID",RESTRICT_EXEC);
+  ps("WARN_RESTRICT_EXEC","\1.TP\1No permission to execute \"x\"\1\
+An attempt to execute a program from within the rcfile was blocked.");
+#else
+  ps("RESTRICT_EXEC","");
+  ps("WARN_RESTRICT_EXEC","");
+#endif
 #ifdef LD_ENV_FIX
   ps("LD_ENV_FIX","\1.PP\1For security reasons, procmail will wipe out all\
  environment variables starting with LD_ upon startup.");
 #else
   ps("LD_ENV_FIX","");
 #endif
-#ifdef NO_USER_TO_LOWERCASE_HACK
-  ps("UPPERCASE_USERNAMES","\1.PP\1If the standard\1.BR getpwnam() (3)\1\
-is case sensitive, and some users have login names with uppercase letters in\
- them, procmail will be unable to deliver mail to them, unless started with\
- their uid.");
-#else
-  ps("UPPERCASE_USERNAMES","");
-#endif
-  ps("SYSTEM_MBOX",SYSTEM_MBOX);
+  ps("MAILSPOOLDIR",MAILSPOOLDIR);
   ps("ETCRC_desc",etcrc?"\1.PP\1If no rcfiles and no\1.B \2-@PRESERVOPT@\1have\
  been specified on the command line, procmail will, prior to reading\
  @PROCMAILRC@, interpret commands from\1.B @ETCRC@\1(if present).\1\
@@ -199,7 +221,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   ps("console","sender");
   ps("aconsole",".");
 #endif
-  pname("INIT_UMASK");printf("0%lo/g\n",(unsigned long)INIT_UMASK);
+  pname("INIT_UMASK");printf("0%lo/g\n",(unsigned long)INIT_UMASK);lines--;
   pn("DEFlinebuf",DEFlinebuf);
   ps("BOGUSprefix",BOGUSprefix);
   ps("FAKE_FIELD",FAKE_FIELD);
@@ -207,6 +229,8 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   pn("HOSTNAMElen",HOSTNAMElen);
   pn("DEFsuspend",DEFsuspend);
   pn("DEFlocksleep",DEFlocksleep);
+  ps("TO_key",TO_key);
+  ps("TO_substitute",TO_substitute);
   ps("TOkey",TOkey);
   ps("TOsubstitute",TOsubstitute);
   ps("FROMDkey",FROMDkey);
@@ -219,13 +243,13 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   ps("DEFdefault",DEFdefault);
   ps("DEFmsgprefix",DEFmsgprefix);
   ps("DEFsendmail",DEFsendmail);
+  ps("DEFflagsendmail",DEFflagsendmail);
   ps("DEFlockext",DEFlockext);
   ps("DEFshellflags",DEFshellflags);
   pn("DEFlocktimeout",DEFlocktimeout);
   pn("DEFtimeout",DEFtimeout);
   pn("DEFnoresretry",DEFnoresretry);
-  matchvar[STRLEN(matchvar)-1]='\0';
-  ps("MATCHVAR",matchvar);
+  ps("MATCHVAR",MATCHVAR);
   ps("COMSAThost",COMSAThost);
   ps("COMSATservice",COMSATservice);
   ps("COMSATprotocol",COMSATprotocol);
@@ -303,9 +327,10 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
   pc("FM_FIRST_UNIQ",FM_FIRST_UNIQ);
   pc("FM_LAST_UNIQ",FM_LAST_UNIQ);
   pc("FM_ReNAME",FM_ReNAME);
+  pc("FM_VERSION",FM_VERSION);
   pn("EX_OK",EXIT_SUCCESS);
-  *(p=strchr(strchr(q=strchr(pm_version,' ')+1,' ')+1,' '))='\0';p++;
-  ps("PM_VERSION",q);
+  *(p=strchr(strchr(strchr(pm_version,' ')+1,' ')+1,' '))='\0';p++;
+  ps("PM_VERSION",PM_VERSION);
   ps("MY_MAIL_ADDR",skltmark(1,&p));
 #if 0
   ps("MY_ALT_MAIL_ADDR",skltmark(0,&p));
@@ -318,7 +343,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
 #else
   pc("POW",'x');
 #endif
-  ps("SETRUID",setruid(getuid())?"":	/* is setruid() a valid system call? */
+  ps("SETRUID",setRuid(getuid())?"":	/* is setruid() a valid system call? */
    " (or if procmail is already running with the recipient's euid and egid)");
   return EXIT_SUCCESS;
 }

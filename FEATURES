@@ -28,6 +28,7 @@ Feature summary for procmail:
 	+ Supports four mailfolder standards: single file folders (standard
 	  and nonstandard VNIX format), directory folders that contain one file
 	  per message, or the similar MH directory folders (numbered files)
+	+ Native support for /var/spool/mail/b/a/bar type mailspools
 	+ Variable assignment and substitution is an extremely complete subset
 	  of the standard /bin/sh syntax
 	+ Provides a mail log file, which logs all mail arrival, shows
@@ -38,7 +39,7 @@ Feature summary for procmail:
 	+ Does not impose *any* limits on line lengths, mail length (as long
 	  as memory permits), or the use of any character (any 8-bit character,
 	  including '\0' is allowed) in the mail
-	+ It has man pages (boy, does *it* have man pages)
+	+ It has man pages (boy, does it have man pages)
 	+ Procmail can be used as a local delivery agent with comsat/biff
 	  support (*fully* downwards compatible with /bin/mail); in which case
 	  it can heal your system mailbox, if something messes up the
@@ -48,7 +49,7 @@ Feature summary for procmail:
 	+ Provides for a controlled execution of programs and scripts from
 	  the aliases file (i.e. under defined user ids)
 	+ Allows you to painlessly shift the system mailboxes into the
-	  user's home directories
+	  users' home directories
 	+ It runs on virtually all (old and future) operating systems which
 	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
 	  code; POSIX, ANSI C and K&R conforming)

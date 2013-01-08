@@ -10,7 +10,33 @@
 2. I installed procmail (i.e. typed 'make install'), but how am I supposed to
    use it?  When I type procmail on the command line it simply does nothing.
 
+	***********************************************************************
+	There exists an excellent newbie FAQ about mailfilters (and procmail
+	in particular), it is being maintained by Nancy McGough <nancym@ii.com>
+	and can be obtained via:
+
+	World Wide Web (the nicest format for online reading!):
+http://www.cis.ohio-state.edu/hypertext/faq/usenet/mail/filtering-faq/faq.html
+
+	Anonymous FTP:
+	ftp://rtfm.mit.edu/pub/usenet/news.answers/mail/filtering-faq
+
+	Email:
+	Send mail to mail-server@rtfm.mit.edu containing the following:
+	    send usenet/news.answers/mail/filtering-faq
+
+	UUCP:
+	uunet!/archive/usenet/news.answers/mail/filtering-faq
+
+	It is also posted monthly in at least the following newsgroups:
+		comp.mail.misc, comp.answers, news.answers
+	***********************************************************************
+
 	You're not supposed to start procmail from the command line.
+	Procmail expects exactly one mail message to be presented to it
+	on its stdin.  Usually the mail system feeds it into procmail.
+	If you start it by hand, you have to type the mail.
+
 	Be sure to have a .forward and a .procmailrc file in your home
 	directory (see the examples subdirectory or the man page).
 	MMDF users should note that they need a .maildelivery file *instead*
@@ -23,13 +49,14 @@
 
 	On some systems .forward files are not checked.
 	It might be possible that your system supports a command like:
-		mail -F "|/usr/local/bin/procmail"
-	to set up forwarding to a program.
+		mail -F "|/usr/bin/procmail"
+	to set up forwarding to a program.  (If procmail is in /usr/local/bin
+	then use that path instead when trying these.)
 	If that doesn't seem to work it might be worth trying to put a line
 	looking like this:
-		Forward to |/usr/local/bin/procmail
+		Forward to |/usr/bin/procmail
 	or if that doesn't work, try:
-		Pipe to /usr/local/bin/procmail
+		Pipe to /usr/bin/procmail
 	as the only line in your mail spool file (e.g. /usr/mail/$LOGNAME), as
 	well as doing a "chmod 06660 /usr/mail/$LOGNAME".  For more information
 	on such systems, do a "man mail".
@@ -53,8 +80,10 @@
 	No, no problem at all, it just means I wrote the code :-).
 	That's just about the only uncommon coding technique I use (don't
 	think I don't try to avoid those jumps in loops, it's just that
-	sometimes they are the best way to code it).  Use gcc if you want
-	to avoid these warnings.
+	sometimes they are the best way to code it).  This warning, as
+	well as "statement not reached", can be ignored -- the compiler
+	will still generate correct code.  Use gcc if they really bother
+	you.
 
 5. The compiler complains about unmodifiable lvalues or assignments to const
    variables.  Now what?
@@ -71,7 +100,31 @@
 
 	Try compiling that module with optimisation turned off.
 
-7. When I send myself a testmail, the mail bounces with the message: cannot
+7. Everything installed just fine, it's just that there are several stale
+   _locktst processes which refuse to die.  How do I get rid of those?
+
+	In order to prevent things like this from happening to procmail,
+	_locktst tries to determine which kernel locking methods are
+	reliable.  Sometimes this triggers a bug in the kernel or in
+	your system-supplied lockd; this is good, because _locktst detects
+	this and makes sure that procmail will not make the same mistake.
+	A side effect is that this sometimes leaves behind some stale
+	_locktst processes that seem to be unkillable.
+
+	This usually is the result of a buggy lockdaemon.  In order to
+	get rid of the stale processes, ask your system administrator
+	to kill and restart the (rpc.)lockd (and perhaps the (rpc.)statd)
+	on both the filesystem-client (where you compiled procmail) and the
+	filesystem-server(s) (where the lockingtests took place).
+	Depending on the OS it might help if you send the offending
+	_locktst processes a kill signal before or after restarting the
+	lockd again.
+
+	In any case, _locktst just uncovered a bug in your operating system.
+	You should contact your system's vendor and ask for a bugfix for
+	your lockd.
+
+8. When I send myself a testmail, the mail bounces with the message: cannot
    execute binary file.	 What am I doing wrong?
 
 	It is very well possible that mail is processed on a different
@@ -81,7 +134,7 @@
 	get this right you might need to do some .forward file tweaking,
 	look at the examples/advanced file for some suggestions.
 
-8. Where do I look for examples about:
+9. Where do I look for examples about:
 	One home directory, several machine architectures?
 	Procmail as an integrated local mail delivery agent? (generic,
 	 sendmail, ZMailer, smail, SysV mailsurr)
@@ -94,11 +147,11 @@
 	Other examples (e.g. for autoreplies) are most likely to be found by
 	typing:		man procmailex
 
-9. How do I use procmail as a general mail filter inside sendmail?
+10. How do I use procmail as a general mail filter inside sendmail?
 
 	See EXAMPLES section of the procmail(1) man page.
 
-10. Why do I have to insert my login name after the '#' in the .forward or
+11. Why do I have to insert my login name after the '#' in the .forward or
    .maildelivery file?
 
 	Some mailers `optimise' maildelivery and take out duplicates from
@@ -108,7 +161,7 @@
 	it will make the .forward files unique, and will ensure that the mailer
 	doesn't optimise away some addresses.
 
-11. How do I view the man pages?
+12. How do I view the man pages?
 
 	If the man(1) program on your system understands the MANPATH
 	environment variable, make sure that the installation directory listed
@@ -119,14 +172,14 @@
 	them, you can view an individual man file by typing something like:
 	nroff -man procmail.1 | more
 
-12. The leading From_ line on all my arriving mail shows the wrong time.
+13. The leading From_ line on all my arriving mail shows the wrong time.
     Before putting procmail in the .forward file everything was OK.
 
 	This is a known bug in sendmail-5.65c+IDA.  The real fix would be
 	to upgrade to sendmail 6.x or later.  For a quick fix, see the
 	procmailex man page.
 
-13. When sending mail to someone with procmail in his/her .forward I sometimes
+14. When sending mail to someone with procmail in his/her .forward I sometimes
     get back an error saying: "Cannot mail directly to programs."
 
 	This is a known bug in some older sendmails that mistakenly drop
@@ -134,7 +187,7 @@
 	make sure that your sendmail always forwards to a mailserver first or
 	upgrade to sendmail 6.x or later.
 
-14. When sending mail to someone with procmail in his/her .forward I sometimes
+15. When sending mail to someone with procmail in his/her .forward I sometimes
     get back an error saying:
     "User doesn't have a valid shell for mailing to programs."
 
@@ -144,7 +197,7 @@
 	Contact your administrator to put the name of that shell in
 	/etc/shells.
 
-15. My mailtool sometimes reports that it is confused about the state of
+16. My mailtool sometimes reports that it is confused about the state of
     the mailbox, or I get "Couldn't unlock" errors from procmail now and then,
     or sometimes it simply seems to hang just when new mail arrives.
 
@@ -155,7 +208,7 @@
 	the compilation of procmail both the fcntl() and lockf() locking
 	methods are disabled (see config.h).
 
-16. I sometimes get these `Lock failure on "/usr/mail/$LOGNAME.lock"' errors
+17. I sometimes get these `Lock failure on "/usr/mail/$LOGNAME.lock"' errors
     from procmail.  What do I do about it?
 
 	The problem here is that as long as procmail has not read a
@@ -206,7 +259,24 @@
 	  and procmail use an overlapping kernel locking method.
 
 
-17. None of the above topics cover my problem.	Should I panic?
+18. Is procmail Y2K safe/compliant?
+
+	Both procmail and formail are Y2K compliant if your system's
+	libraries are Y2K compliant.  In particular, they use the
+	time_t type to hold the current time when it is needed and
+	print out the time using the ctime() library routine.
+
+	For those who have examined the code themselves, the casting of
+	a time_t value to unsigned long in formail.c is guaranteed to
+	work according to the current version of the C language
+	standard.  Future revisions of that standard may change that,
+	at which time formail will be updated to work with both the new
+	and the old standards.
+
+	Individual recipes and rcfiles may need to be checked for
+	unsafe date handling.
+
+19. None of the above topics cover my problem.	Should I panic?
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?

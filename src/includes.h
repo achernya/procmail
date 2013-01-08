@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.50 1994/10/20 18:14:29 berg Exp $*/
+/*$Id: includes.h,v 1.61 1999/02/14 23:53:27 srb Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -30,6 +30,7 @@
 				   getpid() execv() execvp() sleep() setuid()
 				   setgid() setruid() setrgid() setegid()
 				   chown() nice() ftruncate() truncate() */
+#undef EX_OK
 #else
 #undef UNISTD_H_MISSING
 #endif
@@ -79,15 +80,16 @@
 #endif
 #ifndef SYSLOG_H_MISSING
 #include <syslog.h>		/* openlog() syslog() closelog() LOG_EMERG
-				/* LOG_ALERT LOG_ERR LOG_NOTICE LOG_PID
-				   LOG_MAIL */
+				/* LOG_ALERT LOG_CRIT LOG_ERR LOG_NOTICE
+				   LOG_PID LOG_MAIL */
 #endif
 #include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN EXDEV */
 				/* EDQUOT ENOSPC */
 #ifndef SYSEXITS_H_MISSING
-#include <sysexits.h>		/* EX_USAGE EX_NOINPUT EX_NOUSER EX_UNAVAILABLE
-				   EX_OSERR EX_OSFILE EX_CANTCREAT EX_IOERR
-				   EX_TEMPFAIL EX_NOPERM */
+#include <sysexits.h>		/* EX_USAGE EX_DATAERR EX_NOINPUT EX_NOUSER
+				   EX_UNAVAILABLE EX_OSERR EX_OSFILE
+				   EX_CANTCREAT EX_IOERR EX_TEMPFAIL
+				   EX_NOPERM */
 #endif
 
 #ifdef STDLIB_H_MISSING
@@ -143,6 +145,7 @@ double pow();
 		/* Standard exit codes, original list maintained
 		   by Eric Allman (eric@berkeley.edu) */
 #define EX_USAGE	64
+#define EX_DATAERR	65
 #define EX_NOINPUT	66
 #define EX_NOUSER	67
 #define EX_UNAVAILABLE	69
@@ -177,7 +180,7 @@ double pow();
 #endif
 
 #ifndef EWOULDBLOCK
-#define EWOULDBLOCK	EACCES
+#define EWOULDBLOCK	EAGAIN
 #endif
 #ifndef EAGAIN
 #define EAGAIN		EINTR
@@ -308,6 +311,7 @@ extern int errno;
 #define syslog				(void)
 #define closelog()
 #define LOG_EMERG			0
+#define LOG_CRIT			0
 #define LOG_ALERT			0
 #define LOG_ERR				0
 #define LOG_NOTICE			0
@@ -329,6 +333,10 @@ extern int uname();					 /* so we fix it :-) */
 #endif /* NOuname */
 				 /* NEWS OS 5.X has the wrong prototype here */
 #define Fdopen(fd,type)		((FILE*)fdopen(fd,type))
+
+#ifdef u
+#undef u				       /* and the winner is: AIX 3.2 */
+#endif
 
 #ifndef strchr		   /* for very old K&R compatible include files with */
 #ifdef P						/* new K&R libraries */
@@ -397,6 +405,39 @@ extern void*memmove();
 #undef NOsetresgid
 #endif
 
+#ifdef setrgid_BRAIN_DAMAGE
+#undef setrgid_BRAIN_DAMAGE
+#ifdef setrgid
+#undef setrgid
+#endif
+#ifdef setruid
+#undef setruid
+#endif
+#define setrgid(gid)	(-1)		   /* and you think POSIX is broken? */
+#define setruid(uid)	(-1)			   /* BSD 4.4 just topped it */
+#endif
+
+#ifdef setrgid_RUNTIME_CHECK
+#undef setrgid_RUNTIME_CHECK
+#define setRgid(gid)	(setrgid(gid)||getgid()!=(gid))
+#define setRuid(uid)	(setruid(uid)||getuid()!=(uid))
+#else
+#define setRgid(gid)	setrgid(gid)
+#define setRuid(uid)	setruid(uid)
+#endif
+
+#ifdef NOinitgroups
+/*#undef NOinitgroups				 need this macro in autoconf */
+#define initgroups(n,g)
+#endif
+
+#ifdef INEFFICIENTrealloc
+#undef INEFFICIENTrealloc
+#define EXPBLKSIZ	4		    /* 4+3+2+1 = 10 bits total shift */
+#else
+#define EXPBLKSIZ	0
+#endif
+
 #ifdef NOpow
 #define tpow(x,y)	(x)
 #else
@@ -412,6 +453,10 @@ extern void*memmove();
 #undef NOftruncate
 #define ftruncate(fildes,length)	(-1)
 #define truncate(file,length)		(-1)
+#endif
+
+#ifdef NOfstat
+#define fstat(fd,st)	(-1)
 #endif
 
 #ifdef NOwaitpid
@@ -457,7 +502,8 @@ extern void*memmove();
 #define STRLEN(x)	(sizeof(x)-1)
 #define ioffsetof(s,m)	((int)offsetof(s,m))
 #define numeric(x)	((unsigned)(x)-'0'<='9'-'0')
-#define charNUM(num,v)	char num[8*sizeof(v)*4/10+1+1]
+#define sizeNUM(v)	(8*sizeof(v)*4/10+1+1)
+#define charNUM(num,v)	char num[sizeNUM(v)]
 
 #define mx(a,b)		((a)>(b)?(a):(b))
 
@@ -466,7 +512,3 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #undef uchar
 #endif
 #define uchar uschar
-
-#ifdef NO_const
-#undef NO_const
-#endif

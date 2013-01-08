@@ -1,12 +1,12 @@
 /************************************************************************
  *	Miscellaneous routines used by procmail				*
  *									*
- *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.66 1994/10/20 18:14:36 berg Exp $";
+ "$Id: misc.c,v 1.87 1999/02/19 07:24:38 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -21,11 +21,13 @@ static /*const*/char rcsid[]=
 #include "mcommon.h"
 #include "goodies.h"
 #include "locking.h"
+#include "../patchlevel.h"
 #ifndef NO_COMSAT
 #include "network.h"
 #endif
 #include "mailfold.h"
 #include "lastdirsep.h"
+#include "authenticate.h"
 
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
@@ -33,7 +35,8 @@ struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOGABSTRACT",DEFlogabstract}};
 struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
  {"MSGPREFIX",DEFmsgprefix},{"COMSAT",""},{"TRAP",""},
- {"SHELLFLAGS",DEFshellflags},{"DEFAULT",DEFdefault},{"SENDMAIL",DEFsendmail}};
+ {"SHELLFLAGS",DEFshellflags},{"DEFAULT",DEFdefault},{"SENDMAIL",DEFsendmail},
+ {"SENDMAILFLAGS",DEFflagsendmail},{"PROCMAIL_VERSION",PM_VERSION}};
 
 #define MAXvarvals	 maxindex(strenvvar)
 #define MAXvarstrs	 maxindex(strenstr)
@@ -45,7 +48,7 @@ static time_t oldtime;
 static int fakedelivery;
 		       /* line buffered to keep concurrent entries untangled */
 void elog(newt)const char*const newt;
-{ int lnew;size_t i;static lold;static char*old;char*p;
+{ int lnew;size_t i;static int lold;static char*old;char*p;
 #ifndef O_CREAT
   lseek(STDERR,(off_t)0,SEEK_END);	  /* locking should be done actually */
 #endif
@@ -82,7 +85,7 @@ void shutdesc P((void))
 
 void setids P((void))
 { if(rcstate!=rc_NORMAL)
-   { if(setrgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
+   { if(setRgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
 	setgid(gid);	   /* sets the saved gid as well; we can't use that! */
      setruid(uid);setuid(uid);setegid(gid);rcstate=rc_NORMAL;
 #if !DEFverbose
@@ -170,7 +173,11 @@ int nextrcfile P((void))	/* next rcfile specified on the command line */
   while(p= *gargv)
    { gargv++;
      if(!strchr(p,'='))
-      { rcfile=p;
+      { if(strlen(p)>linebuf-1)
+	 { nlog("Excessively long rcfile path skipped\n");
+	   continue;
+	 }
+	rcfile=p;
 	return rval;
       }
      rval=1;			       /* not the first argument encountered */
@@ -268,7 +275,7 @@ void Terminate P((void))
 	catlim(COMSATxtrsep);				 /* custom seperator */
 	if(lasttell>=0&&!strchr(dirsep,*lstfolder))    /* relative filename? */
 	   catlim(tgetenv(maildir)),catlim(MCDIRSEP_);	   /* prepend curdir */
-	catlim(lstfolder);s=socket(AF_INET,SOCK_DGRAM,UDP_protocolno);
+	catlim(lstfolder);s=socket(PF_INET,SOCK_DGRAM,UDP_protocolno);
 	sendto(s,buf,strlen(buf),0,(const void*)&addr,sizeof(addr));rclose(s);
 	yell("Notified comsat:",buf);
       }
@@ -290,7 +297,7 @@ void app_val(sp,val)struct dyna_long*const sp;const off_t val;
 { if(sp->filled==sp->tspace)			    /* growth limit reached? */
    { if(!sp->offs)
 	sp->offs=malloc(1);
-     sp->offs=realloc(sp->offs,(sp->tspace+=4)*sizeof sp->offs);   /* expand */
+     sp->offs=realloc(sp->offs,(sp->tspace+=4)*sizeof*sp->offs);   /* expand */
    }
   sp->offs[sp->filled++]=val;				     /* append to it */
 }
@@ -300,7 +307,9 @@ int alphanum(c)const unsigned c;
 }
 
 char*pmrc2buf P((void))
-{ sgetcp=pmrc;readparse(buf,sgetc,2);
+{ sgetcp=pmrc;
+  if(readparse(buf,sgetc,2))
+     buf[0]='\0';
   return buf;
 }
 
@@ -308,6 +317,10 @@ void setmaildir(newdir)const char*const newdir;		    /* destroys buf2 */
 { char*chp;
   didchd=1;*(chp=strcpy(buf2,maildir)+STRLEN(maildir))='=';
   strcpy(++chp,newdir);sputenv(buf2);
+}
+
+void setoverflow P((void))
+{ sputenv("PROCMAIL_OVERFLOW=yes");
 }
 
 void srequeue P((void))
@@ -334,23 +347,23 @@ void catlim(src)register const char*src;
 
 void setdef(name,contents)const char*const name,*const contents;
 { strcat(strcat(strcpy((char*)(sgetcp=buf2),name),"="),contents);
-  readparse(buf,sgetc,2);sputenv(buf);
+  if(!readparse(buf,sgetc,2))
+     sputenv(buf);
 }
 
 void metaparse(p)const char*p;				    /* result in buf */
 { if(sh=!!strpbrk(p,shellmetas))
      strcpy(buf,p);			 /* copy literally, shell will parse */
   else
-#ifndef GOT_bin_test
    { sgetcp=p=tstrdup(p);
-     readparse(buf,sgetc,0);				/* parse it yourself */
-     if(!strcmp(test,buf))
-	strcpy(buf,p),sh=1;			       /* oops, `test' found */
+     if(readparse(buf,sgetc,0)				/* parse it yourself */
+#ifndef GOT_bin_test
+	||!strcmp(test,buf)
+#endif
+	)
+	strcpy(buf,p),sh=1;		   /* oops, overflow or `test' found */
      free((char*)p);
    }
-#else
-     sgetcp=p,readparse(buf,sgetc,0);
-#endif
 }
 
 void concatenate(p)register char*p;
@@ -392,12 +405,16 @@ void setlastfolder(folder)const char*const folder;
    }
 }
 
-char*gobenv(chp)char*chp;
+char*gobenv(chp,end)char*chp,*end;
 { int found,i;
-  found=0;
+  found=0;end--;
   if(alphanum(i=getb())&&!numeric(i))
-     for(found=1;*chp++=i,alphanum(i=getb()););
+     for(found=1;*chp++=i,chp<end&&alphanum(i=getb()););
   *chp='\0';ungetb(i);
+  if(chp==end)							 /* overflow */
+   { nlog(exceededlb);setoverflow();
+     return end+1;
+   }
   switch(i)
    { case ' ':case '\t':case '\n':case '=':
 	if(found)
@@ -407,11 +424,18 @@ char*gobenv(chp)char*chp;
 }
 
 int asenvcpy(src)char*src;
-{ strcpy(buf,src);
-  if(src=strchr(buf,'='))			     /* is it an assignment? */
-   { const char*chp;
-     strcpy((char*)(sgetcp=buf2),++src);readparse(src,sgetc,2);
-     chp=sputenv(buf);src[-1]='\0';asenv(chp);
+{ const char*chp;
+  if(chp=strchr(src,'='))			     /* is it an assignment? */
+    /*
+     *	really change the uid now, since it would not be safe to
+     *	evaluate the extra command line arguments otherwise
+     */
+   { restrict=1;setids();strcpy(buf,src);src=buf+(chp-src);
+     strcpy((char*)(sgetcp=buf2),++src);
+     if(!readparse(src,sgetc,2))
+      { chp=sputenv(buf);src[-1]='\0';
+	asenv(chp);
+      }
      return 1;
    }
   return 0;
@@ -463,7 +487,7 @@ void asenv(chp)const char*const chp;
       }
    }
   else if(!strcmp(buf,lockfile))
-     lockit((char*)chp,&globlock);
+     lockit(tstrdup((char*)chp),&globlock);
   else if(!strcmp(buf,eumask))
      doumask((mode_t)strtol(chp,(char**)0,8));
   else if(!strcmp(buf,includerc))
@@ -550,24 +574,11 @@ char*egrepin(expr,source,len,casesens)char*expr;const char*source;
   return (char*)source;
 }
 
-const struct passwd*savepass(spass,uid)struct passwd*const spass;
- const uid_t uid;
-{ struct passwd*tpass;
-  if(spass->pw_name&&spass->pw_uid==uid)
-     goto ret;
-  if(tpass=getpwuid(uid))				  /* save by copying */
-   { spass->pw_uid=tpass->pw_uid;spass->pw_gid=tpass->pw_gid;
-     spass->pw_name=cstr(spass->pw_name,tpass->pw_name);
-     spass->pw_dir=cstr(spass->pw_dir,tpass->pw_dir);
-     spass->pw_shell=cstr(spass->pw_shell,tpass->pw_shell);
-ret: return spass;
-   }
-  return (const struct passwd*)0;
-}
-
-int enoughprivs(passinvk,euid,egid,uid,gid)const struct passwd*const passinvk;
+int enoughprivs(passinvk,euid,egid,uid,gid)const auth_identity*const passinvk;
  const uid_t euid,uid;const gid_t egid,gid;
-{ return euid==ROOT_uid||passinvk&&passinvk->pw_uid==uid||euid==uid&&egid==gid;
+{ return euid==ROOT_uid||
+   passinvk&&auth_whatuid(passinvk)==uid||
+   euid==uid&&egid==gid;
 }
 
 void initdefenv P((void))
@@ -585,6 +596,18 @@ const char*newdynstring(adrp,chp)struct dynstring**const adrp;
   tmemmove(curr->ename,chp,len);curr->enext= *adrp;*adrp=curr;
   return curr->ename;
 }
+
+void rcst_nosgid P((void))
+{ if(!rcstate)
+     rcstate=rc_NOSGID;
+}
+
+static void inodename(stbuf,i)const struct stat*const stbuf;const size_t i;
+{ static const char bogusprefix[]=BOGUSprefix;char*p;
+  p=strchr(strcpy(strcpy(buf+i,bogusprefix)+STRLEN(bogusprefix),
+   getenv(lgname)),'\0');
+  *p++='.';ultoan((unsigned long)stbuf->st_ino,p);	  /* i-node numbered */
+}
 			     /* lifted out of main() to reduce main()'s size */
 int screenmailbox(chp,chp2,egid,Deliverymode)
  char*chp;char*const chp2;const gid_t egid;const int Deliverymode;
@@ -594,21 +617,31 @@ int screenmailbox(chp,chp2,egid,Deliverymode)
   */
   *chp2='\0';buf[i=lastdirsep(chp)-chp]='\0';sgid=gid;
   if(!stat(buf,&stbuf))
-   { accspooldir=!!(stbuf.st_mode&(S_IWGRP|S_IWOTH))<<1|uid==stbuf.st_uid;
-     if((uid!=stbuf.st_uid&&
-	  stbuf.st_gid==egid||
-	 (rcstate=rc_NOSGID,0))&&
-	(stbuf.st_mode&S_ISGID||
-	 (stbuf.st_mode&(S_IWGRP|S_IXGRP|S_IWOTH))==(S_IWGRP|S_IXGRP)))
-      { doumask(GROUPW_UMASK);			   /* make it group-writable */
+   { unsigned wwsdir;
+     if(accspooldir=(wwsdir=			/* world writable spool dir? */
+	   (stbuf.st_mode&(S_IWGRP|S_IXGRP|S_IWOTH|S_IXOTH))==
+	   (S_IWGRP|S_IXGRP|S_IWOTH|S_IXOTH))
+	  <<1|						 /* note it in bit 1 */
+	 uid==stbuf.st_uid)	   /* we own the spool dir, note it in bit 0 */
+#ifdef TOGGLE_SGID_OK
+	;
+#endif
+	rcst_nosgid();			     /* we don't *need* setgid privs */
+     if(uid!=stbuf.st_uid&&		 /* we don't own the spool directory */
+	(stbuf.st_mode&S_ISGID||!wwsdir))	  /* it's not world writable */
+      { if(stbuf.st_gid==egid)			 /* but we have setgid privs */
+	   doumask(GROUPW_UMASK);		   /* make it group-writable */
 	goto keepgid;
       }
      else if(stbuf.st_mode&S_ISGID)
-keepgid:
-	sgid=stbuf.st_gid;	   /* keep the gid from the parent directory */
+keepgid:			   /* keep the gid from the parent directory */
+	if((sgid=stbuf.st_gid)!=egid)
+	   setgid(sgid);     /* we were started nosgid, but we might need it */
    }
   else				/* panic, mail-spool directory not available */
-     setids(),mkdir(buf,NORMdirperm);	     /* try creating the last member */
+   { int c;				     /* try creating the last member */
+     setids();c=buf[i-1];buf[i-1]='\0';mkdir(buf,NORMdirperm);buf[i-1]=c;
+   }
  /*
   *	  check if the default-mailbox-lockfile is owned by the
   *	  recipient, if not, mark it for further investigation, it
@@ -620,8 +653,7 @@ keepgid:
 	 renfbogus[]="Couldn't rename bogus \"%s\" into \"%s\"";
 	;{ int goodlock;
 	   if(!(goodlock=lstat(defdeflock,&stbuf)||stbuf.st_uid==uid))
-	      ultoan((unsigned long)stbuf.st_ino,	  /* i-node numbered */
-	       strchr(strcpy(buf+i,BOGUSprefix),'\0'));
+	      inodename(&stbuf,i);
 	  /*
 	   *	  check if the original/default mailbox of the recipient
 	   *	  exists, if it does, perform some security checks on it
@@ -646,29 +678,43 @@ boglock:	 if(!goodlock)		      /* try & rename bogus lockfile */
 	    }
 	 }
 	if(mboxstat>0||mboxstat<0&&(setids(),!lstat(chp,&stbuf)))
-	   if(!(stbuf.st_mode&S_IWUSR)||	     /* recipient can write? */
-	      S_ISLNK(stbuf.st_mode)||			/* no symbolic links */
-	      (S_ISDIR(stbuf.st_mode)?	      /* directories, yes, hardlinks */
-		!(stbuf.st_mode&S_IXUSR):stbuf.st_nlink!=1))	       /* no */
-	      goto bogusbox;		/* can't deliver to this contraption */
-	   else if(stbuf.st_uid!=uid)		      /* recipient not owner */
-bogusbox:   { ultoan((unsigned long)stbuf.st_ino,	  /* i-node numbered */
-	       strchr(strcpy(buf+i,BOGUSprefix),'\0'));		    /* bogus */
-	      nlog("Renaming bogus mailbox \"");elog(chp);elog("\" into");
-	      logqnl(buf);
-	      if(rename(chp,buf))	   /* try and move it out of the way */
-	       { syslog(LOG_EMERG,renfbogus,chp,buf);
-		 goto fishy;	    /* rename failed, something's fishy here */
-	       }
+	 { int checkiter=1;
+	   for(;;)
+	    { if(stbuf.st_uid!=uid||		      /* recipient not owner */
+		 !(stbuf.st_mode&S_IWUSR)||	     /* recipient can write? */
+		 S_ISLNK(stbuf.st_mode)||		/* no symbolic links */
+		 (S_ISDIR(stbuf.st_mode)?     /* directories, yes, hardlinks */
+		   !(stbuf.st_mode&S_IXUSR):stbuf.st_nlink!=1))	       /* no */
+		/*
+		 *	If another procmail is about to create the new
+		 *	mailbox, and has just made the link, st_nlink==2
+		 */
+		 if(checkiter--)	    /* maybe it was a race condition */
+		    suspend();		 /* close eyes, and hope it improves */
+		 else			/* can't deliver to this contraption */
+		  { inodename(&stbuf,i);nlog("Renaming bogus mailbox \"");
+		    elog(chp);elog("\" into");logqnl(buf);
+		    if(rename(chp,buf))	   /* try and move it out of the way */
+		     { syslog(LOG_EMERG,renfbogus,chp,buf);
+		       goto fishy;  /* rename failed, something's fishy here */
+		     }
+		    else
+		       syslog(LOG_ALERT,renbogus,chp,buf);
+		    goto nobox;
+		  }
 	      else
-		 syslog(LOG_ALERT,renbogus,chp,buf);
+		 break;
+	      if(lstat(chp,&stbuf))
+		 goto nobox;
 	    }					/* SysV type autoforwarding? */
-	   else if(Deliverymode&&stbuf.st_mode&(S_ISGID|S_ISUID))
+	   if(Deliverymode&&stbuf.st_mode&(S_ISGID|S_ISUID))
 	    { nlog("Autoforwarding mailbox found\n");
-	      return EX_NOUSER;
+	      exit(EX_NOUSER);
 	    }
 	   else
-	    { if(!(stbuf.st_mode&OVERRIDE_MASK)&&stbuf.st_mode&cumask)
+	    { if(!(stbuf.st_mode&OVERRIDE_MASK)&&
+		 stbuf.st_mode&cumask&
+		  (accspooldir?~(mode_t)0:~(S_IRGRP|S_IWGRP)))	/* hold back */
 	       { static const char enfperm[]=
 		  "Enforcing stricter permissions on";
 		 nlog(enfperm);logqnl(chp);
@@ -677,7 +723,9 @@ bogusbox:   { ultoan((unsigned long)stbuf.st_ino,	  /* i-node numbered */
 	       }
 	      break;				  /* everything is just fine */
 	    }
+	 }
       }
+nobox:
      if(!(accspooldir&1))	     /* recipient does not own the spool dir */
       { if(!xcreat(chp,NORMperm,(time_t*)0,doCHOWN|doCHECK))	   /* create */
 	   break;		   /* mailbox... yes we could, fine, proceed */
@@ -698,8 +746,8 @@ fishy:
 			     /* lifted out of main() to reduce main()'s size */
 int conditions(flags,prevcond,lastsucc,lastcond,nrcond)const char flags[];
  const int prevcond,lastsucc,lastcond;int nrcond;
-{ char*chp,*chp2,*startchar;double score;int scored,i;long tobesent;
-  static const char suppressed[]=" suppressed\n";
+{ char*chp,*chp2,*startchar;double score;int scored,i,skippedempty;
+  long tobesent;static const char suppressed[]=" suppressed\n";
   score=scored=0;
   if(flags[ERROR_DO]&&flags[ELSE_DO])
      nlog(conflicting),elog("else-if-flag"),elog(suppressed);
@@ -729,11 +777,30 @@ noconcat:
    if(flags[ALSO_NEXT_RECIPE])
       i=i&&lastcond;
    Stdout=0;
-   while(skipspace(),nrcond--,testb('*')||nrcond>=0)
-    { skipspace();getlline(buf2);		    /* any conditions (left) */
+   for(skippedempty=0;;)
+    { skipspace();--nrcond;
+      if(!testB('*'))			    /* marks a condition, new syntax */
+	 if(nrcond<0)		/* keep counting, for backward compatibility */
+	  { if(testB('#'))		      /* line starts with a comment? */
+	     { skipline();				    /* skip the line */
+	       continue;
+	     }
+	    if(testB('\n'))				 /* skip empty lines */
+	     { skippedempty=1;			 /* make a note of this fact */
+	       continue;
+	     }
+	    if(skippedempty&&testB(':'))
+	     { nlog("Missing action\n");i=2;
+	       goto ret;
+	     }
+	    break;		     /* no more conditions, time for action! */
+	  }
+      skipspace();
+      if(getlline(buf2))
+	 i=0;				       /* assume failure on overflow */
       if(i)					 /* check out all conditions */
        { int negate,scoreany;double weight,xponent,lscore;
-	 char*lstartchar=startchar;long ltobesent=tobesent;
+	 char*lstartchar=startchar;long ltobesent=tobesent,sizecheck=filled;
 	 for(chp=strchr(buf2,'\0');--chp>=buf2;)
 	  { switch(*chp)		  /* strip off whitespace at the end */
 	     { case ' ':case '\t':*chp='\0';
@@ -785,7 +852,7 @@ docon:			   concon(' ');
 			   goto partition;
 			 }
 			ltobesent=strlen(lstartchar=(char*)tgetenv(chp));
-partition:		chp2=skpspace(chp3+2);chp++;
+partition:		chp2=skpspace(chp3+2);chp++;sizecheck=ltobesent;
 			goto copyrest;
 		      }
 		   }
@@ -795,6 +862,7 @@ normalregexp:	{ int or_nocase;		/* case-distinction override */
 		  static const struct {const char*regkey,*regsubst;}
 		   *regsp,regs[]=
 		    { {FROMDkey,FROMDsubstitute},
+		      {TO_key,TO_substitute},
 		      {TOkey,TOsubstitute},
 		      {FROMMkey,FROMMsubstitute},
 		      {0,0}
@@ -820,8 +888,7 @@ jinregs:		regsp=regs;		/* start over and look again */
 		     igncase=or_nocase||!flags[DISTINGUISH_CASE];
 		     if(scoreany)
 		      { struct eps*re;
-			re=bregcomp(chp,igncase);
-			chp=lstartchar;
+			re=bregcomp(chp,igncase);chp=lstartchar;
 			if(negate)
 			 { if(weight&&!bregexec(re,(const uchar*)chp,
 			    (const uchar*)chp,(size_t)ltobesent,igncase))
@@ -859,7 +926,9 @@ jinregs:		regsp=regs;		/* start over and look again */
 		   }
 		  break;
 		}
-	       case '$':*buf2='"';squeeze(chp);readparse(buf,sgetc,2);
+	       case '$':*buf2='"';squeeze(chp);
+		  if(readparse(buf,sgetc,2)&&(i=0,1))
+		     break;
 		  strcpy(buf2,skpspace(buf));
 		  goto copydone;
 	       case '!':negate^=1;chp2=skpspace(chp);
@@ -879,28 +948,31 @@ copyrest:	  strcpy(buf,chp2);
 		      i=0;
 		   strcpy(buf2,buf);
 		   break;
-	       case '>':case '<':readparse(buf,sgetc,2);
+	       case '>':case '<':
 		{ long pivot;
-		   ;{ char*chp3;
+		  if(readparse(buf,sgetc,2)&&(i=0,1))
+		     break;
+		  ;{ char*chp3;
 		     pivot=strtol(buf+1,&chp3,10);chp=chp3;
 		   }
 		  skipped(skpspace(chp));strcpy(buf2,buf);
 		  if(scoreany)
 		   { double f;
 		     if((*buf=='<')^negate)
-			if(filled)
-			   f=(double)pivot/filled;
+			if(sizecheck)
+			   f=(double)pivot/sizecheck;
 			else if(pivot>0)
 			   goto plusinfty;
 			else
 			   goto mininfty;
 		     else if(pivot)
-			f=(double)filled/pivot;
+			f=(double)sizecheck/pivot;
 		     else
 			goto plusinfty;
 		     score+=weight*tpow(f,xponent);
 		   }
-		  else if(!((*buf=='<'?filled<pivot:filled>pivot)^negate))
+		  else if(!((*buf=='<'?sizecheck<pivot:sizecheck>pivot)^
+		   negate))
 		     i=0;
 		}
 	     }
@@ -935,5 +1007,6 @@ skiptrue:;
       lastscore=1;					 /* round up +0 to 1 */
    if(scored&&i&&score<=0)
       i=0;					     /* it was not a success */
+ret:
    return i;
 }

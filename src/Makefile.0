@@ -1,18 +1,17 @@
-
-#$Id: Makefile.0,v 1.40 1994/09/28 19:58:36 berg Exp $
+#$Id: Makefile.0,v 1.51 1999/01/20 17:58:19 guenther Exp $
 
 PM_OBJ=cstdio.$(O) common.$(O) exopen.$(O) goodies.$(O) locking.$(O) \
  mailfold.$(O) misc.$(O) pipes.$(O) regexp.$(O) robust.$(O) sublib.$(O) \
- acommon.$(O) mcommon.$(O) lastdirsep.$(O)
-LF_OBJ=exopen.$(O) sublib.$(O) acommon.$(O) mcommon.$(O)
+ acommon.$(O) mcommon.$(O) lastdirsep.$(O) authenticate.$(O)
+LF_OBJ=exopen.$(O) sublib.$(O) acommon.$(O) mcommon.$(O) authenticate.$(O)
 FM_OBJ=common.$(O) fields.$(O) formisc.$(O) sublib.$(O) ecommon.$(O) \
  acommon.$(O)
 MG_OBJ=sublib.$(O) ecommon.$(O) mcommon.$(O) hsort.$(O) lastdirsep.$(O)
 
 all:	$(BINSS)
 
-make:
-	@$(SHELL) -c "exit 0"			# fake target
+make:							# fake target
+	@$(SHELL) -c "exit 0"
 
 .PRECIOUS: Makefile
 
@@ -41,8 +40,8 @@ _autotst: _autotst.$(O) sublib.c sublib.h
 ../autoconf.h: autoconf Makefile
 	@echo No this was not make -n >make_n
 	$(SHELL) ./autoconf $(SHELL) "$(RM)" "$(MV)" $(DEVNULL) \
-	 "$(FGREP)" "$(MAKE)" $(O) "$(LOCKINGTEST)" \
-	 "$(BINDIR)" $@
+ "$(FGREP)" "$(MAKE)" $(O) "$(LOCKINGTEST)" \
+ "$(VISIBLE_BINDIR)" $@
 
 autoconf.h: ../autoconf.h
 
@@ -53,6 +52,10 @@ targetdir.h:
 	exit 64
 
 acommon.$(O): ../autoconf.h ../config.h includes.h acommon.h robust.h shell.h
+
+authenticate.$(O): ../autoconf.h ../config.h includes.h robust.h shell.h
+authenticate.$(O): misc.h authenticate.h authenticate.c
+	$(CC) -c -DPROCMAIL $(CFLAGS) $*.c
 
 common.$(O): ../autoconf.h ../config.h includes.h procmail.h sublib.h robust.h
 common.$(O): shell.h misc.h common.h
@@ -70,6 +73,7 @@ fields.$(O): common.h fields.h ecommon.h formisc.h
 
 formail.$(O): ../autoconf.h ../config.h includes.h formail.h acommon.h sublib.h
 formail.$(O): shell.h common.h fields.h ecommon.h formisc.h header.h
+formail.$(O): ../patchlevel.h
 
 formisc.$(O): ../autoconf.h ../config.h includes.h formail.h sublib.h shell.h
 formisc.$(O): common.h ecommon.h formisc.h
@@ -82,6 +86,7 @@ hsort.$(O): ../autoconf.h ../config.h includes.h hsort.h
 lastdirsep.$(O): ../autoconf.h ../config.h includes.h lastdirsep.h
 
 lockfile.$(O): ../autoconf.h ../config.h includes.h sublib.h exopen.h mcommon.h
+lockfile.$(O): authenticate.h ../patchlevel.h
 
 locking.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
 locking.$(O): misc.h pipes.h exopen.h locking.h lastdirsep.h
@@ -92,9 +97,10 @@ mailfold.$(O): goodies.h locking.h mailfold.h
 
 mcommon.$(O): ../autoconf.h ../config.h includes.h mcommon.h
 
-misc.$(O): ../autoconf.h ../config.h includes.h procmail.h acommon.h sublib.h
-misc.$(O): robust.h shell.h misc.h pipes.h common.h cstdio.h exopen.h regexp.h
-misc.$(O): mcommon.h goodies.h locking.h network.h mailfold.h lastdirsep.h
+misc.$(O): ../autoconf.h ../config.h ../patchlevel.h includes.h procmail.h
+misc.$(O): acommon.h sublib.h robust.h shell.h misc.h pipes.h common.h cstdio.h
+misc.$(O): exopen.h regexp.h mcommon.h goodies.h locking.h network.h mailfold.h
+misc.$(O): lastdirsep.h authenticate.h
 
 multigram.$(O): ../autoconf.h ../config.h includes.h sublib.h hsort.h shell.h
 multigram.$(O): ecommon.h mcommon.h lastdirsep.h targetdir.h
@@ -106,10 +112,10 @@ pipes.$(O): mailfold.h
 procmail.$(O): ../patchlevel.h ../autoconf.h ../config.h includes.h procmail.h
 procmail.$(O): acommon.h sublib.h robust.h shell.h misc.h pipes.h common.h
 procmail.$(O): cstdio.h exopen.h regexp.h mcommon.h goodies.h locking.h
-procmail.$(O): mailfold.h lastdirsep.h
+procmail.$(O): mailfold.h lastdirsep.h authenticate.h
 
-regexp.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
-regexp.$(O): misc.h regexp.h goodies.h
+regexp.$(O): ../autoconf.h ../config.h includes.h procmail.h sublib.h robust.h
+regexp.$(O): shell.h misc.h regexp.h goodies.h
 
 robust.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
 robust.$(O): misc.h pipes.h common.h mailfold.h shell.h
@@ -117,7 +123,6 @@ robust.$(O): misc.h pipes.h common.h mailfold.h shell.h
 sublib.$(O): ../autoconf.h ../config.h includes.h sublib.h shell.h
 
 gethome.$(O) setid.$(O) recommend.$(O): ../autoconf.h ../config.h includes.h
-recommend.$(O): lastdirsep.h
 
 gethome.$(O): gethome.c
 	@$(CC) -c $(CFLAGS) $*.c
@@ -134,26 +139,30 @@ recommend.$(O): recommend.c
 gethome: gethome.$(O) setid
 	@$(CC) $(CFLAGS) $@.$(O) -o $@ $(LDFLAGS)
 
+getparams:
+	@echo "ln=\"$(LN)\"" >../SmartList/targetdir.tmp
+
 setid: setid.$(O)
 	@$(CC) $(CFLAGS) $@.$(O) -o $@ $(LDFLAGS)
 
-recommend: recommend.$(O) sublib.$(O) lastdirsep.$(O)
-	@$(CC) $(CFLAGS) $@.$(O) sublib.$(O) lastdirsep.$(O) -o $@ $(LDFLAGS)
+recommend: recommend.$(O) sublib.$(O)
+	@$(CC) $(CFLAGS) $@.$(O) sublib.$(O) -o $@ $(LDFLAGS)
 
 ../man/man.sed: manconf.c ../autoconf.h ../config.h includes.h procmail.h
 ../man/man.sed: ../patchlevel.h lastdirsep.h lastdirsep.$(O)
-	@$(CC) $(CFLAGS) "-DBINDIR=\"$(BINDIR)\"" -o _autotst manconf.c \
-	 lastdirsep.$(O) $(LDFLAGS)
-	@./_autotst $@ $@.0 $@.1
+	@$(CC) $(CFLAGS) "-DBINDIR=\"$(VISIBLE_BINDIR)\"" -o _autotst \
+ manconf.c lastdirsep.$(O) $(LDFLAGS)
+	@./_autotst $@
+	@echo Housekeeping file >$@
 	@$(RM) _autotst
 
 clean:
 	$(RM) -r _locktest
 	$(RM) procmail.$(O) $(PM_OBJ) lockfile.$(O) $(LF_OBJ) formail.$O \
-	 $(FM_OBJ) multigram.$(O) $(MG_OBJ) $(BINSS) multigram ../autoconf.h \
-	 _autotst* lookfor _locktst* grepfor recommend recommend.$(O) manconf \
-	 _Makefile lock.log *core* targetdir.h setid setid.$(O) gethome \
-	 gethome.$(O) make_n
+ $(FM_OBJ) multigram.$(O) $(MG_OBJ) $(BINSS) multigram ../autoconf.h \
+ _autotst* lookfor _locktst* grepfor recommend recommend.$(O) manconf \
+ _Makefile lock.log *core* targetdir.h setid setid.$(O) gethome \
+ gethome.$(O) make_n
 
 Makefile: ../Makefile Makefile.0
 	@echo "You have made changes to the master Makefile, in order for"

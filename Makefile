@@ -1,21 +1,25 @@
-#$Id: Makefile,v 1.65 1994/10/07 15:23:44 berg Exp $
+#$Id: Makefile,v 1.73 1997/04/28 00:27:40 srb Exp $
 
 # BASENAME should point to where the whole lot will be installed
 # change BASENAME to your home directory if need be
-BASENAME = /usr/local
+BASENAME	= /usr
+# For display in the man pages
+VISIBLE_BASENAME= $(BASENAME)
 
 # You can predefine ARCHITECTURE to a bin directory suffix
-ARCHITECTURE=
-#ARCHITECTURE=.sun4
+ARCHITECTURE	=
+#ARCHITECTURE	=.sun4
 
-BINDIR	  = $(BASENAME)/bin$(ARCHITECTURE)
-MANDIR	  = $(BASENAME)/man
+BINDIR_TAIL	= bin$(ARCHITECTURE)
+MANDIR		= $(BASENAME)/man
+BINDIR		= $(BASENAME)/$(BINDIR_TAIL)
+VISIBLE_BINDIR	= $(VISIBLE_BASENAME)/$(BINDIR_TAIL)
 # MAN1SUFFIX for regular utility manuals
-MAN1SUFFIX= 1
+MAN1SUFFIX	=1
 # MAN5SUFFIX for file-format descriptions
-MAN5SUFFIX= 5
-MAN1DIR	  = $(MANDIR)/man$(MAN1SUFFIX)
-MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
+MAN5SUFFIX	=5
+MAN1DIR		= $(MANDIR)/man$(MAN1SUFFIX)
+MAN5DIR		= $(MANDIR)/man$(MAN5SUFFIX)
 
 # Uncomment to install compressed man pages (possibly add extra suffix
 # to the definitions of MAN?DIR and/or MAN?SUFFIX by hand)
@@ -71,15 +75,15 @@ LOCKINGTEST=__defaults__
 
 # Optional system libraries we search for
 SEARCHLIBS = -lm -ldir -lx -lsocket -lnet -linet -lnsl_s -lnsl_i -lnsl -lsun \
- -lgen -lsockdns
+ -lgen -lsockdns -ldl
 #			-lresolv	# not really needed, is it?
 
 # Informal list of directories where we look for the libraries in SEARCHLIBS
 LIBPATHS=/lib /usr/lib /usr/local/lib
 
-GCC_WARNINGS = -O2 -pedantic -Wimplicit -Wreturn-type -Wunused -Wformat \
- -Wtraditional -Wshadow -Wid-clash-6 -Wpointer-arith -Wconversion \
- -Waggregate-return #-Wuninitialized
+GCC_WARNINGS = -O2 -pedantic -Wreturn-type -Wunused -Wformat -Wtraditional \
+ -Wpointer-arith -Wconversion -Waggregate-return \
+ #-Wimplicit -Wshadow -Wid-clash-6 #-Wuninitialized
 
 # The place to put your favourite extra cc flag
 CFLAGS0 = -O #$(GCC_WARNINGS)
@@ -117,13 +121,13 @@ make:
 
 init:
 	$(BSHELL) ./initmake $(BSHELL) "$(SHELL)" "$(RM)" "$(MV)" "$(LN)" \
-	 "$(SEARCHLIBS)" \
-	 "$(LIBPATHS)" \
-	 $(DEVNULL) "$(MAKE)" $(O) \
-	 "$(CC)" "$(CFLAGS1)" "$(LDFLAGS1)" "$(BINSS)" \
-	 "$(MANS1S)" \
-	 "$(MANS5S)" "$(SUBDIRS)" \
-	 "$(BINDIR)"
+ "$(SEARCHLIBS)" \
+ "$(LIBPATHS)" \
+ $(DEVNULL) "$(MAKE)" $(O) \
+ "$(CC)" "$(CFLAGS1)" "$(LDFLAGS1)" "$(BINSS)" \
+ "$(MANS1S)" \
+ "$(MANS5S)" "$(SUBDIRS)" \
+ "$(VISIBLE_BINDIR)"
 
 makefiles makefile Makefiles Makefile: init
 	@$(BSHELL) -c "exit 0"

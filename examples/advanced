@@ -9,6 +9,10 @@ Discusses:
 		3. Changing the mail spool directory to $HOME for all users
 		4. Security considerations (when installing procmail suid root)
 
+NOTE: This file refers to the procmail binary being located in
+/usr/bin.  Some systems may place procmail in other locations such as
+/usr/local/bin.  Talk with your sysadmin if you are not sure.
+
 				---
 
 1. One home directory, several machine architectures
@@ -17,7 +21,7 @@ Discusses:
 For users that have the very same home directory on machines with differing
 architectures (i.e. you need different executables), and they
 have to explicitly use (i.e. the system administrator did not arrange,
-for example, /usr/local/bin/procmail to have exactly the right contents
+for example, /usr/bin/procmail to have exactly the right contents
 depending on from which machine it is called) two executables of procmail,
 I have the following suggestion to use as a .forward file (examples are for
 sparc and sun3 architectures):
@@ -43,13 +47,13 @@ YOUR_LOGIN_NAME@your.favourite.machine
 
 And, in a second file named .forward.your.favourite.machine you put:
 
-"|exec /usr/local/bin/procmail #YOUR_USERNAME"
+"|exec /usr/bin/procmail #YOUR_USERNAME"
 
 If you have an older sendmail, you could put something like the following two
 lines in your .forward file:
 
 YOUR_LOGIN_NAME@your.favourite.machine
-"|IFS=' ';test .`/bin/uname -n` != .your.favourite.machine || exec /usr/local/bin/procmail #YOUR_USERNAME"
+"|IFS=' ';test .`/bin/uname -n` != .your.favourite.machine || exec /usr/bin/procmail #YOUR_USERNAME"
 
 The leading dots are important.	 Check what `/bin/uname -n` returns on
 your.favourite.machine, and substitute that for your.favourite.machine in the
@@ -60,7 +64,7 @@ With some sendmails, the last suggestion causes you to get a superfluous
 copy in the system mailfolder.	If that is the case, you'll have to change
 your .forward to something like:
 
-"|IFS=' ';if test .`/bin/uname -n` = .your.favourite.machine ; then exec /usr/local/bin/procmail; else exec /usr/lib/sendmail -oi YOUR_LOGIN_NAME@your.favourite.machine; fi"
+"|IFS=' ';if test .`/bin/uname -n` = .your.favourite.machine ; then exec /usr/bin/procmail; else exec /usr/lib/sendmail -oi YOUR_LOGIN_NAME@your.favourite.machine; fi"
 
 				---
 
@@ -75,6 +79,14 @@ just makes the use of procmail easier because people are not required to
 start up procmail from within their .forward files.  Creation of a .procmailrc
 file will suffice.
 
+N.B. If you *are* installing it as the local delivery agent, and users on
+     your system have dormant .procmailrc files without corresponding
+     .forward file.  Then, after the installation, these dormant .procmailrc
+     files will be automagically activated/used (so you might want to rename
+     any dormant .procmailrc files out of the way and notify the users; do be
+     careful, since some users might invoke procmail through other means
+     (cron or login) and might be surprised if it stops working).
+
 The generic way to accomplish this (works with sendmail, smail and any other
 mail system that uses a local mail delivery program that takes the mail-
 to-be-delivered on stdin and the recipient(s) on the command line, with or
@@ -82,7 +94,7 @@ without the "-d" option) is this:
 
 Move your current local mail delivery agent (e.g. /bin/mail, /bin/lmail,
 /usr/lib/mail/mail.local, etc.) out of the way, and create a (symbolic or hard)
-link from there to procmail, as in "ln /usr/local/bin/procmail /bin/lmail".
+link from there to procmail, as in "ln /usr/bin/procmail /bin/lmail".
 
 Beware, however, that if you are using this method, /bin/mail can *only* be
 used to deliver mail.  On many systems /bin/mail has several uses (also to
@@ -109,24 +121,41 @@ to abuse the sgid/suid-ness.
    ------------------------------------------
 
 The following lines should take the place of the standard Mlocal definition in
-your sendmail.cf:
+your sendmail.cf (as for the fields "S=10, R=20": if your system uses others
+or none on the current Mlocal definition, use those *instead* of "S=10, R=20"):
 
-Mlocal, P=/usr/local/bin/procmail, F=lsSDFMhPfn, S=10, R=20,
-	A=procmail -a $h -d $u
+If you're using a sendmail 8.6.x or older:
 
-As for the fields "S=10, R=20": if your system uses others or none on the
-current Mlocal definition, use those instead of "S=10, R=20".
+Mlocal, P=/usr/bin/procmail, F=lsSDFMhPfn, S=10, R=20,
+	A=procmail -Y -a $h -d $u
+
+If you're using sendmail 8.7 or newer:
+
+	In your *.mc file, insert FEATURE(local_procmail) or edit the
+	sendmail.cf file and change the Mlocal definition to match:
+
+Mlocal, P=/usr/bin/procmail, F=SAw5:|/@glDFMPhsfn, S=10/30, R=20/40,
+	T=DNS/RFC822/X-Unix,
+	A=procmail -Y -a $h -d $u
+
+In case you were wondering why there is no 'm' flag on this definition, you
+can add it if you want, but I recommend omitting it (it would enhance
+performance very slightly; however, if one of the multiple recipients causes
+mail to bounce, it will bounce for all recipients (since there is only
+one exitcode)).
 
 To impose a 2MB limit on mails, you could add a `Maxsize=' field like in:
 
-Mlocal, P=/usr/local/bin/procmail, F=lsSDFMhPfn, S=10, R=20, M=2000000,
-	A=procmail -a $h -d $u
+Mlocal, P=/usr/bin/procmail, F=lsSDFMhPfn, S=10, R=20, M=2000000,
+	A=procmail -Y -a $h -d $u
 
 In order to take advantage of the optional meta argument that can be passed to
 procmail you'd have to change the sendmail.cf file to add a $#local mailer
 rule to set the $@ host name (which will be substituted for $h in the mailer
 definition).  There is nothing forcing you to do this, but if you do, you'll
-gain functionality.
+gain functionality.  If you are using sendmail 8.7.* or newer, and are
+using the standard FEATURE(local_procmail), then the support for this
+meta argument is already present.
 
 For example:
 	Make sure that the definition of operators in the sendmail.cf file
@@ -155,6 +184,11 @@ For example:
 		ARGUMENT=$1
 	which will expand to ARGUMENT=pizza.
 
+N.B. that if you do *not* have sendmail v6.* or older, or IDA-sendmail, and
+would like to make use of the meta-argument, you'll have to drop the 'l'
+flag on the Mlocal definition and make sure that *every* $#local invocation
+carries a (possibly empty) $@ host definition.
+
 Since you are editing the sendmail.cf file now anyway, you might as well setup
 an extra `procmail' mailer.  This Mprocmail can then be used as a general mail
 filter.	 For more information, see the EXAMPLES section the procmail(1) man
@@ -166,7 +200,8 @@ N.B. Do NOT create the extra rules mentioned in the EXAMPLES section of the
 
 After having edited the sendmail.cf file you'll have to kill (terminate)
 the running sendmail daemon.  Then restart it.	It will *not* suffice to
-send sendmail a SIGHUP.
+send sendmail a SIGHUP (unless you are running sendmail 8.7.* or newer
+and started it with an absolute path).
 
 				---
 
@@ -176,7 +211,7 @@ send sendmail a SIGHUP.
 The following line should be inserted into (or take the place of any previous
 local definition in) your sm.conf file for the Transport Agent:
 
-local	sSPfn	/usr/local/bin/procmail		procmail -a $h -d $u
+local	sSPfn	/usr/bin/procmail		procmail -a $h -d $u
 
 				---
 
@@ -186,9 +221,9 @@ local	sSPfn	/usr/local/bin/procmail		procmail -a $h -d $u
 For smail 2.x users there are two options:
  i. Move the current local-mail-delivery program (probably /bin/lmail) out of
     the way, make a symbolic or hard link from procmail to the name of that
-    program (e.g. "ln /usr/local/bin/procmail /bin/lmail")
+    program (e.g. "ln /usr/bin/procmail /bin/lmail")
  ii.Make sure the following macro is defined in src/defs.h:
-    #define LMAIL(frm,sys) "/usr/local/bin/procmail -d"
+    #define LMAIL(frm,sys) "/usr/bin/procmail -d"
 
 For smail 3.x users there are also two options:
  i. The same solution as for smail 2.x (however, method ii is preferred)
@@ -196,7 +231,7 @@ For smail 3.x users there are also two options:
     (create one, if need be) with the following two lines:
 
 local: return_path, local, from, driver=pipe; user=root,
-	cmd="/usr/local/bin/procmail -d $($user$)"
+	cmd="/usr/bin/procmail -d $($user$)"
 
 				---
 
@@ -208,7 +243,7 @@ procmail with mailsurr the following two lines should be inserted in the
 /etc/mail/mailsurr file (preferably at the bottom):
 
 '(.+)' '([^@!]+)' '<S=0;C=67,75;F=*;
-	/usr/local/bin/procmail -f \\1 -d \\2'
+	/usr/bin/procmail -f \\1 -d \\2'
 
 				---
 

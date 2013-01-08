@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmailex.man,v 1.44 1994/10/31 20:11:52 berg Exp $
+.Id $Id: procmailex.man,v 1.51 1999/03/02 01:27:52 guenther Exp $
 .TH PROCMAILEX 5 \*(Dt BuGless
 .na
 .SH NAME
@@ -137,13 +137,16 @@ recipes in your rcfile.  However, it is advisable to put it
 .I after
 any recipes that process the mails from subscribed mailinglists; it generally
 is not a good idea to generate autoreplies to mailinglists (yes, the
-!^FROM_DAEMON regexp should already catch those, but if the mailinglist
-doesn't follow accepted conventions, this might not be enough).
+!@FROMDkey@ regexp should already catch those, but if the mailinglist
+doesn't follow accepted conventions, this might
+.I not
+be
+.IR enough ).
 .Sx 6
 :0 @PASS_HEAD@ @CONTINUE@
-* !^FROM_DAEMON
+* !@FROMDkey@
 * !^X-Loop: your@own.mail.address
-| (formail \-@FM_REPLY@ \-@FM_ADD_ALWAYS@"Precedence: junk" \e
+| (formail \-@FM_REPLY@ \-@FM_DEL_INSERT@"Precedence: junk" \e
     \-@FM_ADD_ALWAYS@"X-Loop: your@own.mail.address" ; \e
    echo "Mail received.") | $SENDMAIL \-t
 .Ex
@@ -157,16 +160,27 @@ file if the name was new (the vacation.cache file is maintained by formail
 which will make sure that it always contains the most recent names, the size
 of the file is limited to a maximum of aproximately 8192 bytes).  If the name
 was new, an autoreply will be sent.
-.Sx 14
+.PP
+As you can see, the following recipe has comments
+.B between
+the conditions.
+This is allowed.  Do
+.B not
+put comments on the same line as a condition though.
+.Sx 18
 SHELL=/bin/sh    # for other shells, this might need adjustment
 
 :0 @WAIT_EXIT_QUIET@@PASS_HEAD@@CONTINUE@: vacation.lock
-* !^FROM_DAEMON
+ # Perform a quick check to see if the mail was addressed to us
+* $^To:.*\e<$\eLOGNAME\e>
+ # Don't reply to daemons and mailinglists
+* !@FROMDkey@
+ # Mail loops are evil
 * !^X-Loop: your@own.mail.address
 | formail \-@FM_REPLY@@FM_DUPLICATE@ 8192 vacation.cache
 
   :0 @ERROR_DO@@PASS_HEAD@@CONTINUE@         # if the name was not in the cache
-  | (formail \-@FM_REPLY@@FM_ADD_ALWAYS@"Precedence: junk" \e
+  | (formail \-@FM_REPLY@@FM_DEL_INSERT@"Precedence: junk" \e
        \-@FM_ADD_ALWAYS@"X-Loop: your@own.mail.address" ; \e
      echo "I received your mail,"; \e
      echo "but I won't be back until Monday."; \e
@@ -210,7 +224,7 @@ is created automatically:
 .Sx 9
 MONTHFOLDER=`date +%y-%m`
 
-:0 @IGNORE_WRITERR@@CONTINUE@
+:0 @WAIT_EXIT_QUIET@@IGNORE_WRITERR@@CONTINUE@
 * ? test ! \-d $MONTHFOLDER
 | mkdir $MONTHFOLDER
 
@@ -239,6 +253,38 @@ no duplicate mail will get past it.
 :0 @WAIT_EXIT_QUIET@@PASS_HEAD@: msgid.lock
 | formail \-@FM_DUPLICATE@ 8192 msgid.cache
 .Ex
+.B Beware
+if you have delivery problems in recipes below this one and procmail tries
+to requeue the mail, then on the next queue run, this mail will be considered
+a duplicate and will be thrown away.  For those not quite so confident in
+their own scripting capabilities, you can use the following recipe instead.
+It puts duplicates in a separate folder instead of throwing them away.
+It is up to you to periodically empty the folder of course.
+.Sx 5
+:0 @WAIT_EXIT_QUIET@@PASS_HEAD@@CONTINUE@: msgid.lock
+| formail \-@FM_DUPLICATE@ 8192 msgid.cache
+
+:0 @ALSO_N_IF_SUCC@:
+duplicates
+.Ex
+Procmail can deliver to MH folders directly, but, it does not update
+the unseen sequences the real MH manages.  If you want procmail to
+update those as well, use a recipe like the following which will file
+everything that contains the word spam in the body of the mail into an
+MH folder called spamfold.  Note the local lockfile, which is needed
+because MH programs do not lock the sequences file.  Asynchronous
+invocations of MH programs that change the sequences file may therefore
+corrupt it or silently lose changes.  Unfortunately, the lockfile
+doesn't completely solve the problem as rcvstore could be invoked while
+`show' or `mark' or some other MH program is running.  This problem is
+expected to be fixed in some future version of MH, but until then,
+you'll have to balance the risk of lost or corrupt sequences against
+the benefits of the unseen sequence.
+.Sx 3
+:0 :spamfold/$LOCKEXT
+* @BODY_GREP@ ?? spam
+| rcvstore +spamfold
+.Ex
 When delivering to emacs folders (i.e. mailfolders managed by any emacs
 mail package, e.g. RMAIL or VM) directly, you should use emacs-compatible
 lockfiles.  The emacs mailers are a bit braindamaged in that respect, they get
@@ -254,7 +300,8 @@ mailbox
 Alternatively, you can have procmail deliver into its own set of mailboxes,
 which you then periodically empty and copy over to your emacs files using
 .BR movemail .
-Movemail uses mailbox.lock local lockfiles per mailbox.
+Movemail uses mailbox.lock local lockfiles per mailbox.  This actually is
+the preferred mode of operation in conjunction with procmail.
 .PP
 To extract certain headers from a mail and put them into environment
 variables you can use any of the following constructs:
@@ -343,7 +390,7 @@ loops.
 :0
 * !^@FROM@+YOUR_USERNAME
 * !^Subject:.*Re:
-* !^FROM_DAEMON
+* !@FROMDkey@
 * ^Subject:.*retrieve
 | (formail \-@FM_REPLY@ ; cat info_file) | $SENDMAIL \-oi \-t
 .Ex
@@ -363,7 +410,7 @@ loosen this last restriction).
 * ^Subject: send file [0-9a-z]
 * !^X-Loop: yourname@your.main.mail.address
 * !^Subject:.*Re:
-* !^FROM_DAEMON
+* !@FROMDkey@
 * !^Subject: send file .*[/.]\e.
 {
   MAILDIR=$HOME/fileserver # chdir to the fileserver directory
@@ -412,7 +459,7 @@ increase LINEBUF if necessary):
 .Sx 5
 URGMATCH=`cat $HOME/.urgent`
 
-:0 @BODY_GREP@:
+:0:
 * $^From.*${URGMATCH}
 urgent
 .Ex
