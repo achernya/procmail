@@ -1,12 +1,12 @@
 /************************************************************************
  *	Some routine common to procmail, formail and lockfile		*
  *									*
- *	Copyright (c) 1993-1997, S.R. van den Berg, The Netherlands	*
+ *	Copyright (c) 1993-1999, S.R. van den Berg, The Netherlands	*
  *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: acommon.c,v 1.7 1997/04/03 01:58:39 srb Exp $";
+ "$Id: acommon.c,v 1.10 1999/11/02 03:50:59 guenther Exp $";
 #endif
 #include "includes.h"
 #include "acommon.h"
@@ -19,16 +19,18 @@ const char*hostname P((void))
 #ifndef MAXHOSTNAMELEN
 #define MAXHOSTNAMELEN	64
 #endif
-  static char name[MAXHOSTNAMELEN];
-  gethostname(name,MAXHOSTNAMELEN);name[MAXHOSTNAMELEN-1]='\0';
+  static char name[MAXHOSTNAMELEN]="";
+  if(!name[0])
+     gethostname(name,MAXHOSTNAMELEN),name[MAXHOSTNAMELEN-1]='\0';
 #else
-  struct utsname names;static char*name;
-  if(name)
-     free(name);
-  Uname(&names);
-  if(!(name=malloc(strlen(names.nodename)+1)))
-     return "";		      /* can happen when called from within lockfile */
-  strcpy(name,names.nodename);
+  static char*name=0;
+  if(!name)
+   { struct utsname names;
+     Uname(&names);
+     if(!(name=malloc(strlen(names.nodename)+1)))
+	return "";	      /* can happen when called from within lockfile */
+     strcpy(name,names.nodename);
+   }
 #endif
   return name;
 }

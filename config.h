@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.82 1999/02/26 21:11:54 guenther Exp $*/
+/*$Id: config.h,v 1.88 1999/08/20 04:41:37 guenther Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -127,7 +127,7 @@
 #define STDBUF		128
 #endif /* SMALLHEAP */
 #define FAKE_FIELD	">From "
-#define HOSTNAMElen	8	  /* determines hostname-ID-len on tempfiles */
+#define RETRYunique	8	   /* # of tries at making a unique filename */
 #define BOGUSprefix	"BOGUS."	     /* prepended to bogus mailboxes */
 #define DEFsuspend	16		 /* multi-purpose 'idle loop' period */
 #define DEFlocksleep	8
@@ -180,6 +180,9 @@ MMGR)\
 #define chPARDIR	".."			     /* the parent directory */
 #define DIRSEP		"/"		 /* directory separator symbols, the */
 				   /* last one should be the most common one */
+#define MAILDIRtmp	"/tmp"			   /* maildir subdirectories */
+#define MAILDIRnew	"/new"
+#define MAILDIRcur	"/cur"
 
 #define EOFName		" \t\n#`'\");"
 
@@ -265,6 +268,7 @@ MMGR)\
 
 #define UNKNOWN		"foo@bar"	  /* formail default originator name */
 #define OLD_PREFIX	"Old-"			 /* formail field-Old-prefix */
+#define RESENT_		"Resent-"    /* -a *this* to reply to Resent headers */
 #define BABYL_SEP1	'\037'		       /* BABYL format separator one */
 #define BABYL_SEP2	'\f'		       /* BABYL format separator two */
 #define DEFfileno	"FILENO=000"		/* split counter for formail */
@@ -281,7 +285,7 @@ MMGR)\
 #define FM_FORCE	'f'   /* force formail to accept an arbitrary format */
 #define FM_REPLY	'r'		    /* generate an auto-reply header */
 #define FM_KEEPB	'k'		   /* keep the header, when replying */
-#define FM_TRUST	't'	/* trust the sender to supply a valid header */
+#define FM_TRUST	't'		       /* reply to the header sender */
 #define FM_LOGSUMMARY	'l'    /* generate a procmail-compatible log summary */
 #define FM_SPLIT	's'				      /* split it up */
 #define FM_NOWAIT	'n'		      /* don't wait for the programs */
@@ -317,7 +321,7 @@ Usage: formail [-vbczfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
 \n -f\t\tforce formail to pass along any non-mailbox format\
 \n -r\t\tgenerate an auto-reply header, preserve fields with -i\
 \n -k\t\ton auto-reply keep the body, prevent escaping with -b\
-\n -t\t\ttrust the sender for his return address\
+\n -t\t\treply to the header sender instead of the envelope sender\
 \n -l folder\tgenerate a procmail-compatible log summary\
 \n -D nnn idcache\tdetect duplicates with an idcache of length nnn\
 \n -s prg arg\tsplit the mail, startup prg for every message\n"

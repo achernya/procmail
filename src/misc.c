@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.89.2.1 1999/04/06 04:05:16 guenther Exp $";
+ "$Id: misc.c,v 1.99 1999/11/18 01:59:48 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -34,7 +34,7 @@ struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout},{"VERBOSE",DEFverbose},
  {"LOGABSTRACT",DEFlogabstract}};
 struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
- {"MSGPREFIX",DEFmsgprefix},{"COMSAT",""},{"TRAP",""},
+ {"MSGPREFIX",DEFmsgprefix},{"COMSAT",empty},{"TRAP",empty},
  {"SHELLFLAGS",DEFshellflags},{"DEFAULT",DEFdefault},{"SENDMAIL",DEFsendmail},
  {"SENDMAILFLAGS",DEFflagsendmail},{"PROCMAIL_VERSION",PM_VERSION}};
 
@@ -106,9 +106,10 @@ int forkerr(pid,a)const pid_t pid;const char*const a;
   return 0;
 }
 
-void progerr(line,xitcode)const char*const line;int xitcode;
+void progerr(line,xitcode,okay)const char*const line;int xitcode,okay;
 { charNUM(num,thepid);
-  nlog("Program failure (");ltstr(0,(long)xitcode,num);elog(num);elog(") of");
+  nlog(okay?"Non-zero exitcode (":"Program failure (");
+  ltstr(0,(long)xitcode,num);elog(num);elog(okay?") from":") of");
   logqnl(line);
 }
 
@@ -239,7 +240,7 @@ void Terminate P((void))
 	else if(!renvint(-1L,chp))		/* or is it a false boolean? */
 	   goto nocomsat;			       /* ok, no comsat then */
 	else
-	   chp="";			  /* set to yes, so take the default */
+	   chp=empty;			  /* set to yes, so take the default */
 	if(!chad||!*chad)					  /* no host */
 #ifndef IP_localhost
 	   chad=COMSAThost;				      /* use default */
@@ -288,20 +289,19 @@ nocomsat:
 	exectrap(traps);
      nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
    }					/* flush the logfile & exit procmail */
-  elog("");exit(fakedelivery==2?EXIT_SUCCESS:retval);
+  elog(empty);exit(fakedelivery==2?EXIT_SUCCESS:retval);
 }
 
 void suspend P((void))
 { ssleep((unsigned)suspendv);
 }
 
-void app_val(sp,val)struct dyna_long*const sp;const off_t val;
+void*app_val_(sp)struct dyna_long*const sp;
 { if(sp->filled==sp->tspace)			    /* growth limit reached? */
-   { if(!sp->offs)
-	sp->offs=malloc(1);
-     sp->offs=realloc(sp->offs,(sp->tspace+=4)*sizeof*sp->offs);   /* expand */
+   { size_t len=(sp->tspace+=4)*sizeof*sp->vals;
+     sp->vals=sp->vals?realloc(sp->vals,len):malloc(len);	   /* expand */
    }
-  sp->offs[sp->filled++]=val;				     /* append to it */
+  return &sp->vals[sp->filled++];			     /* append to it */
 }
 
 int alphanum(c)const unsigned c;
@@ -388,7 +388,7 @@ char*tstrdup(a)const char*const a;
 
 const char*tgetenv(a)const char*const a;
 { const char*b;
-  return (b=getenv(a))?b:"";
+  return (b=getenv(a))?b:empty;
 }
 
 char*cstr(a,b)char*const a;const char*const b;	/* dynamic buffer management */
@@ -443,22 +443,28 @@ int asenvcpy(src)char*src;
   return 0;
 }
 
-void mallocbuffers(linebuf)size_t linebuf;
+void mallocbuffers(lineb,setenv)size_t lineb;int setenv;
 { if(buf)
    { free(buf);
      free(buf2);
    }
-  buf=malloc(linebuf);buf2=malloc(linebuf);
+  buf=malloc(lineb);buf2=malloc(lineb);
+  if(setenv)
+   { char*chp;
+     *(chp=strcpy(buf,slinebuf)+STRLEN(slinebuf))='=';
+     ultstr(0,lineb-XTRAlinebuf,chp+1);
+     sputenv(buf);
+   }
 }
 
 void asenv(chp)const char*const chp;
 { static const char logfile[]="LOGFILE",Log[]="LOG",sdelivered[]="DELIVERED",
    includerc[]="INCLUDERC",eumask[]="UMASK",dropprivs[]="DROPPRIVS",
-   shift[]="SHIFT";
+   shift[]="SHIFT",switchrc[]="SWITCHRC";
   if(!strcmp(buf,slinebuf))
    { if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
 	linebuf=MINlinebuf+XTRAlinebuf;		       /* check minimum size */
-     mallocbuffers(linebuf);
+     mallocbuffers(linebuf,0);
    }
   else if(!strcmp(buf,maildir))
      if(chdir(chp))
@@ -502,6 +508,8 @@ void asenv(chp)const char*const chp;
      doumask((mode_t)strtol(chp,(char**)0,8));
   else if(!strcmp(buf,includerc))
      pushrc(chp);
+  else if(!strcmp(buf,switchrc))
+     changerc(chp);
   else if(!strcmp(buf,host))
    { const char*name;
      if(strcmp(chp,name=hostname()))
@@ -612,20 +620,19 @@ void rcst_nosgid P((void))
      rcstate=rc_NOSGID;
 }
 
-static void inodename(stbuf,i)const struct stat*const stbuf;const size_t i;
-{ static const char bogusprefix[]=BOGUSprefix;char*p;
-  p=strchr(strcpy(strcpy(buf+i,bogusprefix)+STRLEN(bogusprefix),
-   getenv(lgname)),'\0');
-  *p++='.';ultoan((unsigned long)stbuf->st_ino,p);	  /* i-node numbered */
-}
 			     /* lifted out of main() to reduce main()'s size */
-int screenmailbox(chp,chp2,egid,Deliverymode)
- char*chp;char*const chp2;const gid_t egid;const int Deliverymode;
-{ int i;struct stat stbuf;			   /* strip off the basename */
+int screenmailbox(chp,egid,Deliverymode)
+ char*chp;const gid_t egid;const int Deliverymode;
+{ char ch;struct stat stbuf;
  /*
   *	  do we need sgidness to access the mail-spool directory/files?
   */
-  *chp2='\0';buf[i=lastdirsep(chp)-chp]='\0';sgid=gid;
+  chp=lastdirsep(strcpy(buf,chp));		   /* strip off the basename */
+  if(chp<buf+3)
+     chp=buf+1;
+  else if(!chp[0]||(chp[0]==chCURDIR&&!chp[1]))		/* take into account */
+     for(chp-=2;chp>buf+1&&!strchr(dirsep,*chp--););/* folder type indicator */
+  ch=*chp;*chp='\0';sgid=gid;
   if(!stat(buf,&stbuf))
    { unsigned wwsdir;
      if(accspooldir=(wwsdir=			/* world writable spool dir? */
@@ -649,120 +656,120 @@ keepgid:			   /* keep the gid from the parent directory */
 	   setgid(sgid);     /* we were started nosgid, but we might need it */
    }
   else				/* panic, mail-spool directory not available */
-   { int c;				     /* try creating the last member */
-     setids();c=buf[i-1];buf[i-1]='\0';mkdir(buf,NORMdirperm);buf[i-1]=c;
+   { setids();mkdir(buf,NORMdirperm);	     /* try creating the last member */
    }
+  *chp=ch;
  /*
   *	  check if the default-mailbox-lockfile is owned by the
   *	  recipient, if not, mark it for further investigation, it
   *	  might need to be removed
   */
+  if(*(chp=buf))
+     chp=strchr(buf,'\0')-1;
   for(;;)
-   { ;{ int mboxstat;
-	static const char renbogus[]="Renamed bogus \"%s\" into \"%s\"",
-	 renfbogus[]="Couldn't rename bogus \"%s\" into \"%s\"";
-	;{ int goodlock;
-	   if(!(goodlock=lstat(defdeflock,&stbuf)||stbuf.st_uid==uid))
-	      inodename(&stbuf,i);
-	  /*
-	   *	  check if the original/default mailbox of the recipient
-	   *	  exists, if it does, perform some security checks on it
-	   *	  (check if it's a regular file, check if it's owned by
-	   *	  the recipient), if something is wrong try and move the
-	   *	  bogus mailbox out of the way, create the
-	   *	  original/default mailbox file, and chown it to
-	   *	  the recipient
-	   */
-	   if(lstat(chp,&stbuf))			 /* stat the mailbox */
-	    { mboxstat= -(errno==EACCES);
-	      goto boglock;
-	    }					/* lockfile unrightful owner */
-	   else
-	    { mboxstat=1;
-	      if(!(stbuf.st_mode&S_IWGRP))
-boglock:	 if(!goodlock)		      /* try & rename bogus lockfile */
-		    if(rename(defdeflock,buf))		   /* out of the way */
-		       syslog(LOG_EMERG,renfbogus,defdeflock,buf);
-		    else
-		       syslog(LOG_ALERT,renbogus,defdeflock,buf);
-	    }
+   { ;{ int defaulttype=foldertype(chp,0,0,&stbuf);   /* what type of folder */
+	if(defaulttype==to_NOTYET)				 /* is this? */
+	 { if(errno!=EACCES||(setids(),lstat(buf,&stbuf)))
+	      goto nobox;
 	 }
-	if(mboxstat>0||mboxstat<0&&(setids(),!lstat(chp,&stbuf)))
-	 { int checkiter=1;
-	   for(;;)
-	    { if(stbuf.st_uid!=uid||		      /* recipient not owner */
-		 !(stbuf.st_mode&S_IWUSR)||	     /* recipient can write? */
-		 S_ISLNK(stbuf.st_mode)||		/* no symbolic links */
-		 (S_ISDIR(stbuf.st_mode)?     /* directories, yes, hardlinks */
-		   !(stbuf.st_mode&S_IXUSR):stbuf.st_nlink!=1))	       /* no */
-		/*
-		 *	If another procmail is about to create the new
-		 *	mailbox, and has just made the link, st_nlink==2
-		 */
-		 if(checkiter--)	    /* maybe it was a race condition */
-		    suspend();		 /* close eyes, and hope it improves */
-		 else			/* can't deliver to this contraption */
-		  { inodename(&stbuf,i);nlog("Renaming bogus mailbox \"");
-		    elog(chp);elog("\" into");logqnl(buf);
-		    if(rename(chp,buf))	   /* try and move it out of the way */
-		     { syslog(LOG_EMERG,renfbogus,chp,buf);
-		       goto fishy;  /* rename failed, something's fishy here */
-		     }
-		    else
-		       syslog(LOG_ALERT,renbogus,chp,buf);
-		    goto nobox;
-		  }
-	      else
-		 break;
-	      if(lstat(chp,&stbuf))
+	else if(!to_checkcloser(defaulttype))
+	 { setids();
+	   if(defaulttype<0)
+	      goto fishy;
+	   goto nl;					   /* no lock needed */
+	 }
+      }
+    /*
+     *	  check if the original/default mailbox of the recipient
+     *	  exists, if it does, perform some security checks on it
+     *	  (check if it's a regular file, check if it's owned by
+     *	  the recipient), if something is wrong try and move the
+     *	  bogus mailbox out of the way, create the
+     *	  original/default mailbox file, and chown it to
+     *	  the recipient
+     */
+     ;{ int checkiter=1;
+	for(;;)
+	 { if(stbuf.st_uid!=uid||		      /* recipient not owner */
+	      !(stbuf.st_mode&S_IWUSR)||	     /* recipient can write? */
+	      S_ISLNK(stbuf.st_mode)||			/* no symbolic links */
+	      (S_ISDIR(stbuf.st_mode)?	      /* directories, yes, hardlinks */
+		!(stbuf.st_mode&S_IXUSR):stbuf.st_nlink!=1))	       /* no */
+	     /*
+	      * If another procmail is about to create the new
+	      * mailbox, and has just made the link, st_nlink==2
+	      */
+	      if(checkiter--)		    /* maybe it was a race condition */
+		 suspend();		 /* close eyes, and hope it improves */
+	      else			/* can't deliver to this contraption */
+	       { int i=lastdirsep(buf)-buf;
+		 strncpy(buf2,buf,i);buf2[i]='\0';
+		 if(rnmbogus(buf,&stbuf,i,1))
+		    goto fishy;
 		 goto nobox;
-	    }					/* SysV type autoforwarding? */
-	   if(Deliverymode&&stbuf.st_mode&(S_ISGID|S_ISUID))
-	    { nlog("Autoforwarding mailbox found\n");
-	      exit(EX_NOUSER);
-	    }
-	   else
-	    { if(!(stbuf.st_mode&OVERRIDE_MASK)&&
-		 stbuf.st_mode&cumask&
-		  (accspooldir?~(mode_t)0:~(S_IRGRP|S_IWGRP)))	/* hold back */
-	       { static const char enfperm[]=
-		  "Enforcing stricter permissions on";
-		 nlog(enfperm);logqnl(chp);
-		 syslog(LOG_NOTICE,slogstr,enfperm,chp);setids();
-		 chmod(chp,stbuf.st_mode&=~cumask);
 	       }
-	      break;				  /* everything is just fine */
+	   else
+	      break;
+	   if(lstat(buf,&stbuf))
+	      goto nobox;
+	 }					/* SysV type autoforwarding? */
+	if(Deliverymode&&(stbuf.st_mode&S_ISUID||
+	 !S_ISDIR(stbuf.st_mode)&&stbuf.st_mode&S_ISGID))
+	 { nlog("Autoforwarding mailbox found\n");
+	   exit(EX_NOUSER);
+	 }
+	else
+	 { if(!(stbuf.st_mode&OVERRIDE_MASK)&&
+	      stbuf.st_mode&cumask&
+	       (accspooldir?~(mode_t)0:~(S_IRGRP|S_IWGRP)))	/* hold back */
+	    { static const char enfperm[]=
+	       "Enforcing stricter permissions on";
+	      nlog(enfperm);logqnl(buf);
+	      syslog(LOG_NOTICE,slogstr,enfperm,buf);setids();
+	      chmod(buf,stbuf.st_mode&=~cumask);
 	    }
+	   break;				  /* everything is just fine */
 	 }
       }
 nobox:
      if(!(accspooldir&1))	     /* recipient does not own the spool dir */
-      { if(!xcreat(chp,NORMperm,(time_t*)0,doCHOWN|doCHECK))	   /* create */
+      { if(!xcreat(buf,NORMperm,(time_t*)0,doCHOWN|doCHECK))	   /* create */
 	   break;		   /* mailbox... yes we could, fine, proceed */
-	if(!lstat(chp,&stbuf))			     /* anything in the way? */
+	if(!lstat(buf,&stbuf))			     /* anything in the way? */
 	   continue;			       /* check if it could be valid */
       }
      setids();						   /* try some magic */
-     if(!xcreat(chp,NORMperm,(time_t*)0,doCHECK))		/* try again */
+     if(!xcreat(buf,NORMperm,(time_t*)0,doCHECK))		/* try again */
 	break;
-     if(lstat(chp,&stbuf))			      /* nothing in the way? */
+     if(lstat(buf,&stbuf))			      /* nothing in the way? */
 fishy:
-      { nlog("Couldn't create");logqnl(chp);
+      { nlog("Couldn't create");logqnl(buf);
 	return 0;
       }
    }
+  if(!S_ISDIR(stbuf.st_mode))
+   { int isgrpwrite=stbuf.st_mode&S_IWGRP;
+     strcpy(chp=strchr(buf,'\0'),lockext);
+     defdeflock=tstrdup(buf);
+     if(!isgrpwrite&&!lstat(defdeflock,&stbuf)&&stbuf.st_uid!=uid&&
+      stbuf.st_uid!=ROOT_uid)
+      { int i=lastdirsep(buf)-buf;
+	strncpy(buf2,buf,i);buf2[i]='\0';     /* try & rename bogus lockfile */
+	rnmbogus(defdeflock,&stbuf,i,0);		   /* out of the way */
+      }
+     *chp='\0';
+   }
+  else
+nl:  defdeflock=empty;					   /* no lock needed */
   return 1;
 }
+
 			     /* lifted out of main() to reduce main()'s size */
-int conditions(flags,prevcond,lastsucc,lastcond,nrcond)const char flags[];
+int conditions(flags,prevcond,lastsucc,lastcond,nrcond)char flags[];
  const int prevcond,lastsucc,lastcond;int nrcond;
 { char*chp,*chp2,*startchar;double score;int scored,i,skippedempty;
   long tobesent;static const char suppressed[]=" suppressed\n";
   score=scored=0;
-  if(flags[ERROR_DO]&&flags[ELSE_DO])
-     nlog(conflicting),elog("else-if-flag"),elog(suppressed);
-  if(flags[ERROR_DO]&&flags[ALSO_N_IF_SUCC])
-     nlog(conflicting),elog("also-if-succeeded-flag"),elog(suppressed);
   if(nrcond<0)		      /* assume appropriate default nr of conditions */
      nrcond=!flags[ALSO_NEXT_RECIPE]&&!flags[ALSO_N_IF_SUCC]&&!flags[ELSE_DO]&&
       !flags[ERROR_DO];
@@ -779,14 +786,20 @@ int conditions(flags,prevcond,lastsucc,lastcond,nrcond)const char flags[];
 noconcat:
    i=!skiprc;						  /* init test value */
    if(flags[ERROR_DO])
-      i&=prevcond&&!lastsucc;
+    { i&=prevcond&&!lastsucc;
+      if(flags[ELSE_DO])
+	 nlog(conflicting),elog("else-if-flag"),elog(suppressed),
+	  flags[ELSE_DO]=0;
+      if(flags[ALSO_N_IF_SUCC])
+	 nlog(conflicting),elog("also-if-succeeded-flag"),elog(suppressed),
+	  flags[ALSO_N_IF_SUCC]=0;
+    }
    if(flags[ELSE_DO])
       i&=!prevcond;
    if(flags[ALSO_N_IF_SUCC])
       i&=lastcond&&lastsucc;
    if(flags[ALSO_NEXT_RECIPE])
       i=i&&lastcond;
-   Stdout=0;
    for(skippedempty=0;;)
     { skipspace();--nrcond;
       if(!testB('*'))			    /* marks a condition, new syntax */
@@ -806,7 +819,7 @@ noconcat:
 	    break;		     /* no more conditions, time for action! */
 	  }
       skipspace();
-      if(getlline(buf2))
+      if(getlline(buf2,buf2+linebuf))
 	 i=0;				       /* assume failure on overflow */
       if(i)					 /* check out all conditions */
        { int negate,scoreany;double weight,xponent,lscore;

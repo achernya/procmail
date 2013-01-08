@@ -13,9 +13,9 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: lockfile.c,v 1.39 1999/02/16 21:13:39 guenther Exp $";
+ "$Id: lockfile.c,v 1.43 1999/11/16 06:32:56 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1999/02/16 21:13:39 $";
+static /*const*/char rcsdate[]="$Date: 1999/11/16 06:32:56 $";
 #include "includes.h"
 #include "sublib.h"
 #include "exopen.h"
@@ -23,15 +23,12 @@ static /*const*/char rcsdate[]="$Date: 1999/02/16 21:13:39 $";
 #include "authenticate.h"
 #include "../patchlevel.h"
 
-#ifndef SYSTEM_MBOX
-#define SYSTEM_MBOX	SYSTEM_MAILBOX
-#endif
-
 static volatile int exitflag;
 pid_t thepid;
 uid_t uid;
 gid_t sgid;
-static const char dirsep[]=DIRSEP,lockext[]=DEFlockext,
+const char dirsep[]=DIRSEP;
+static const char lockext[]=DEFlockext,
  nameprefix[]="lockfile: ",lgname[]="LOGNAME";
 
 static void failure P((void))				      /* signal trap */
@@ -45,7 +42,7 @@ static int xcreat(name,tim)const char*const name;time_t*const tim;
   if(!(p=malloc(i+UNIQnamelen)))
      return exitflag=1;
   strncpy(p,name,i);
-  if(unique(p,p+i,LOCKperm,0,doCHECK|doLOCK))
+  if(unique(p,p+i,0,LOCKperm,0,doCHECK|doLOCK))
      stat(p,&stbuf),*tim=stbuf.st_mtime,j=myrename(p,name);
   free(p);
   return j;
@@ -61,7 +58,7 @@ void nlog(a)const char*const a;
 
 static PROGID;
 
-main(argc,argv)const char*const argv[];
+int main(argc,argv)int argc;const char*const argv[];
 { const char*const*p;char*cp;uid_t uid;
   int sleepsec,retries,invert,force,suspend,retval=EXIT_SUCCESS,virgin=1;
   static const char usage[]="Usage: lockfile -v | -nnn | -r nnn | -l nnn \
@@ -104,7 +101,7 @@ again:
 \n\t-r nnn\tmake at most nnn retries before giving up on a lock\
 \n\t-l nnn\tset locktimeout to nnn seconds\
 \n\t-s nnn\tsuspend nnn seconds after a locktimeout occurred\
-\n\t-!\tinvert the exit code of lockfile\
+\n\t-!\tinvert the exitcode of lockfile\
 \n\t-ml\tlock your system mail-spool file\
 \n\t-mu\tunlock your system mail-spool file\n");
 		 goto xusg;
@@ -267,4 +264,8 @@ void writeerr(a)const char*const a;				     /* stub */
 
 char*cstr(a,b)char*const a;const char*const b;			     /* stub */
 { return 0;
+}
+
+void ssleep(seconds)const unsigned seconds;			     /* stub */
+{ sleep(seconds);
 }

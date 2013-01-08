@@ -8,9 +8,9 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formail.c,v 1.89 1999/03/26 02:45:56 guenther Exp $";
+ "$Id: formail.c,v 1.97 1999/10/24 06:32:08 guenther Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1999/03/26 02:45:56 $";
+static /*const*/char rcsdate[]="$Date: 1999/10/24 06:32:08 $";
 #include "includes.h"
 #include <ctype.h>		/* iscntrl() */
 #include "formail.h"
@@ -36,6 +36,7 @@ static const char
  x_[]=			"X-",				/* general extension */
  old_[]=		OLD_PREFIX,			     /* my extension */
  xloop[]=		"X-Loop:",				/* ditto ... */
+ Resent_[]=		"Resent-",	   /* for tweaking reply preferences */
  mdaemon[]="<>",unknown[]=UNKNOWN,re[]=" Re:",fmusage[]=FM_USAGE;
 
 static const struct {const char*hedr;int lnr;}cdigest[]=
@@ -48,22 +49,26 @@ static const struct {const char*hedr;int lnr;}cdigest[]=
 /*
  *	sender determination fields in order of importance/reliability
  *	reply-address determination fields (wrepl specifies the weight
- *	for regular replies, wtrepl specifies the weight for trusted users)
+ *	for header replies and wrrepl specifies the weight for header
+ *	replies where Resent- header are used, while the position in the
+ *	table index specifies the weight for envelope replies and From_
+ *	line creation.
  *
- *	I bet this is the first time you see a bar graph in C-source-code :-)
+ *	I bet this is the first time you've seen a bar graph in
+ *	C-source-code :-)
  */
-static const struct {const char*head;int len,wrepl,wtrepl;}sest[]=
-{ sslbar(replyto	,"******"	,"********"	),
-  sslbar(Fromm		,"*"		,"*******"	),
-  sslbar(retreceiptto	,"********"	,"*****"	),
-  sslbar(sender		,"*****"	,"******"	),
-  sslbar(res_replyto	,"***********"	,"***********"	),
-  sslbar(res_from	,"***foo***"	,"***bar****"	),
-  sslbar(res_sender	,"**********"	,"*********"	),
-  sslbar(errorsto	,"*******"	,"****"		),
+static const struct {const char*head;int len,wrepl,wrrepl;}sest[]=
+{ sslbar(replyto	,"*********"	,"********"	),
+  sslbar(Fromm		,"**foo***"	,"**bar**"	),
+  sslbar(sender		,"*******"	,"******"	),
+  sslbar(res_replyto	,"*"		,"***********"	),
+  sslbar(res_from	,"*"		,"**********"	),
+  sslbar(res_sender	,"*"		,"*********"	),
   sslbar(path		,"**"		,"*"		),
-  sslbar(returnpath	,"***"		,"***"		),
-  sslbar(From_		,"****"		,"**"		)
+  sslbar(retreceiptto	,"***"		,"**"		),
+  sslbar(errorsto	,"****"		,"***"		),
+  sslbar(returnpath	,"******"	,"*****"	),
+  sslbar(From_		,"*****"	,"****"		),
 };
 
 static struct saved rex[]=
@@ -202,19 +207,19 @@ static int artheadr P((void))	     /* could it be the start of an article? */
   return 0;
 }
 			     /* lifted out of main() to reduce main()'s size */
-static char*getsender(namep,fldp,trust)char*namep;struct field*fldp;
- const int trust;
+static char*getsender(namep,fldp,headreply)char*namep;struct field*fldp;
+ const int headreply;
 { char*chp;int i,nowm;size_t j;static int lastm;
   chp=fldp->fld_text;j=fldp->id_len;i=maxindex(sest);
   while((sest[i].len!=j||strnIcmp(sest[i].head,chp,j))&&i--);
   if(i>=0&&(i!=maxindex(sest)||fldp==rdheader))		  /* found anything? */
    { char*saddr;char*tmp;			     /* determine the weight */
-     nowm=trust?sest[i].wtrepl:areply?sest[i].wrepl:i;chp+=j;
+     nowm=areply&&headreply?headreply==1?sest[i].wrepl:sest[i].wrrepl:i;chp+=j;
      tmp=malloc(j=fldp->Tot_len-j);tmemmove(tmp,chp,j);(chp=tmp)[j-1]='\0';
      if(sest[i].head==From_)
       { char*pastad;
-	if(trust||!(saddr=strchr(chp,'\n')))	     /* skip the first line? */
-	   saddr=chp;						  /* no need */
+	if(strchr(saddr=chp,'\n'))		     /* multiple From_ lines */
+	   nowm-=2;				    /* aren't as trustworthy */
 	if(*saddr=='\n'&&(pastad=strchr(saddr,' ')))
 	   saddr=pastad+1;			/* reposition at the address */
 	chp=saddr;
@@ -353,8 +358,8 @@ dupfound:
 
 static PROGID;
 
-main(lastm,argv)int lastm;const char*const argv[];
-{ int i,split=0,force=0,bogus=1,every=0,trust=0,digest=0,nowait=0,keepb=0,
+int main(lastm,argv)int lastm;const char*const argv[];
+{ int i,split=0,force=0,bogus=1,every=0,headreply=0,digest=0,nowait=0,keepb=0,
    minfields=(char*)progid-(char*)progid,conctenate=0,babyl=0,babylstart,
    berkeley=0,forgetclen;
   off_t maxlen,ctlength;FILE*idcache=0;pid_t thepid;
@@ -369,7 +374,7 @@ main(lastm,argv)int lastm;const char*const argv[];
 	   goto usg;
 	for(;;)
 	 { switch(lastm= *chp++)
-	    { case FM_TRUST:trust=1;
+	    { case FM_TRUST:headreply|=1;
 		 continue;
 	      case FM_REPLY:areply=1;
 		 continue;
@@ -440,9 +445,17 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 	      case FM_FIRST_UNIQ:case FM_LAST_UNIQ:case FM_ReNAME:Qnext_arg();
 		 i=breakfield(chp,lnl=strlen(chp));
 		 switch(lastm)
-		  { default:
+		  { case FM_ADD_IFNOT:
+		       if(i>0)			   /* the only partial field */
+			  break;			  /* allowed with -a */
+		       else if(i!=-STRLEN(Resent_)||-i!=lnl||  /* is Resent- */
+			strnIcmp(chp,Resent_,STRLEN(Resent_)+1))
+			  goto invfield;
+		       headreply|=2;
+		       goto nextarg;		/* don't add to the list */
+		    default:
 		       if(-i!=lnl)	  /* it is not an early ending field */
-		    case FM_ADD_IFNOT:case FM_ADD_ALWAYS:
+		    case FM_ADD_ALWAYS:
 			  if(i<=0)	      /* and it is not a valid field */
 			     goto invfield;			 /* complain */
 		    case FM_ReNAME:;		       /* everything allowed */
@@ -473,8 +486,9 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 		       tmemmove((char*)fldp->fld_text+lnl,chp,i),copied=1;
 		    else if(namep>chp||				 /* garbage? */
 			    !(chp=(char*)*++argv)||	 /* look at next arg */
-			    !(i=breakfield(chp,strlen(chp)))||	/* fieldish? */
-			    i<0&&(i= -i,lastm>0))  /* impossible combination */
+			    (!(i=breakfield(chp,strlen(chp)))&& /* fieldish? */
+			     *chp)||			   /* but "" is fine */
+			    i<=0&&(i= -i,lastm>0)) /* impossible combination */
 invfield:	     { nlog("Invalid field-name:");logqnl(chp?chp:"");
 		       goto usg;
 		     }
@@ -491,6 +505,11 @@ nextarg:;
       }
 parsedoptions:
   escaplen=strlen(escap);mystdout=stdout;signal(SIGPIPE,SIG_IGN);
+  if(nowait&&idcache&&split)
+   { nowait=childlimit=0;
+     if(!quiet)
+	nlog("No-wait option ignored to prevent corrupted idcache\n");
+   }
 #ifdef SIGCHLD
   signal(SIGCHLD,SIG_DFL);
 #endif
@@ -537,6 +556,10 @@ usg:						     /* options sanity check */
    { elog(fmusage);					   /* impossible mix */
 xusg:
      return EX_USAGE;
+   }
+  if(headreply==2)				/* -aResent- is only allowed */
+   { chp=(char*)Resent_;		  /* as a modifier to header replies */
+     goto invfield;
    }
   buf=malloc(buflen=Bsize);Totallen=0;i=maxindex(rex); /* prime some buffers */
   do rex[i].rexp=malloc(1);
@@ -602,8 +625,8 @@ startover:
 	 }
 	if(conctenate)
 	   concatenate(fldp);		    /* save fields for later perusal */
-	namep=getsender(namep,fldp,trust);i=maxindex(rex);chp=fldp->fld_text;
-	j=fldp->id_len;
+	namep=getsender(namep,fldp,headreply);
+	i=maxindex(rex);chp=fldp->fld_text;j=fldp->id_len;
 	while((rex[i].lenr!=j||strnIcmp(rex[i].headr,chp,j))&&i--);
 	chp+=j;
 	if(i>=0&&(j=fldp->Tot_len-j)>1)			  /* found anything? */
@@ -864,15 +887,23 @@ int eqFrom_(a)const char*const a;
 
 int breakfield(line,len)const char*const line;size_t len;  /* look where the */
 { const char*p=line;			   /* fieldname ends (RFC 822 specs) */
-  if(eqFrom_(p))				      /* special case, From_ */
-     return STRLEN(From_);
-  while(len&&!iscntrl(*p))		    /* no control characters allowed */
+  while(len&&*p&&!iscntrl(*p))		    /* no control characters allowed */
    { switch(*p++)
       { default:len--;
 	   continue;
-	case HEAD_DELIMITER:len=p-line;
+	case HEAD_DELIMITER:
+good:	   len=p-line;
 	   return len==1?0:len;					  /* eureka! */
-	case ' ':p--;					/* no spaces allowed */
+	case ' ':case '\t':
+	   ;{ const char*q=p;	/* whitespace is okay right before the colon */
+	      while(--len&&(*q==' '||*q=='\t'))
+		 q++;
+	      if(len&&*q==HEAD_DELIMITER)
+		 goto good;
+	      if(eqFrom_(line))			      /* special case, From_ */
+		 return STRLEN(From_);
+	      p--;
+	    }					   /* it was bogus after all */
       }
      break;
    }

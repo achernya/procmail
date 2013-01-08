@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.61 1999/02/14 23:53:27 srb Exp $*/
+/*$Id: includes.h,v 1.63 1999/11/04 23:11:42 guenther Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -142,8 +142,8 @@ double pow();
 #endif
 #ifdef SYSEXITS_H_MISSING
 #undef SYSEXITS_H_MISSING
-		/* Standard exit codes, original list maintained
-		   by Eric Allman (eric@berkeley.edu) */
+		/* Standard exitcodes, original list maintained
+		   by Eric Allman (eric@Sendmail.COM) */
 #define EX_USAGE	64
 #define EX_DATAERR	65
 #define EX_NOINPUT	66
@@ -453,6 +453,10 @@ extern void*memmove();
 #undef NOftruncate
 #define ftruncate(fildes,length)	(-1)
 #define truncate(file,length)		(-1)
+#endif
+
+#ifdef NOfsync
+#define fsync(fd)	0
 #endif
 
 #ifdef NOfstat

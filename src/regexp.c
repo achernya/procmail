@@ -8,7 +8,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: regexp.c,v 1.64.2.1 1999/04/06 04:05:20 guenther Exp $";
+ "$Id: regexp.c,v 1.65 1999/04/05 17:35:06 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"

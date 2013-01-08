@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: robust.c,v 1.25 1997/04/03 01:58:49 srb Exp $";
+ "$Id: robust.c,v 1.27 1999/11/04 23:26:25 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -20,7 +20,7 @@ mode_t cumask;
 #define nomemretry	noresretry
 #define noforkretry	noresretry
 		       /* set nextexit to prevent elog() from using malloc() */
-static void nomemerr(len)const size_t len;
+void nomemerr(len)const size_t len;
 { static const char outofmem[]="Out of memory";
   nextexit=2;nlog(outofmem);elog("\n");
   syslog(LOG_NOTICE,"%s as I tried to allocate %ld bytes\n",outofmem,
@@ -81,7 +81,7 @@ void tfree(p)void*const p;
 
 pid_t sfork P((void))			/* this fork can survive a temporary */
 { pid_t i;int r;			   /* "process table full" condition */
-  zombiecollect();elog("");r=noforkretry;	  /* flush log, just in case */
+  zombiecollect();elog(empty);r=noforkretry;	  /* flush log, just in case */
   while((i=fork())==-1)
    { lcking|=lck_FORK;
      if(!(r<0||r--))
@@ -95,7 +95,7 @@ pid_t sfork P((void))			/* this fork can survive a temporary */
 
 void opnlog(file)const char*file;
 { int i;
-  elog("");						     /* flush stderr */
+  elog(empty);						     /* flush stderr */
   if(!*file)						   /* empty LOGFILE? */
      file=devnull;				 /* substitute the bitbucket */
   if(0>(i=opena(file)))			     /* error?	keep the old LOGFILE */

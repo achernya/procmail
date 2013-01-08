@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.76 1999/02/21 19:37:15 guenther Exp $";
+ "$Id: mailfold.c,v 1.90 1999/11/04 23:26:18 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -19,6 +19,7 @@ static /*const*/char rcsid[]=
 #include "exopen.h"
 #include "goodies.h"
 #include "locking.h"
+#include "lastdirsep.h"
 #include "mailfold.h"
 
 int logopened,tofile,rawnonl;
@@ -57,19 +58,19 @@ long dump(s,source,len)const int s;const char*source;long len;
 { int i;long part;
   lasttell=i= -1;SETerrno(EBADF);
   if(s>=0)
-   { if(tofile&&(lseek(s,(off_t)0,SEEK_END),fdlock(s)))
+   { if(to_lock(tofile)&&(lseek(s,(off_t)0,SEEK_END),fdlock(s)))
 	nlog("Kernel-lock failed\n");
      lastdump=len;doesc=0;
-     part=tofile==to_FOLDER&&!rawnonl?getchunk(s,source,len):len;
+     part=to_delim(tofile)&&!rawnonl?getchunk(s,source,len):len;
      lasttell=lseek(s,(off_t)0,SEEK_END);
      if(!rawnonl)
       { smboxseparator(s);			       /* optional separator */
 #ifndef NO_NFS_ATIME_HACK	       /* if it is a file, trick NFS into an */
-	if(part&&tofile==to_FILE)			    /* a_time<m_time */
+	if(part&&to_atime(tofile))			    /* a_time<m_time */
 	 { struct stat stbuf;
 	   rwrite(s,source++,1);len--;part--;		     /* set the trap */
 	   if(fstat(s,&stbuf)||					  /* needed? */
-	    stbuf.st_mtime==stbuf.st_atime&&stbuf.st_size!=1)
+	    stbuf.st_mtime==stbuf.st_atime)
 	      ssleep(1);  /* ...what a difference this (tea) second makes... */
 	 }
 #endif
@@ -90,20 +91,26 @@ jin:	while(part&&(i=rwrite(s,source,BLKSIZ<part?BLKSIZ:(int)part)))
 	emboxseparator(s);	 /* newline and an optional custom separator */
       }
 writefin:
-     ;{ int serrno=errno;		       /* save any error information */
-	if(tofile&&fdunlock())
+     i=tofile&&fsync(s)&&errno!=EINVAL;		  /* EINVAL => wasn't a file */
+     if(to_lock(tofile))
+      { int serrno=errno;		       /* save any error information */
+	if(fdunlock())
 	   nlog("Kernel-unlock failed\n");
 	SETerrno(serrno);
       }
-     i=rclose(s);
+     i=rclose(s)||i;
    }			   /* return an error even if nothing was to be sent */
   tofile=0;
   return i&&!len?-1:len;
 }
 
-static int dirfile(chp,linkonly)char*const chp;const int linkonly;
+static const char
+ maildirtmp[]=MAILDIRtmp,maildircur[]=MAILDIRcur,maildirnew[]=MAILDIRnew;
+#define MAILDIRLEN STRLEN(maildirtmp)
+
+static int dirfile(chp,linkonly,tofile)char*const chp;const int linkonly,tofile;
 { static const char lkingto[]="Linking to";
-  if(chp)
+  if(tofile==to_MH)
    { long i=0;			     /* first let us try to prime i with the */
 #ifndef NOopendir		     /* highest MH folder number we can find */
      long j;DIR*dirp;struct dirent*dp;char*chp2;
@@ -133,13 +140,22 @@ exlb: { nlog(exceededlb);setoverflow();
      unlink(buf2);
      goto opn;
    }
-  ;{ struct stat stbuf;
-     char*p=strchr(buf,'\0');
-     if(p-buf+strlen(msgprefix)+sizeNUM(stbuf.st_ino)-XTRAlinebuf>linebuf)
+  else if(tofile==to_MAILDIR)
+   { if(!unique(buf,strcpy(chp+MAILDIRLEN,MCDIRSEP_)+1,linebuf,NORMperm,
+      verbose,0))
+	goto ret;
+     unlink(buf);			 /* found a name, remove file in tmp */
+     strncpy(chp,maildirnew,MAILDIRLEN);    /* but to link directly into new */
+   }
+  else								   /* to_DIR */
+   { struct stat stbuf;
+     size_t mpl=strlen(msgprefix);
+     if(chp-buf+mpl+sizeNUM(stbuf.st_ino)-XTRAlinebuf>linebuf)
 	goto exlb;
-     stat(buf2,&stbuf);
-     ultoan((unsigned long)stbuf.st_ino,      /* filename with i-node number */
-      strchr(strcat(p,msgprefix),'\0'));
+     stat(buf2,&stbuf);			      /* filename with i-node number */
+     ultoan((unsigned long)stbuf.st_ino,strcpy(chp,msgprefix)+mpl);
+     if(!linkonly&&(!stat(buf,&stbuf)||errno!=ENOENT))
+	goto ret;			 /* avoid overwriting an old message */
    }
   if(linkonly)
    { yell(lkingto,buf);
@@ -148,9 +164,10 @@ nolnk:	nlog("Couldn't make link to"),logqnl(buf);
      else
 didlnk:
       { size_t len;char*p;
-	Stdout=buf;primeStdout("");
-	p=realloc(Stdout,(Stdfilled=(len=strlen(Stdout))+1+strlen(buf))+1);
-	p[len]=' ';strcpy(p+len+1,buf);retbStdout(p);Stdout=0;
+	Stdout=buf;primeStdout(empty);
+	len=Stdfilled+strlen(Stdout+Stdfilled);
+	p=realloc(Stdout,(Stdfilled=len+1+strlen(buf))+1);
+	p[len]=' ';strcpy(p+len+1,buf);retbStdout(p);
       }
      goto ret;
    }
@@ -160,40 +177,132 @@ ret:
   return -1;
 }
 
-static int ismhdir(chp)char*const chp;
-{ if(chp-1>=buf&&chp[-1]==*MCDIRSEP_&&*chp==chCURDIR)
-   { chp[-1]='\0';
+int rnmbogus(name,stbuf,i,dolog)const char*const name;	      /* move a file */
+ const struct stat*const stbuf;const int i,dolog;	   /* out of the way */
+{ static const char renbogus[]="Renamed bogus \"%s\" into \"%s\"",
+   renfbogus[]="Couldn't rename bogus \"%s\" into \"%s\"",
+   bogusprefix[]=BOGUSprefix;char*p;
+  p=strchr(strcpy(strcpy(buf2+i,bogusprefix)+STRLEN(bogusprefix),
+   getenv(lgname)),'\0');
+  *p++='.';ultoan((unsigned long)stbuf->st_ino,p);	  /* i-node numbered */
+  if(dolog)
+   { nlog("Renaming bogus mailbox \"");elog(name);elog("\" info");
+     logqnl(buf2);
+   }
+  if(rename(name,buf2))			   /* try and move it out of the way */
+   { syslog(LOG_ALERT,renfbogus,name,buf2);		 /* danger!  danger! */
      return 1;
    }
+  syslog(LOG_CRIT,renbogus,name,buf2);
   return 0;
 }
-				       /* open file or new file in directory */
-static int deliver(boxname,linkfolder)char*boxname,*linkfolder;
-{ struct stat stbuf;char*chp;int mhdir;mode_t numask;
+
+/* return the named object's mode, making it a directory if it doesn't exist
+ * and renaming it out of the way if it's not _just_right_ and we're being
+ * paranoid */
+static mode_t trymkdir(dir,paranoid,i)const char*const dir;const int paranoid,i;
+{ int(*dostat)P((const char*,struct stat*));struct stat stbuf;int tries;
+  dostat=paranoid?&lstat:&stat;tries=3-1;    /* minus one for post-decrement */
+  do
+   { if(!dostat(dir,&stbuf))		      /* does it exist?	 Is it okay? */
+      { if(!paranoid||				  /* if we're trusting it is */
+	   (S_ISDIR(stbuf.st_mode)&&	      /* else it must be a directory */
+	    (stbuf.st_uid==uid||	       /* and have the correct owner */
+	     !stbuf.st_uid&&!chown(dir,uid,sgid))))  /* or be safely fixable */
+	   return stbuf.st_mode;				   /* bingo! */
+	else if(rnmbogus(dir,&stbuf,i,1))  /* try and move it out of the way */
+	   break;						/* couldn't! */
+      }
+     else if(errno!=ENOENT)	    /* something more fundamental went wrong */
+	break;
+     else if(!mkdir(dir,NORMdirperm))	  /* it's not there, can we make it? */
+      { if(!paranoid)	      /* do we need to double check the permissions? */
+	   return S_IFDIR|NORMdirperm&~cumask;			     /* nope */
+	tries++;		/* the mkdir succeeded, so take another shot */
+      }
+   }while(tries-->0);
+  return 0;
+}
+
+static int mkmaildir(chp,paranoid)char*chp;const int paranoid;
+{ mode_t mode;int i;
+  if(paranoid)
+     strncpy(buf2,buf,i=chp-buf+1),buf2[i-1]=*MCDIRSEP_,buf2[i]='\0';
+  return
+   (strcpy(chp,maildirnew),mode=trymkdir(buf,paranoid,i),S_ISDIR(mode))&&
+   (strcpy(chp,maildircur),mode=trymkdir(buf,paranoid,i),S_ISDIR(mode))&&
+   (strcpy(chp,maildirtmp),mode=trymkdir(buf,paranoid,i),S_ISDIR(mode));
+}					      /* leave tmp in buf on success */
+
+int foldertype(chp,modep,forcedir,paranoid)char*chp;mode_t*const modep;
+ int forcedir;struct stat*const paranoid;
+{ struct stat stbuf;mode_t mode;int type,i;
+  int(*dostat)(const char*,struct stat*);
+  i=0;dostat=paranoid?&lstat:&stat;
+  if(chp>=buf+1&&chp[-1]==*MCDIRSEP_&&*chp==chCURDIR)
+   { *--chp='\0';type=to_MH;
+   }
+  else if(*chp==*MCDIRSEP_&&chp>buf)
+   { *chp='\0';type=to_MAILDIR;
+     i=MAILDIRLEN;
+   }
+  else
+   { chp++;					    /* resolve the ambiguity */
+     if(!forcedir)
+      { if(dostat(buf,&stbuf))
+	 { if(paranoid)
+	    { type=to_NOTYET;
+	      goto ret;
+	    }
+	   goto newfile;
+	 }
+	else if(mode=stbuf.st_mode,!S_ISDIR(mode))
+	   goto file;
+      }
+     type=to_DIR;
+   }
+  if((chp-buf)+UNIQnamelen+1+i>linebuf)
+   { type=to_TOOLONG;
+     goto ret;
+   }
+  if(type==to_DIR&&!forcedir)		  /* we've already checked this case */
+     goto done;
+  if(paranoid)
+     strncpy(buf2,buf,i=lastdirsep(buf)-buf),buf2[i]='\0';
+  mode=trymkdir(buf,paranoid!=0,i);
+  if(!S_ISDIR(mode)||(type==to_MAILDIR&&
+   (forcedir=1,!mkmaildir(chp,paranoid!=0))))
+   { nlog("Unable to treat as directory");logqnl(buf);	 /* we can't make it */
+     if(forcedir)				     /* fallback or give up? */
+      { *chp='\0';skipped(buf);type=to_CANTCREATE;
+	goto ret;
+      }
+     if(!mode)
+newfile:mode=S_IFREG|NORMperm&~cumask;
+file:type=to_FILE;
+   }
+done:
+  if(paranoid)
+     *paranoid=stbuf;
+  else
+     *modep=mode;
+ret:
+  return type;
+}
+
+int writefolder(boxname,linkfolder,source,len,ignwerr,dolock)
+ char*boxname,*linkfolder;const char*source;long len;const int ignwerr,dolock;
+{ char*chp,*chp2;mode_t mode;int fd;
   asgnlastf=1;
   if(*boxname=='|'&&(!linkfolder||linkfolder==Tmnate))
    { setlastfolder(boxname);
-     return rdup(savstdout);
+     fd=rdup(savstdout);
+     goto dump;
    }
-  numask=UPDATE_MASK&~cumask;tofile=to_FILE;
   if(boxname!=buf)
      strcpy(buf,boxname);		 /* boxname can be found back in buf */
   if(*(chp=buf))				  /* not null length target? */
      chp=strchr(buf,'\0')-1;		     /* point to just before the end */
-  mhdir=ismhdir(chp);				      /* is it an MH folder? */
-  if(!stat(boxname,&stbuf))					/* it exists */
-   { if(numask&&!(stbuf.st_mode&UPDATE_MASK))
-	chmod(boxname,stbuf.st_mode|UPDATE_MASK);
-     if(!S_ISDIR(stbuf.st_mode))	 /* it exists and is not a directory */
-	goto makefile;				/* no, create a regular file */
-   }
-  else if(!mhdir||mkdir(buf,NORMdirperm))    /* shouldn't it be a directory? */
-makefile:
-   { if(linkfolder)	  /* any leftovers?  Now is the time to display them */
-	concatenate(linkfolder),skipped(linkfolder);
-     tofile=strcmp(devnull,buf)?to_FOLDER:(rawnonl=1,0);
-     return opena(boxname);
-   }
   if(linkfolder)		    /* any additional directories specified? */
    { size_t blen;
      if(blen=Tmnate-linkfolder)		       /* copy the names into safety */
@@ -201,58 +310,116 @@ makefile:
      else
 	linkfolder=0;
    }
-  if(mhdir)				/* buf should contain directory name */
-     *chp='\0',chp[-1]= *MCDIRSEP_,strcpy(buf2,buf);	   /* it ended in /. */
-  else					 /* fixup directory name, append a / */
-     strcat(chp,MCDIRSEP_),strcpy(buf2,buf),chp=0;
-  if(strlen(buf2)+UNIQnamelen>linebuf)
-   { nlog(exceededlb);setoverflow();
-     return -1;
-   }
-  ;{ int fd= -1;		/* generate the name for the first directory */
-     if(unique(buf2,strchr(buf2,'\0'),NORMperm,verbose,0)&&
-      (fd=dirfile(chp,0))>=0&&linkfolder)	 /* save the file descriptor */
-	for(strcpy(buf2,buf),boxname=linkfolder;boxname!=Tmnate;)
-	 { strcpy(buf,boxname);		/* go through the list of other dirs */
-	   if(*(chp=buf))
-	      chp=strchr(buf,'\0')-1;
-	   mhdir=ismhdir(chp);			      /* is it an MH folder? */
-	   if(stat(boxname,&stbuf))			 /* it doesn't exist */
-	      mkdir(buf,NORMdirperm);				/* create it */
-	   else if(numask&&!(stbuf.st_mode&UPDATE_MASK))
-	      chmod(buf,stbuf.st_mode|UPDATE_MASK);
-	   if(mhdir)
-	      *chp='\0',chp[-1]= *MCDIRSEP_;
-	   else				 /* fixup directory name, append a / */
-	      strcat(chp,MCDIRSEP_),chp=0;
-	   dirfile(chp,1);		/* link it with the original in buf2 */
-	   while(*boxname++);		  /* skip to the next directory name */
+/*tofile=foldertype(chp,&mode,linkfolder!=0,0)			perhaps? XXX */
+  switch(tofile=foldertype(chp,&mode,0,0))	     /* the envelope please! */
+   { case to_FILE:
+	if(linkfolder)	  /* any leftovers?  Now is the time to display them */
+	   concatenate(linkfolder),skipped(linkfolder),free(linkfolder);
+	if(!strcmp(devnull,buf))
+	   tofile=0,rawnonl=1;		     /* save the effort on /dev/null */
+	else if(!(UPDATE_MASK&(mode|cumask)))
+	   chmod(boxname,mode|UPDATE_MASK);
+	if(dolock&&tofile)
+	 { strcpy(chp=strchr(buf,'\0'),lockext);
+	   if(!globlock||strcmp(buf,globlock))
+	      lockit(tstrdup(buf),&loclock);
+	   *chp='\0';
 	 }
-     if(linkfolder)					   /* free our cache */
-	free(linkfolder);
-     return fd;			      /* return the file descriptor we saved */
-   }
-}
-
-int writefolder(boxname,linkfolder,source,len,ignwerr)char*boxname,*linkfolder;
- const char*source;const long len;const int ignwerr;
-{ if(dump(deliver(boxname,linkfolder),source,len)&&!ignwerr)
-   { switch(errno)
-      { case ENOSPC:nlog("No space left to finish writing"),logqnl(buf);
-	   break;
+	fd=opena(boxname);
+dump:	if(dump(fd,source,len)&&!ignwerr)
+dumpf:	 { switch(errno)
+	    { case ENOSPC:nlog("No space left to finish writing"),logqnl(buf);
+		 break;
 #ifdef EDQUOT
-	case EDQUOT:nlog("Quota exceeded while writing"),logqnl(buf);
-	   break;
+	      case EDQUOT:nlog("Quota exceeded while writing"),logqnl(buf);
+		 break;
 #endif
-	default:writeerr(buf);
+	      default:writeerr(buf);
+	    }
+	   if(lasttell>=0&&!truncate(boxname,lasttell)&&(logopened||verbose))
+	      nlog("Truncated file to former size\n");	    /* undo garbage */
+ret0:	   return 0;
+	 }
+	return 1;
+     case to_TOOLONG:
+exlb:	nlog(exceededlb);setoverflow();
+     case to_CANTCREATE:
+retf:	if(linkfolder)
+	   free(linkfolder);
+	goto ret0;
+     case to_MAILDIR:
+	chp2=buf2+(chp-buf);
+	strcpy(buf2,buf);
+	/* chp2=stpcpy(buf2,buf)-MAILDIRLEN; */
+	strcpy(chp+=MAILDIRLEN,MCDIRSEP_);
+	if(0>(fd=unique(buf,++chp,linebuf,NORMperm,verbose,doFD)))
+	   goto nfail;
+	if(source==themail)			      /* skip leading From_? */
+	   source=skipFrom_(source,&len);
+	if(dump(fd,source,len)&&!ignwerr)
+	   goto failed;
+	strcpy(strcpy(strcpy(chp2,maildirnew)+MAILDIRLEN,MCDIRSEP_)+1,chp);
+	if(rename(buf,buf2))
+	 { unlink(buf);
+nfail:	   nlog("Couldn't create or rename temp file");logqnl(buf);
+	   goto retf;
+	 }
+	setlastfolder(buf2);
+	break;
+     case to_DIR:
+	chp+=2;
+     default: /* case to_MH: */
+	strcpy(chp-1,MCDIRSEP_);
+#if 0
+	if(tofile==to_MH&&source==themail)
+	   source=skipFrom_(source,&len);			      /* XXX */
+#endif
+	chp2=buf2+(chp-buf);
+	strcpy(buf2,buf);
+	/* chp2=stpcpy(buf2,buf); */
+	if(!unique(buf2,chp2,linebuf,NORMperm,verbose,0)||
+	 0>(fd=dirfile(chp,0,tofile)))
+	   goto nfail;
+	if(dump(fd,source,len)&&!ignwerr)
+	 { strcpy(buf,buf2);
+failed:	   unlink(buf);lasttell= -1;
+	   if(linkfolder)
+	      free(linkfolder);
+	   goto dumpf;
+	 }
+	strcpy(buf2,buf);
+	break;
+   }
+  if(!(UPDATE_MASK&(mode|cumask)))
+   { chp[-1]='\0';				      /* restore folder name */
+     chmod(buf,mode|UPDATE_MASK);
+   }
+  if(linkfolder)
+   { for(boxname=linkfolder;boxname!=Tmnate;boxname=strchr(boxname,'\0')+1)
+      { strcpy(buf,boxname);
+	if(*(chp=buf))
+	   chp=strchr(buf,'\0')-1;
+	switch(tofile=foldertype(chp,&mode,1,0))
+	 { case to_TOOLONG:goto exlb;
+	   case to_CANTCREATE:				     /* just skip it */
+	      continue;
+	   case to_DIR:
+	      chp+=2;
+	   case to_MH:
+	      strcpy(chp-1,MCDIRSEP_);
+	   case to_MAILDIR:
+	      break;
+	 }
+	if(dirfile(chp,1,tofile))	/* link it with the original in buf2 */
+	   if(!(UPDATE_MASK&(mode|cumask)))
+	    { chp[-1]='\0';
+	      chmod(buf,mode|UPDATE_MASK);
+	    }
       }
-     if(lasttell>=0&&!truncate(boxname,lasttell)&&(logopened||verbose))
-	nlog("Truncated file to former size\n");    /* undo appended garbage */
-     return 0;
+     free(linkfolder);
    }
   return 1;
 }
-
 
 void logabstract(lstfolder)const char*const lstfolder;
 { if(lgabstract>0||(logopened||verbose)&&lgabstract)  /* don't mail it back? */
@@ -292,7 +459,7 @@ void concon(ch)const int ch;   /* flip between concatenated and split fields */
   if(concnd!=ch)				   /* is this run redundant? */
    { concnd=ch;			      /* no, but note this one for next time */
      for(i=confield.filled;i;)		   /* step through the saved offsets */
-	themail[confield.offs[--i]]=ch;		       /* and flip every one */
+	themail[acc_vall(confield,--i)]=ch;	       /* and flip every one */
    }
 }
 
@@ -320,7 +487,7 @@ void readmail(rhead,tobesent)const long tobesent;
       { confield.filled=0;concnd='\n';
 	while(thebody=strchr(thebody,'\n'))
 	   switch(*++thebody)			    /* mark continued fields */
-	    { case '\t':case ' ':app_val(&confield,(off_t)(thebody-1-themail));
+	    { case '\t':case ' ':app_vall(confield,(long)(thebody-1-themail));
 	      default:
 		 continue;		   /* empty line marks end of header */
 	      case '\n':thebody++;
@@ -372,7 +539,7 @@ char*findtstamp(start,end)const char*start,*end;
   start=skpspace(start);start+=strcspn(start," \t\n");	/* jump over address */
   if(skpspace(start)>=end)			       /* enough space left? */
      return (char*)start;	 /* no, too small for a timestamp, stop here */
-  while(!(end[13]==':'&&end[15]==':')&&--end>start);	  /* search for :..: */
+  while(!(end[13]==':'&&end[16]==':')&&--end>start);	  /* search for :..: */
   ;{ int spc=0;						 /* found it perhaps */
      while(end-->start)		      /* now skip over the space to the left */
       { switch(*end)

@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: pipes.c,v 1.57.2.1 1999/04/06 04:05:18 guenther Exp $";
+ "$Id: pipes.c,v 1.62 1999/11/08 07:06:09 guenther Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -50,16 +50,15 @@ void resettmout P((void))
 }
 
 static void stermchild P((void))
-{ if(pidfilt>0)		    /* don't kill what is not ours, we might be root */
+{ static const char rescdata[]="Rescue of unfiltered data ";
+  if(pidfilt>0)		    /* don't kill what is not ours, we might be root */
      kill(pidfilt,SIGTERM);
-  if(!Stdout)
-   { static const char rescdata[]="Rescue of unfiltered data ";
-     rawnonl=1;				       /* give back the raw contents */
-     if(dump(PWRB,backblock,backlen))	  /* pump data back via the backpipe */
-	nlog(rescdata),elog("failed\n");
-     else if(verbose||pwait!=4)		/* are we not looking the other way? */
-	nlog(rescdata),elog("succeeded\n");
-   }
+  rawnonl=1;				       /* give back the raw contents */
+  if(PWRB<0);						/* previously unset? */
+  else if(dump(PWRB,backblock,backlen))	  /* pump data back via the backpipe */
+     nlog(rescdata),elog("failed\n");
+  else if(verbose||pwait!=4)		/* are we not looking the other way? */
+     nlog(rescdata),elog("succeeded\n");
   exit(lexitcode);
 }
 
@@ -134,14 +133,19 @@ No_1st_comma: elog(*walkargs);					/* expand it */
 }
 
 int pipthrough(line,source,len)char*line,*source;const long len;
-{ int pinfd[2],poutfd[2];
-  if(Stdout)
-     PWRB=PRDB= -1;
+{ int pinfd[2],poutfd[2];char*eq;
+  if(Stdout&&(*(eq=strchr(Stdout,'\0')-1)='\0',		     /* chop the '=' */
+   !(backblock=getenv(Stdout))))			/* no current value? */
+     PRDB=PWRB= -1;
   else
      rpipe(pbackfd);
   rpipe(pinfd);						 /* main pipes setup */
   if(!(pidchild=sfork()))			/* create a sending procmail */
-   { backblock=source;backlen=len;childsetup();rclose(PRDI);rclose(PRDB);
+   { if(Stdout&&backblock)
+	backlen=strlen(backblock);
+     else
+	backblock=source,backlen=len;
+     childsetup();rclose(PRDI);rclose(PRDB);
      rpipe(poutfd);rclose(STDOUT);
      if(!(pidfilt=sfork()))				/* create the filter */
       { rclose(PWRB);rclose(PWRO);rdup(PWRI);rclose(PWRI);getstdin(PRDO);
@@ -161,7 +165,7 @@ int pipthrough(line,source,len)char*line,*source;const long len;
 		 goto perr;
 	    }
 	   else
-perr:	      progerr(line,excode);	      /* I'm going to tell my mommy! */
+perr:	      progerr(line,excode,pwait==4);  /* I'm going to tell my mommy! */
 	   stermchild();
 	 }
       }
@@ -171,7 +175,10 @@ perr:	      progerr(line,excode);	      /* I'm going to tell my mommy! */
   if(forkerr(pidchild,procmailn))
      return -1;
   if(Stdout)
-   { retStdout(readdyn(Stdout,&Stdfilled));
+   { char*name;
+     *eq='=';name=Stdout;Stdout=0;primeStdout(name);free(name);
+     Stdout=readdyn(Stdout,&Stdfilled);
+     retStdout(Stdout,!backblock&&pwait&&pipw);
      return pipw;
    }
   return 0;		    /* we stay behind to read back the filtered text */
@@ -199,7 +206,7 @@ long pipin(line,source,len)char*const line;char*source;long len;
 		    len=0;
 		 if(pwait&&(excode=strcmp(t1,t3)?1:EXIT_SUCCESS)!=EXIT_SUCCESS)
 		  { if(!(pwait&2)||verbose)	  /* do we put it on report? */
-		       progerr(line,excode);
+		       progerr(line,excode,pwait&2);
 		    len=1;
 		  }
 		 goto builtin;
@@ -222,7 +229,7 @@ long pipin(line,source,len)char*const line;char*source;long len;
   ;{ int excode;			    /* optionally check the exitcode */
      if(pwait&&(excode=waitfor(pidchild))!=EXIT_SUCCESS)
       { if(!(pwait&2)||verbose)			  /* do we put it on report? */
-	   progerr(line,excode);
+	   progerr(line,excode,pwait&2);
 	len=1;
       }
    }
@@ -234,18 +241,20 @@ builtin:
   return len;
 }
 
+#undef realloc				/* unshell realloc for finer control */
+
 char*readdyn(bf,filled)char*bf;long*const filled;
 { int blksiz=BLKSIZ;long oldsize= *filled;unsigned shift=EXPBLKSIZ;char*np;
   for(;;)
    {
 #ifdef SMALLHEAP
      if((size_t)*filled>=(size_t)(*filled+blksiz))
-	lcking|=lck_MEMORY,nomemerr();
+	lcking|=lck_MEMORY,nomemerr(*filled);
 #endif				       /* dynamically adjust the buffer size */
 		       /* use the real realloc so that we can retry failures */
-     while(EXPBLKSIZ&&(np=0,blksiz>BLKSIZ)&&!(np=(realloc)(bf,*filled+blksiz)))
+     while(EXPBLKSIZ&&(np=0,blksiz>BLKSIZ)&&!(np=realloc(bf,*filled+blksiz)))
 	blksiz>>=1;				  /* try a smaller increment */
-     bf=EXPBLKSIZ&&np?np:realloc(bf,*filled+blksiz);		 /* last try */
+     bf=EXPBLKSIZ&&np?np:trealloc(bf,(size_t)(*filled+blksiz));	 /* last try */
 jumpback:;
      ;{ int got,left=blksiz;
 	do
@@ -261,11 +270,12 @@ jumpback:;
    }
 eoffound:
   if(pidchild>0)
-   { if(!Stdout)
+   { if(PRDB>=0)
       { getstdin(PRDB);			       /* filter ready, get backpipe */
 	if(1==rread(STDIN,buf,1))		      /* backup pipe closed? */
-	 { bf=realloc(bf,(*filled=oldsize+1)+blksiz);bf[oldsize]= *buf;
-	   Stdout=buf;pwait=2;		      /* break loop, definitely reap */
+	 { bf=trealloc(bf,(size_t)((*filled=oldsize+1)+blksiz));
+	   bf[oldsize]= *buf;
+	   PRDB= -1;pwait=2;		      /* break loop, definitely reap */
 	   goto jumpback;		       /* filter goofed, rescue data */
 	 }
       }
@@ -273,8 +283,10 @@ eoffound:
 	pipw=waitfor(pidchild);		      /* reap your child in any case */
    }
   pidchild=0;					/* child must be gone by now */
-  return (np=(realloc)(bf,*filled+1))?np:bf;  /* minimise+1 for housekeeping */
+  return (np=realloc(bf,*filled+1))?np:bf;    /* minimise+1 for housekeeping */
 }
+
+#define realloc foobar		      /* make sure don't accidentally use it */
 
 char*fromprog(name,dest,max)char*name;char*const dest;size_t max;
 { int pinfd[2],poutfd[2];int i;char*p;

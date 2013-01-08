@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmailrc.man,v 1.69 1999/02/26 01:00:42 guenther Exp $
+.Id $Id: procmailrc.man,v 1.75 1999/11/23 06:08:57 guenther Exp $
 .TH PROCMAILRC 5 \*(Dt BuGless
 .na
 .SH NAME
@@ -255,12 +255,19 @@ directory, absolute or relative to the current directory (see MAILDIR)).
 If it is a (possibly yet nonexistent) filename, the mail will be appended to
 it.
 .PP
-If it is a directory, the mail will be delivered to a newly created, guaranteed
-to be unique file named $MSGPREFIX* in the specified directory.  If the
-directory name ends in "@MCDIRSEP@@chCURDIR@", then this directory is presumed
-to be an MH folder; i.e. procmail will use the next number it finds available.
-When procmail is delivering to directories, you can specify multiple
-directories to deliver to (procmail will do so utilising hardlinks).
+If it is a directory, the mail will be delivered to a newly created,
+guaranteed to be unique file named $MSGPREFIX* in the specified directory.
+If the mailbox name ends in "@MCDIRSEP@@chCURDIR@", then this directory is
+presumed to be an MH folder; i.e., procmail will use the next number it
+finds available.  If the mailbox name ends in "@MCDIRSEP@", then this
+directory is presumed to be a maildir folder; i.e., procmail will deliver
+the message to a file in a subdirectory named "tmp" and rename it to be
+inside a subdirectory named "new".  If the mailbox is specified to be an MH
+folder or maildir folder, procmail will create the necessary directories if
+they don't exist, rather than treat the mailbox as a non-existent
+filename.  When procmail is delivering to directories, you can specify
+multiple directories to deliver to (procmail will do so utilising
+hardlinks).
 .SS "Environment variable defaults"
 .TP 2.2i
 .B "LOGNAME, HOME and SHELL"
@@ -403,7 +410,7 @@ child has terminated; if not specified, it defaults to @DEFtimeout@ seconds.
 .TP
 .B MSGPREFIX
 Filename prefix that is used when delivering to a directory (not used when
-delivering to an MH directory).
+delivering to a maildir or an MH directory).
 .TP
 .B HOST
 If this is not the
@@ -439,7 +446,7 @@ If you're not using the
 facility don't worry about this one.  It specifies the program being
 called to forward any mail.
 .br
-It gets invoked as: "$SENDMAIL" "$SENDMAILFLAGS" "$@";
+It gets invoked as: $SENDMAIL $SENDMAILFLAGS "$@";
 .TP
 .B NORESRETRY
 Number of retries that are to be made if any `\fBprocess table full\fP',
@@ -501,8 +508,10 @@ program.
 .TP
 .B LASTFOLDER
 This variable is assigned to by procmail whenever it is delivering
-to a folder or program.  It always contains the name of the last folder
-(or program) procmail delivered to.
+to a folder or program.  It always contains the name of the last file
+(or program) procmail delivered to.  If the last delivery was to
+several directory folders together then $LASTFOLDER will contain
+the hardlinked filenames as a space separated list.
 .TP
 .B @MATCHVAR@
 This variable is assigned to by procmail whenever it is told to extract
@@ -517,13 +526,26 @@ This command is most useful to extract extra arguments passed to procmail
 when acting as a generic mailfilter.
 .TP
 .B INCLUDERC
-Names an rcfile (relative to the current directory) which will be included
-here as if it were part of the current rcfile.  Unlimited nesting is
-permitted.  As no checking is done on the permissions or ownership of the
-rcfile, users of
+Names an rcfile (relative to the current directory) which will be
+included here as if it were part of the current rcfile.  Nesting is
+permitted and only limited by systems resources (memory and file
+descriptors).  As no checking is done on the permissions or ownership
+of the rcfile, users of
 .B INCLUDERC
 should make sure that only trusted users have write access to the included
 rcfile or the directory it is in.
+.TP
+.B SWITCHRC
+Names an rcfile (relative to the current directory) to which processing
+will be switched.  If the named rcfile doesn't exist or is not a normal
+file or /dev/null then an error will be logged and processing will
+continue in the current rcfile.  Otherwise, processing of the current
+rcfile will be aborted and the named rcfile started.  Unsetting
+.B SWITCHRC
+aborts processing of the current rcfile as if it had ended at the
+assignment.  As with
+.BR INCLUDERC ,
+no checking is done on the permissions or ownership of the rcfile.
 .TP
 .B PROCMAIL_VERSION
 The version number of the running procmail binary.
@@ -684,8 +706,11 @@ When the
 or
 .B \-@MAILFILTOPT@
 options are used, "$@" will expand to respectively the specified argument
-(list); but only when passed as in the argument list to a
-program.
+(list); but only when passed as in the argument list to a program, and
+then only one such occurence will be expanded.
+.PP
+Unquoted variable expansions performed by procmail are always split on
+whitespace; the IFS variable is not used internally.
 .PP
 Procmail does not support the expansion of `~'.
 .PP
@@ -780,6 +805,12 @@ before checking for $SHELLMETAS.
 .PP
 Files included with the INCLUDERC directive containing only environment
 variable assignments can be shared with sh.
+.PP
+The current behavior of assignments on the command line to
+.B INCLUDERC
+and
+.B SWITCHRC
+is not guaranteed and may be changed or removed in future releases.
 .PP
 For
 .I really
