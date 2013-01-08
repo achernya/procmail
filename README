@@ -8,22 +8,23 @@ however not to be not sold (minor transfer costs excepted) or included in
 any commercially sold software package (if you want to do this anyway,
 contact me (address below), and we'll work something out).
 
-If you distribute it, please leave the package in tact.  If you have some
+If you distribute it, please leave the package in tact.	 If you have some
 important changes that might be usefull to the rest of the world, contact
 me instead.
 
 ----------------------
 
-The Procmail mail processing package. (v1.10 1991-02-13)
+The Procmail mail processing package. (v1.30 1991-01-03)
 
 Can be used to create mail-servers, mailing lists, sort your incoming mail
 (real convenient when subscribing to one or more mailing lists),
 preprocess your mail, or selectively forward certain incoming mail
 automatically to someone.
 
-To install it, edit the Makefile accordingly (if it doesn't compile at first,
-check if some extra header files should be included (or left out) in order
-to make any used types/defines/declarations for the library compatible).
+To install it, edit config.h (!) and Makefile accordingly (if it doesn't
+compile at first, check if some extra header files (in includes.h) should
+be included (or left out) in order to make any used types/defines/declarations
+for the library compatible).
 
 BTW, the warnings you get about 'loop not entered at top': they're normal :-).
 Some older compilers could complain about ambiguous assignments, if they
@@ -35,13 +36,12 @@ Should procmail seem to hang, check if the $LOCKFILE is still present.
 If you kill procmail with "kill pid" it will clean up the $LOCKFILE
 itself.
 
-If you really want to, you can change some of the defines at the start
-of procmail.c to suit your needs.  They should be sufficient for most
-people though.
+Though be sure to skim through config.h and in particular check out
+the t_buf declaration.
 
 Every user that wants to use procmail should have a .forward and a
-.procmailrc file in his HOME directory.  For starters, you can look
-at the supplied example "forward" and "procmailrc" files.
+.procmailrc file in his HOME directory.	 For starters, you can look
+at the supplied example files in "examples".
 (BTW, be sure to make .forward *world* readable).
 
 For more info about the program, see the man page.
@@ -53,8 +53,8 @@ will perform as required, I must say that I made the utmost effort
 to make procmail as robust as any program can be.
 
 Procmail was designed to deliver the mail under the worst conditions
-(file system full, process table full, missing support files,
-unavailable executables; it all doesn't matter).
+(file system full, out of swap space, process table full,
+missing support files, unavailable executables; it all doesn't matter).
 Should (in the unlikely event) procmail be unable to deliver your mail
 somewhere, the mail will bounce back to the sender.
 
@@ -64,8 +64,17 @@ bug free (no known bug at the time).  Should, however, anyone
 find any bugs (highly unlikely :-), I would be pleased (well, sort of :-)
 to hear about it.  Please send me the patches or bug report.
 I'll look at them and will try to fix it in a future release.
+(BTW, if you should find any spelling or grammar errors in these files,
+it's not priority one, but if you were sending me mail anyway, I don't
+mind if you point them out to me; I like correct English just as much
+as you do).
 
 Cheers,
-       Stephen R. van den Berg  at RWTH-Aachen, Germany.
+       Stephen R. van den Berg	at RWTH-Aachen, Germany.
 
-Internet E-mail: berg@marvin.e17.physik.tu-muenchen.de
+Internet E-mail:		berg@marvin.e17.physik.tu-muenchen.de
+or if the above bounces:	berg@cip-s01.informatik.rwth-aachen.de
+
+Or:	P.O.Box 21074
+	6369 ZG Simpelveld
+	The Netherlands

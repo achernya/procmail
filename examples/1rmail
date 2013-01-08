@@ -2,7 +2,8 @@
 #
 # specify the mailbox file you want to read on the command line
 #
-cd $HOME/mail
+MAILDIR=$HOME/Mail
+cd $MAILDIR
 LOCKFILE=$HOME/.lockmail
 if lockfile -! -r1 $LOCKFILE
 then

@@ -1,0 +1,48 @@
+# Please check if all the paths in PATH are reachable, remove the ones that
+# are not.
+
+PATH=$HOME/bin:/usr/bin:/global/bin:/usr/ucb:/bin:/usr/local/bin:
+MAILDIR=$HOME/Mail	# You'd better make sure it exists
+DEFAULT=$MAILDIR/mbox
+LOGFILE=$MAILDIR/from
+			# We don't use a global lockfile here now
+			# Instead we use local lockfiles everywhere
+
+# Notice the double : in the next recipe, this will cause a lockfile
+# named "$MAILDIR/todd.lock" to be used if and only if this mail is going
+# into the file "todd".
+
+::				# Anything from thf
+^From.*thf\@somewhere.someplace
+todd				# will go to $MAILDIR/todd
+
+
+# The next recipe will likewise use $MAILDIR/uunetbox.lock as a lock file.
+
+::				# Anything from people at uunet
+^From.*\@uunet
+uunetbox			# will go to $MAILDIR/uunetbox
+
+
+# And here the lockfile will be $MAILDIR/henries.lock of course.
+
+:I:				# Anything from Henry or henry (ignore case)
+^From.*henry
+henries				# will go to $MAILDIR/henries
+
+
+# But you can specify any lockfile you want, like "myfile".  The following
+# recipe will use "$MAILDIR/myfile" as the lock file.
+
+::myfile			# All 'questions' will go to
+^Subject:.*questions
+toread				# $MAILDIR/toread
+
+# Anything that has not been delivered by now will go to $DEFAULT
+# BUT, since we have not specified any global lock file because we
+# were working with local lock files, and since we are sending the mail to
+# $DEFAULT now, we need to specify a lockfile for that too.  We use
+# a global lockfile for that  (it won't be created until procmail 
+# has parsed (needed to parse) up till here.
+
+LOCKFILE=$DEFAULT.lock

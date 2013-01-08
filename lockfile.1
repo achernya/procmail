@@ -1,4 +1,4 @@
-.\" @(#)lockfile.1 1.29 90/12/07 SMI;
+.\" @(#)lockfile.1 1.29 91/03/01 SMI;
 .de Sh
 .br
 .ne 6
@@ -9,18 +9,21 @@
 .ne 6
 .SS \\$1
 ..
-.TH LOCKFILE 1 "07 December 1990"
+.de Tp
+.br
+.ne 6
+.TP \\$1
+..
+.TH LOCKFILE 1 "1 March 1991"
 .SH NAME
 lockfile \- conditional semaphore-file creator
 .SH SYNOPSIS
 .B lockfile
-[
-.BI \- sleeptime
-] [
-.BI \-r retries
-] [
-.B \-!
-]
+.RI [ " \fB\-\fPsleeptime " ]
+.RI [ " \fB\-r\fPretries " ]
+.RB [ " \-! ]
+.if n .ti +0.5i
+.RI [ " \fB\-l\fPlocktimeout " ]
 .I filename
 \&.\|.\|.
 .Sh "DESCRIPTION"
@@ -64,6 +67,16 @@ will have access permission 0, and therefore will have to be removed
 with
 .B rm
 .BR \-f .
+.LP
+If you specify a
+.I locktimeout
+then a
+.B lockfile
+will be removed by force after
+.I locktimeout
+seconds have passed since the
+.B lockfile
+was last modified/created.
 .Sh "SEE ALSO"
 .LP
 .BR rm (1),
@@ -71,6 +84,15 @@ with
 .BR binmail (1),
 .BR sendmail (8),
 .BR procmail (1)
+.Sh "DIAGNOSTICS"
+.Tp 23
+Forcing lock on "x"
+specified
+.B lockfile
+is going to be removed by force because of a timeout (compare
+.BR LOCKTIMEOUT
+in
+.BR procmail (1))
 .Sh "BUGS & SPECIAL FEATURES"
 .LP
 .B lockfile
@@ -94,5 +116,7 @@ after every file on the command line.
 .LP
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .RS
-berg@marvin.e17.physik.tu-muenchen.de
+berg@marvin.e17.physik.tu-muenchen.de (preferred)
+.br
+berg@cip-s01.informatik.rwth-aachen.de (alternative)
 .RE

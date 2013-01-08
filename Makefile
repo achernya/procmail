@@ -1,36 +1,38 @@
-BASENAME = /global              # change to your home directory if need be
-BINDIR   = ${BASENAME}/bin
-MANDIR   = ${BASENAME}/man/man1
+# change BASENAME to your home directory if need be
+BASENAME = /global
 
-OCFLAGS  = -O
+BINDIR	 = ${BASENAME}/bin
+MANDIR	 = ${BASENAME}/man/man1
+
+OCFLAGS	 = -O
 OLDFLAGS = -s
 
 # Uncomment appropiately (for sysV and the like):
-CFLAGS  = ${OCFLAGS} #-DSYSV -DNOfsync -DNO_ANSI_PROT -Dvoid=char
+CFLAGS	= ${OCFLAGS} #-DSYSV
 LDFLAGS = ${OLDFLAGS} #-lbsd 
 
 CC = cc
-INSTALL= install -m 755
+INSTALL= mv
 RM= rm -f
 
-all:    procmail lockfile
+OBJ=procmail.o nonint.o retint.o
 
-procmail: procmail.o
-	${CC} ${CFLAGS} -o procmail procmail.o ${LDFLAGS}
+all:	procmail lockfile
 
-procmail.o: procmail.c
-	${CC} ${CFLAGS} -c procmail.c
+procmail: ${OBJ}
+	${CC} ${CFLAGS} -o procmail ${OBJ} ${LDFLAGS}
 
 lockfile: lockfile.o
 	${CC} ${CFLAGS} -o lockfile lockfile.o ${LDFLAGS}
 
-lockfile.o: lockfile.c
-	${CC} ${CFLAGS} -c lockfile.c
+.c.o:
+	${CC} ${CFLAGS} -c $*.c
 
 install: all
+	chmod 755 procmail lockfile
 	${INSTALL} procmail lockfile ${BINDIR}
 	chmod 644 procmail.1 lockfile.1
 	cp procmail.1 lockfile.1 ${MANDIR}
 
 clean:
-	${RM} procmail.o lockfile.o procmail lockfile
+	${RM} ${OBJ} lockfile.o procmail lockfile

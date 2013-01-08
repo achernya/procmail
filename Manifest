@@ -1,15 +1,26 @@
-Makefile        We all know what that is.
-README          Important, read it.
-HISTORY         Recent and ancient changes (or bugs) documented.
-lockfile.1      Man page for lockfile.
-lockfile.c      You guessed it.
-Manifest        Right again.
-procmail.1      Yes, the man page for procmail.
-procmail.c      Yes, exactly.
-sysexits.h      Substitute for the machines that don't have it (is it ever
-                needed?)
-procmailrc      A sample .procmailrc file
-rmail           A sample shell script that demonstrates how to use
-                lockfiles while reading the mail (to ensure mail integrity
-                as soon as you exit the mail program)
-forward         A sample .forward file
+Makefile	We all know what that is.
+README		Important, read it.
+HISTORY		Recent and ancient changes (or bugs) documented.
+lockfile.1	Man page for lockfile.
+lockfile.c	You guessed it.
+Manifest	Right again.
+procmail.1	Yes, the man page for procmail (writing man pages gobbles up
+		sooo much time, here you can see why :-).
+procmail.c	main program for procmail.
+nonint.c	Collection of routines that don't return ints.
+retint.c	Collection of routines that return ints.
+procmail.h	Include file with all declarations.
+
+includes.h	System include files are all referenced here.
+config.h	The file to edit if you want to change, yes, the configuration.
+
+shell.h		Defines a few 'shell' macros for malloc and the like.
+sysexits.h	Standard exit codes.
+examples/?procmailrc
+		Sample .procmailrc files.
+examples/?rmail
+		Sample shell scripts that demonstrate how to use
+		lockfiles while reading the mail (to ensure mail integrity
+		as soon as you exit the mail program).
+examples/forward
+		A sample .forward file.

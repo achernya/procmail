@@ -1,22 +1,54 @@
 1990-12-07: v1.00
-            First release (after 2 weeks of coding and testing)
+	    First release (after 2 weeks of coding and testing)
 1990-12-12: v1.01
-            Added fsync to procmail.c
-            Removed longjmp in lockfile.c out of the signal handler
-                (not portable, so I'm told)
+	    Added fsync to procmail.c
+	    Removed longjmp in lockfile.c out of the signal handler
+		(not portable, so I'm told)
 1991-02-04: v1.02
-            Changes to procmail.c:
-               Added physical-write-error check
-               Altered egrep invocation (left out the -s flag, not supported
-                  on all machines; this didn't change functionality though)
-               Avoided the 'dirty' allocation of one more byte than needed by
-                  rewriting the bogus_header_replace routine
-               Made the finding bogus headers more robust
-            Added sysV lines in Makefile
+	    Changes to procmail.c:
+	       Added physical-write-error check
+	       Altered egrep invocation (left out the -s flag, not supported
+		  on all machines; this didn't change functionality though)
+	       Avoided the 'dirty' allocation of one more byte than needed by
+		  rewriting the bogus_header_replace routine
+	       Made the finding bogus headers more robust
+	    Added sysV lines in Makefile
 1991-02-13: v1.10
-            Changes to procmail.c:
-               Fixed slight error in parsing the recipe when 'h' and 'b' where
-                  specified
-               Started using the official exit codes
-               Made sure that the procmail is not influenced by falsely
-                  set environment variables like LOCKSLEEP
+	    Changes to procmail.c:
+	       Fixed slight error in parsing the recipe when 'h' and 'b' where
+		  specified
+	       Started using the official exit codes
+	       Made sure that the procmail is not influenced by falsely
+		  set environment variables like LOCKSLEEP
+1991-02-21: v1.20
+	    Changes to procmail.c:
+	       Removed library conflict on some machines for 'locking'
+	       Added uname call as alternative for gethostname
+	       Changed name of SHELLMETA to SHELLMETAS (for conformance
+		  with dmake)
+	       Added LOCKTIMEOUT to learn procmail to decide wether or not
+		  a certain lockfile is still 'valid'
+	       Added the function sputenv (smart-putenv) to avoid library
+		  problems and to finally have a putenv that works the
+		  way it was supposed to work all along (you wouldn't believe
+		  how brain damaged this library function is :-)
+	       Changed environment variable assignment to skip trailing blanks
+		  only, and allow intermediate blanks (parsing like make)
+1991-02-22: v1.21
+	    Split up procmail.c in procmail.c, nonint.c, retint.c, procmail.h,
+	       config.h, sysexits.h, shell.h
+	    Changes to lockfile.c:
+	       Added -l option (locktimeout)
+	    Moved virtually all configuration stuff from Makefile into
+	       config.h
+	    Added -v option to procmail
+1991-03-01: v1.30
+	    Added out of memory/swap space immunity  (NOMEMRETRY)
+	    Made forced terminations of procmail more reliable and verbose
+	       (previously, procmail would display erroneous error messages
+	       if an attempt was made to kill procmail more than once in
+	       rapid succession)
+	    Fixed up man pages and comments
+	    Included more example files
+	    Made sure that variable substitution works in locallockfile-
+	       specifications too
