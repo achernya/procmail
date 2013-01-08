@@ -1,6 +1,6 @@
 #! /bin/sh
 :
-#$Id: autoconf,v 1.35 1993/02/10 19:21:41 berg Exp $
+#$Id: autoconf,v 1.56 1993/06/23 14:35:13 berg Exp $
 
 # All possible entries in autoconf.h:
 
@@ -26,6 +26,7 @@
 #	typedef int uid_t;
 #	typedef int gid_t;
 #	typedef unsigned size_t;
+#	typedef long off_t;
 #	typedef long time_t;
 #	#define NOmemmove
 #	#define NObcopy
@@ -33,6 +34,9 @@
 #	#define NOstrpbrk
 #	#define NOopendir
 #	#define NOrename
+#	#define NOsetrgid
+#	#define NOsetregid
+#	#define NOmkdir
 #	#define NOuname
 #	#define NOstrstr
 #	#define NOstrtol
@@ -70,11 +74,11 @@ SHELL=$1
 PATH=.:$PATH
 shift; RM="$1"
 shift; MV="$1"
-shift; USRINC=$1
 shift; DEVNULL=$1
 shift; FGREP="$1"
 shift; MAKE="$1"
 shift; O=$1
+shift; LOCKINGTEST="$1"
 shift; ACONF=$1
 
 test 1 != $# &&
@@ -82,41 +86,81 @@ test 1 != $# &&
 
 export SHELL PATH
 
+OLDTESTDIRS=""
 tailpid=""
+echo "" >_locktst.pid
 
 if test -f $ACONF
 then
-  trap "cp $ACONF $ACONF.tmp;
-   test ! -z "$tailpid" && kill $tailpid; exit 1" 1 2 3 15
+  trap "kill \`cat _locktst.pid\` 2>$DEVNULL;cp $ACONF $ACONF.tmp
+   $RM -r \$OLDTESTDIRS;test ! -z \"\$tailpid\" && kill \$tailpid 2>$DEVNULL
+   kill \`cat _locktst.pid\` 2>$DEVNULL; exit 1" 1 2 3 15
 else
-  trap "$RM $ACONF.tmp;mv $ACONF $ACONF.tmp;
-   test ! -z "$tailpid" && kill $tailpid; exit 1" 1 2 3 15
-fi
-
-if test ! -z "$LD_LIBRARY_PATH"
-then
-  echo '***************************** WARNING *********************************'
-  echo '* You seem to have set the LD_LIBRARY_PATH variable, this might cause *'
-  echo '* some trouble during the execution of this autoconf script.  If the  *'
-  echo '* the make does not finish by itself, do a: "make clean",	      *'
-  echo '* clear LD_LIBRARY_PATH from the environment, and start over.	      *'
-  echo '***************************** WARNING *********************************'
-fi
-
-echo hi | $FGREP hi >$DEVNULL
-t=$?
-echo ho | $FGREP hi >$DEVNULL
-f=$?
-if test 0 != $t -o 0 = $f
-then
-  echo "Your \"$FGREP\" program seems to be incapable of returning a proper"
-  echo "exitvalue depending on the success of the search.  This script can"
-  echo "not work without it."
-  exit 2
+  trap "kill \`cat _locktst.pid\` 2>$DEVNULL;$RM -r \$OLDTESTDIRS $ACONF.tmp
+   mv $ACONF $ACONF.tmp 2>$DEVNULL
+   test ! -z \"\$tailpid\" && kill \$tailpid 2>$DEVNULL
+   kill \`cat _locktst.pid\` 2>$DEVNULL; exit 1" 1 2 3 15
 fi
 
 nocore=yes
 test -f core && nocore=no
+
+cat 2>&1 <<HERE
+==============================================================================
+In order for the kernel-locking tests to work as intended I have to be able to
+test-lock files on as many semantically different filesystems as possible (for
+more information about this, READ PARAGRAPH TWO in INSTALL).  To suppress this
+prompt you can set the LOCKINGTEST variable in the Makefile.
+
+Please add writeable directories to the list.  You should only add directories
+that reside on filesystems that have unique characterics.  E.g. if you have
+several remote NFS partitions, pick some unique client-server pairs, there is
+little use in picking the same server twice from the same client-machine.
+An excellent candidate would be a remotely mounted mail spool directory.
+==============================================================================
+HERE
+
+testdirs="/tmp ."
+b=dummy
+while test ! -z "$b"
+do
+  echo 2>&1 ""
+  b=""
+  OLDTESTDIRS="$TESTDIRS"
+  TESTDIRS=""
+  for a in $testdirs
+  do $RM -r $a/_locktest
+     if mkdir $a/_locktest
+     then
+	b="$b $a"
+	TESTDIRS="$TESTDIRS $a/_locktest"
+     else
+	echo 2>&1 "Can't create $a/_locktest"
+     fi
+  done
+  OLDTESTDIRS="$TESTDIRS"
+  testdirs="$b"
+  echo 2>&1 ""
+  echo 2>&1 "I will temporarily use a testdirectory named _locktest"
+  echo 2>&1 "in the following directories:"
+  echo 2>&1 ""
+  echo 2>&1 $testdirs
+  echo 2>&1 ""
+  echo 2>&1 "If you would like to add any, please specify them below,"
+  echo 2>&1 "press return to continue:"
+  echo 2>&1 ""
+  if test -z "$LOCKINGTEST"
+  then
+     read b
+  elif test dummy = "$LOCKINGTEST"
+  then
+     b=""
+  else
+     testdirs=""; b="$LOCKINGTEST"; LOCKINGTEST=dummy
+     echo $b
+  fi
+  testdirs="$testdirs $b"
+done
 
 cat >grepfor <<HERE
 $FGREP -e "\$1" _autotst.rrr >$DEVNULL && echo "\$2" >>$ACONF
@@ -128,35 +172,41 @@ cat >$ACONF <<HERE
 
 HERE
 
-echo 'Checking for POSIX and ANSI system include files'
-test -f $USRINC/unistd.h || echo "#define UNISTD_H_MISSING" >>$ACONF
-test -f $USRINC/stddef.h || echo "#define STDDEF_H_MISSING" >>$ACONF
-test -f $USRINC/stdlib.h || echo "#define STDLIB_H_MISSING" >>$ACONF
-if test ! -f $USRINC/dirent.h
-then echo "#define DIRENT_H_MISSING" >>$ACONF
-  if test ! -f $USRINC/ndir.h
-  then echo "#define NDIR_H_MISSING" >>$ACONF
-     if test ! -f $USRINC/sys/ndir.h
-     then echo "#define SYS_NDIR_H_MISSING" >>$ACONF
-	if test ! -f $USRINC/sys/dir.h
-	then echo "#define SYS_DIR_H_MISSING" >>$ACONF
-	   test -f $USRINC/sys/dirent.h ||
-	    echo "#define SYS_DIRENT_H_MISSING" >>$ACONF
-	fi
-     fi
+echo >_locktst.h
+
+$RM _autotst.$O
+
+cat >_autotst.c <<HERE
+#include "$ACONF"
+#include <sys/types.h>
+#include <time.h>
+void*vvoid;
+main(){int i;char*p="t";
+ {time_t vtime_t;i=vtime_t=1;}
+ {off_t voff_t;i=voff_t=1;}
+ vvoid=p;
+ return !vvoid;}
+#include <unistd.h>
+struct {char a;char b;} setsid;
+HERE
+
+if $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr
+ test -f _autotst.$O
+then
+  echo "#define setsid()" >>_locktst.h
+else
+  grepfor void '#define void char'
+  grepfor time_t 'typedef long time_t;'
+  grepfor off_t 'typedef long off_t;'
+  if $FGREP setsid _autotst.rrr >$DEVNULL 2>&1
+  then
+  :
+  else
+     echo "#define setsid()" >>_locktst.h
+     $MAKE _autotst.$O 2>&1 >$DEVNULL
+     test -f _autotst.$O || echo "#define UNISTD_H_MISSING" >>$ACONF
   fi
 fi
-test -f $USRINC/sys/wait.h || echo "#define SYS_WAIT_H_MISSING" >>$ACONF
-test -f $USRINC/sys/utsname.h || echo "#define SYS_UTSNAME_H_MISSING" >>$ACONF
-test -f $USRINC/string.h || echo "#define STRING_H_MISSING" >>$ACONF
-test -f $USRINC/sysexits.h || echo "#define SYSEXITS_H_MISSING" >>$ACONF
-
-echo >_locktst.h
-test -f $USRINC/sys/locking.h ||
- echo "#define SYS_LOCKING_H_MISSING" >>_locktst.h
-test -f $USRINC/sys/file.h || echo "#define SYS_FILE_H_MISSING" >>_locktst.h
-$FGREP setsid $USRINC/sys/unistd.h >$DEVNULL 2>&1 ||
- echo "#define setsid()" >>_locktst.h
 
 $RM _autotst.$O _autotst
 
@@ -175,7 +225,7 @@ main(){
  fcntl(0,F_SETLKW,0);
 #endif
 #ifdef F_LOCK
-  lockf(0,F_LOCK,0L);
+  lockf(0,F_LOCK,(off_t)0);
 #endif
 #ifdef LOCK_EX
   flock(0,LOCK_EX);
@@ -184,19 +234,11 @@ main(){
 HERE
 
 echo 'Initiating fcntl()/kernel-locking-support tests'
-echo   '********************************************************************'
-echo   '* If your system has mounted a REMOTE filesystem (like per NFS),   *'
-echo   '* then it would be advisable to compile these sources from within  *'
-echo   '* that filesystem, otherwise the locking tests might produce false *'
-echo   '* results (locking capability is file-system dependent)		   *'
-echo   '********************************************************************'
 if $MAKE _autotst.$O >$DEVNULL 2>&1
 then
 :
 else
   $RM _autotst.$O
-  echo 'Oops, your <sys/file.h> file seems to be incorrect.'
-  echo 'Retrying without it.'
   echo "#define SYS_FILE_H_MISSING" >>$ACONF
   if $MAKE _autotst.$O >_autotst.rrr 2>&1
   then
@@ -231,14 +273,14 @@ cat >_autotst.c <<HERE
 #include "../config.h"
 #include <sys/types.h>
 #ifndef UNISTD_H_MISSING
-#include <unistd.h>		/* getppid() */
+#include <unistd.h>		/* getpid() getppid() */
 #endif
 #include <stdio.h>
 #include <time.h>
 #include <fcntl.h>
 #include <signal.h>		/* SIGKILL */
 #ifndef tell
-#define tell(fd)	lseek(fd,0L,SEEK_CUR)
+#define tell(fd)	lseek(fd,(off_t)0,SEEK_CUR)
 #endif
 #define EX_OK	0
 #include "_locktst.h"
@@ -254,6 +296,7 @@ cat >_autotst.c <<HERE
 #define MIN_locks	128	  /* minimum of consecutive successful locks */
 #define SLEEP_loop	64		      /* iterations in the busy loop */
 #define SLEEP_delay	0		  /* sleep() time per busy iteration */
+#define SLEEP_retreat	1		 /* extra sleep() when quota reached */
 #define TIME_OUT_SEC	16			 /* initial timeout per lock */
 #define NR_of_forks	8			 /* concurrent test-programs */
 #define NR_of_lockfiles 2		  /* lockfiles used in testing (<=4) */
@@ -261,6 +304,7 @@ cat >_autotst.c <<HERE
 #define DECAY		7/8			   /* when timing got better */
 #define GOBBLE		256			 /* for the SunOS crash test */
 
+#define LOCKS_per_child (((MIN_locks+NR_of_forks-1)/NR_of_forks+1)/2)
 #define SHIFT_childno	3
 #define MASK_fileno	((1<<SHIFT_childno)-1)
 #define MASK_childno	(~MASK_fileno)
@@ -281,9 +325,14 @@ cat >_autotst.c <<HERE
 #define MSK_flock	0x01
 
 int dolock,child[NR_of_forks],timeout,fdcollect;
+char dirlocktest[]="_locktest";
 
 void stimeout()
-{ timeout=1;killchildren();close(fdcollect);
+{ timeout=1;close(fdcollect);killchildren();
+}
+
+void terminate()
+{ stimeout();exit(1);
 }
 
 static unsigned long seed;
@@ -292,78 +341,99 @@ unsigned psrand()
 { return(unsigned)(seed*=69069L)>>8;
 }
 
-main()
-{ int goodlock,testlock,i,pip[2];unsigned otimet,dtimet;
+unsigned sfork()
+{ int pid;
+  while((pid=fork())<0)
+     fprintf(stderr,"Couldn't fork _locktst, retrying\n"),sleep(TIME_OUT_SEC);
+  return pid;
+}
+
+main(argc,argv)char*argv[];
+{ int goodlock,testlock,i,pip[2],pipw[2];unsigned otimet,dtimet;
   static char filename[]="_locktst.l0";
-  close(0);goodlock=0;testlock=FIRST_lock;
-  if(fork())				 /* try to ditch the controlling tty */
+  close(0);goodlock=0;testlock=FIRST_lock;signal(SIGPIPE,SIG_DFL);
+  if(sfork())				 /* try to ditch the controlling tty */
      return EX_OK;	/* mainly to prevent rather messy kernel-diagnostics */
   setsid();				       /* from appearing on your tty */
   do
-   { otimet=time((char*)0);signal(SIGTERM,SIG_DFL);dolock=goodlock|testlock;
-     if(fork())	      /* discard the old body, let "init" adopt our children */
-      { close(1);close(2);i=NR_of_lockfiles;
-	do			       /* prime the lock, see if it vanishes */
-	 { filename[sizeof filename-2]='0'+--i;
-	   lseek(goodlock=open(filename,O_WRONLY),0L,SEEK_END);
-	   fdlock(goodlock);
+   { int countlocks;
+     signal(SIGTERM,SIG_DFL);argc=1;dolock=goodlock|testlock;
+     do
+      { char*curdir;
+	curdir=argv[argc];otimet=time((time_t*)0);
+	if(sfork())
+	 { close(1);close(2);i=NR_of_lockfiles;chdir(curdir);
+	   chdir(dirlocktest);
+	   do			       /* prime the lock, see if it vanishes */
+	    { filename[sizeof filename-2]='0'+--i;
+	      lseek(goodlock=open(filename,O_WRONLY),(off_t)0,SEEK_END);
+	      fdlock(goodlock);
+	    }
+	   while(i);
+	   for(;;)				/* synchronising "busy"-wait */
+	      sleep(TIME_OUT_SEC);	   /* until the games can be started */
 	 }
-	while(i);
-	for(;;)					/* synchronising "busy"-wait */
-	   sleep(TIME_OUT_SEC);		   /* until the games can be started */
-      }
-     sleep(1);pipe(pip);i=NR_of_forks;*child=0;
-     fprintf(stderr,"\nStarting test %x\n",dolock);
-     while((child[--i]=fork())&&i);		       /* divide and conquer */
-     if(!*child)
-      { unsigned char lockflag;int fd,childno=i<<SHIFT_childno;
-	close(pip[0]);close(1);seed=time((char*)0)+getpid()|1;
-	for(;;)						   /* and lock away! */
-	 { filename[sizeof filename-2]='0'+(i=psrand()%NR_of_lockfiles);
-	   lockflag=childno|i<<1|1;
-	   lseek(fd=open(filename,O_WRONLY),0L,SEEK_END);
-	   if(sfdlock(fd))
-	      lockflag&=~1,fprintf(stderr,"XX%02x",lockflag);
-	   write(pip[1],&lockflag,1);
-	   fprintf(stderr,"%2x%02x",i,childno>>SHIFT_childno);
-	   lseek(fd,0L,SEEK_END);write(fd,&lockflag,1);
-	   for(i=SLEEP_loop;i;i--,time((char*)0),sleep(SLEEP_delay));
-	   lockflag&=~1;write(pip[1],&lockflag,1);
-	   if(fdunlock()||close(fd))
-	    { write(pip[1],&lockflag,1);fprintf(stderr,"XX%02x",lockflag);
-	      return 1;
+	sleep(1);pipe(pip);pipe(pipw);i=NR_of_forks;*child=0;
+	fprintf(stderr,"\nStarting test %x on %s\n",dolock,curdir);
+	while((child[--i]=sfork())&&i);		       /* divide and conquer */
+	if(!*child)
+	 { unsigned char lockflag;int fd,childno=i<<SHIFT_childno;
+	   int mylocks=LOCKS_per_child;
+	   close(pipw[0]);close(pip[0]);close(1);
+	   seed=time((time_t*)0)+getpid()|1;chdir(curdir);chdir(dirlocktest);
+	   close(pipw[1]);
+	   for(;;)					   /* and lock away! */
+	    { filename[sizeof filename-2]='0'+(i=psrand()%NR_of_lockfiles);
+	      lockflag=childno|i<<1|1;
+	      lseek(fd=open(filename,O_WRONLY),(off_t)0,SEEK_END);
+	      if(sfdlock(fd))
+		 lockflag&=~1,fprintf(stderr,"XX%02x",lockflag);
+	      write(pip[1],&lockflag,1);
+	      fprintf(stderr,"%2x%02x",i,childno>>SHIFT_childno);
+	      lseek(fd,(off_t)0,SEEK_END);write(fd,&lockflag,1);
+	      for(i=SLEEP_loop;i;i--,time((time_t*)0),sleep(SLEEP_delay));
+	      lockflag&=~1;write(pip[1],&lockflag,1);
+	      if(fdunlock()||close(fd))
+	       { write(pip[1],&lockflag,1);fprintf(stderr,"XX%02x",lockflag);
+		 return 1;
+	       }
+	      if(--mylocks<0)
+		 sleep(SLEEP_retreat);
 	    }
 	 }
-      }
-     ;{ unsigned char lckdfil[NR_of_lockfiles],curflag;
-	int j,countlocks=MIN_locks;	       /* give all children a chance */
-	for(j=NR_of_lockfiles;lckdfil[--j]=0,j;);
-	close(pip[1]);timeout=0;sleep(1);kill(getppid(),SIGKILL);
-	fdcollect=pip[0];signal(SIGALRM,(void(*)())stimeout);
-	dtimet=(((unsigned)time((char*)0)-otimet)*GROW)+TIME_OUT_SEC;
-	do
-	 { unlink("_locktst.alive");alarm(dtimet+2);		 /* watchdog */
-	   dtimet=(otimet=time((char*)0)-otimet)>dtimet?
-	    otimet*GROW:otimet+(dtimet-otimet)*DECAY+1;	   /* load dependent */
-	   otimet=time((char*)0);
+	signal(SIGTERM,terminate);
+	;{ unsigned char lckdfil[NR_of_lockfiles],curflag;
+	   int j,ppid;			       /* give all children a chance */
+	   ppid=getppid();
+	   if(sfork())	/* discard the old body, let init adopt our children */
+	      return EX_OK;
+	   ;{ FILE*fp;
+	      if(fp=fopen("_locktst.pid","w"))
+		 fprintf(fp,"%ld",(long)getpid()),fclose(fp);
+	    }
+	   countlocks=MIN_locks;close(pip[1]);close(pipw[1]);
+	   for(j=NR_of_lockfiles;lckdfil[--j]=0,j;);
+	   timeout=0;sleep(1);read(pipw[0],&curflag,1);close(pipw[0]);
+	   kill(ppid,SIGKILL);fdcollect=pip[0];signal(SIGALRM,stimeout);
+	   dtimet=(((unsigned)time((time_t*)0)-otimet)*GROW)+TIME_OUT_SEC;
+	   do
+	    { unlink("_locktst.alive");alarm(dtimet+2);		 /* watchdog */
+	      dtimet=(otimet=time((time_t*)0)-otimet)>dtimet?
+	       otimet*GROW:otimet+(dtimet-otimet)*DECAY+1; /* load dependent */
+	      otimet=time((time_t*)0);
+	    }
+	   while(1==read(fdcollect,&curflag,1)&&
+	    (j=lckdfil[i=(curflag&MASK_fileno)>>1],!timeout)&&
+	    ((j^(lckdfil[i]=curflag))==1||!(j&1)&&curflag&1)&&--countlocks);
+	   alarm(0);close(fdcollect);killchildren();
+	   fprintf(stdout,
+	    "/*locktype: %x, countlocks: %x, timeout %x, watchdog %x, %s*/\n",
+	    dolock,countlocks,timeout,dtimet,curdir);fflush(stdout);
 	 }
-	while(1==read(fdcollect,&curflag,1)&&
-	 (j=lckdfil[i=(curflag&MASK_fileno)>>1],!timeout)&&
-	 ((j^(lckdfil[i]=curflag))==1||!(j&1)&&curflag&1)&&--countlocks);
-	alarm(0);killchildren();close(fdcollect);
-#ifdef FAIR_LOCK_CHECK
-	j=NR_of_lockfiles;
-	do
-	   if(!lckdfil[--j])			    /* was the locking fair? */
-	      countlocks+=MIN_locks;				     /* nope */
-	while(j);
-#endif
-	fprintf(stdout,
-	 "/*locktype: %x, countlocks: %x, timeout %x, watchdog %x*/\n",dolock,
-	 countlocks,timeout,dtimet);fflush(stdout);
-	if(!countlocks)			    /* Hurray!	Locking was flawless */
-	   goodlock=dolock;			  /* make a mark on our colt */
       }
+     while(!countlocks&&argv[++argc]);
+     if(!countlocks)			    /* Hurray!	Locking was flawless */
+	goodlock=dolock;			  /* make a mark on our colt */
    }
   while(testlock>>=1);
   if(!(goodlock&MSK_fcntl))			      /* report our findings */
@@ -400,7 +470,7 @@ static oldfdlock;
 static struct flock flck;		/* why can't it be a local variable? */
 #endif
 #ifdef F_LOCK
-static long oldlockoffset;
+static off_t oldlockoffset;
 #endif
 
 fdlock(fd)
@@ -417,7 +487,7 @@ fdlock(fd)
 #endif
   if(MSK_lockf&dolock)
 #ifdef F_LOCK
-     oldlockoffset=tell(oldfdlock),fd|=lockf(oldfdlock,F_LOCK,0L);
+     oldlockoffset=tell(oldfdlock),fd|=lockf(oldfdlock,F_LOCK,(off_t)0);
 #else
      fd=1;
 #endif
@@ -441,8 +511,8 @@ fdunlock()
 #endif
   if(MSK_lockf&dolock)
 #ifdef F_LOCK
-   { lseek(oldfdlock,oldlockoffset,SEEK_SET);i|=lockf(oldfdlock,F_LOCK,2L);
-     i|=lockf(oldfdlock,F_ULOCK,0L);
+   { lseek(oldfdlock,oldlockoffset,SEEK_SET);
+     i|=lockf(oldfdlock,F_LOCK,(off_t)2);i|=lockf(oldfdlock,F_ULOCK,(off_t)0);
    }
 #else
      i=1;
@@ -478,14 +548,18 @@ fi
 $MV _locktst _locktst.$$ 2>$DEVNULL
 $RM _autotst.$O _autotst.rrr locktst* 2>$DEVNULL
 $MV _autotst _locktst
-for a in 0 1 2 3
-do echo dummy_file >_locktst.l$a
-done
-_locktst >_locktst.rrr 2>lock.log	# this will finish in the background
-echo 'Proceeding with kernel-locking-support tests in the background'
 
-test -f $USRINC/sys/socket.h -a -f $USRINC/netdb.h -a -f $USRINC/netinet/in.h||
- echo "#define NO_COMSAT" >>$ACONF
+for b in $TESTDIRS
+do
+  for a in 0 1 2 3
+  do echo dummy_file >$b/_locktst.l$a
+  done
+done
+
+echo 2>&1 ""
+
+_locktst $TESTDIRS >_locktst.rrr 2>lock.log	# will finish in the background
+echo 'Proceeding with kernel-locking-support tests in the background'
 
 cat >_autotst.c <<HERE
 #include "$ACONF"
@@ -493,16 +567,17 @@ cat >_autotst.c <<HERE
 #include <unistd.h>		/* execvp() */
 #endif
 main()
-{ char r[]="",*const*p;char*q="";static struct{const int a;int b;}c[2];
+{ char r[]="",*const*p;char*q="";const char*s="";
+  static struct{const int a;int b;}c[2];
   --(c+1)->b;				 /* AIX 3.1.5 machines can't do this */
   p= &q;
   execvp(q,p);	  /* IRIX 4.0.1 system-include files are wrong on this point */
-  return *r;
+  return r==s;		    /* Domain/OS warns here, not about "s==r" though */
 }
 HERE
 
 echo 'Testing for const'
-if $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr &&
+if $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr
  test -f _autotst.$O
 then
   grepfor const '#define const'
@@ -542,34 +617,93 @@ HERE
   $RM _autotst.$O
 fi
 
+echo 'Checking for POSIX and ANSI system include files'
+
+cat >_autotst.c <<HERE
+#include "includes.h"
+int a;
+HERE
+
+i0="";i1="";i2="";i3="";i4="";i5="";i6="";i7="";i8="";i9="";i10="";
+oldi=""
+
+while $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr
+ test ! -f _autotst.$O
+do
+  test -z "$i0" && grepfor stddef.h "#define STDDEF_H_MISSING" && i0=I
+  test -z "$i1" && grepfor stdlib.h "#define STDLIB_H_MISSING" && i1=I
+  test -z "$i2" && grepfor dirent.h "#define DIRENT_H_MISSING" && i2=I
+  test -z "$i3" && grepfor ndir.h "#define NDIR_H_MISSING" && i3=I
+   test I = "$i3$i4" && grepfor sys/ndir.h "#define SYS_NDIR_H_MISSING" && i4=I
+    test I = "$i4$i5" && grepfor sys/dir.h "#define SYS_DIR_H_MISSING" && i5=I
+     test I = "$i5$i6" && grepfor sys/dirent.h "#define SYS_DIRENT_H_MISSING" \
+      && i6=I
+  test -z "$i7" && grepfor sys/wait.h "#define SYS_WAIT_H_MISSING" && i7=I
+  test -z "$i8" && grepfor sys/utsname.h "#define SYS_UTSNAME_H_MISSING" &&
+   i8=I
+  test -z "$i9" && grepfor string.h "#define STRING_H_MISSING" && i9=I
+  test -z "$i10" && grepfor sysexits.h "#define SYSEXITS_H_MISSING" && i10=I
+  newi="$i0$i1$i2$i3$i4$i5$i6$i7$i8$i9$i10"
+  if test a$oldi = a$newi
+  then
+     echo 2>&1 "Whoeaaa!  There's something fishy going on here."
+     echo 2>&1 "You have a look and see if you detect anything uncanny:"
+     echo 2>&1 "*******************************************************"
+     $MAKE _autotst.$O >_autotst.rrr 2>&1
+     cat 2>&1 _autotst.rrr
+     echo 2>&1 "*******************************************************"
+     echo 2>&1 "I suggest you take a look at the definition of CFLAGS*"
+     echo 2>&1 "in the Makefile before you try make again."
+     kill -15 $$
+  fi
+  oldi=$newi
+  echo \
+   "	...missing `expr $oldi : '.*'` include files, doublechecking..."
+done
+
+$RM _autotst.$O
+
+cat >_autotst.c <<HERE
+#include "includes.h"
+#include "network.h"
+int a;
+HERE
+
+echo 'Checking for network/comsat/biff support'
+
+if $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr
+ test -f _autotst.$O
+then
+:
+else
+  echo "#define NO_COMSAT" >>$ACONF
+fi
+
+$RM _autotst.$O
+
 cat >_autotst.c <<HERE
 #include "includes.h"
 #ifndef NO_COMSAT
 #include "network.h"
 #endif
-void*vvoid;
-main(){int i;char*p="t";
+main(){int i;
  {size_t vsize_t;i=vsize_t=1;}
  {pid_t vpid_t;i=vpid_t=1;}
- {time_t vtime_t;i=vtime_t=1;}
  {mode_t vmode_t;i=vmode_t=1;}
  {uid_t vuid_t;i=vuid_t=1;}
  {gid_t vgid_t;i=vgid_t=1;}
 #ifndef NO_COMSAT
  {struct hostent host;i=!(host.h_addr_list=0);}
 #endif
- vvoid=p;
- return !vvoid;}
+ return !i;}
 HERE
 
-echo 'Testing for void*,size_t,pid_t,time_t,mode_t,uid_t,gid_t'
+echo 'Testing for void*,size_t,off_t,pid_t,time_t,mode_t,uid_t,gid_t'
 $MAKE _autotst.$O 2>&1 | $FGREP -v include/ >_autotst.rrr
 $RM _autotst.$O
 
-grepfor void '#define void char'
 grepfor size_t 'typedef unsigned size_t;'
 grepfor pid_t 'typedef int pid_t;'
-grepfor time_t 'typedef long time_t;'
 grepfor mode_t 'typedef int mode_t;'
 grepfor uid_t 'typedef int uid_t;'
 grepfor gid_t 'typedef int gid_t;'
@@ -603,7 +737,8 @@ cat >_autotst.c <<HERE
 main(){char a[2];
  endpwent();endgrent();memmove(a,"0",1);bcopy("0",a,1);strcspn(a,"0");
  strtol("0",(char**)0,10);strchr("0",'0');strpbrk(a,"0");rename(a,"0");
- opendir("0");initgroups("0",0);strstr("0","0");
+ setrgid(0);setregid(0,0);opendir("0");initgroups("0",0);strstr("0","0");
+ mkdir("0",0);
 #ifndef NOuname
  {struct utsname b;uname(&b);}
 #endif
@@ -614,7 +749,8 @@ main(){char a[2];
  return 0;}
 HERE
 
-echo 'Testing for memmove, strchr, strpbrk, strcspn, strtol, strstr & opendir'
+echo 'Testing for memmove, strchr, strpbrk, strcspn, strtol, strstr,'
+echo '	rename, setrgid, opendir & mkdir'
 if $MAKE _autotst.$O >_autotst.rrr 2>&1
 then
 :
@@ -624,26 +760,9 @@ else
   echo 2>&1 "*******************************************************"
   cat 2>&1 _autotst.rrr
   echo 2>&1 "*******************************************************"
-  if $FGREP NO_COMSAT $ACONF >$DEVNULL
-  then
-     echo 2>&1 "Your include files seem to be beyond repair <sigh>."
-     echo 2>&1 "I give up."
-     kill -15 $$
-  else
-     echo 2>&1 "Maybe your network-support include files are messed up."
-     echo 2>&1 "Continuing the compilation, throwing out network"
-     echo 2>&1 "support..."
-     $RM _autotst.$O
-     echo "#define NO_COMSAT" >>$ACONF
-     if $MAKE _autotst.$O >$DEVNULL 2>&1
-     then
-	echo "It seems to be all right."
-     else
-	echo 2>&1 "Your include files seem to be beyond repair <sigh>."
-	echo 2>&1 "I give up."
-	kill -15 $$
-     fi
-  fi
+  echo 2>&1 "Your include files seem to be beyond repair <sigh>."
+  echo 2>&1 "I give up."
+  kill -15 $$
 fi
 $MAKE _autotst 2>&1 | $FGREP -v include/ >_autotst.rrr
 $RM _autotst _autotst.$O
@@ -656,6 +775,9 @@ grepfor opendir "
 			   selected in MH-folders by procmail */
 "
 grepfor rename '#define NOrename'
+grepfor setrgid '#define NOsetrgid' &&
+ grepfor setregid '#define NOsetregid'
+grepfor mkdir '#define NOmkdir'
 grepfor strchr '#define strchr(s,c) index(s,c)'
 grepfor uname "\
 #define NOuname		 \
@@ -797,7 +919,7 @@ $MAKE _autotst >$DEVNULL 2>&1
 _autotst >>$ACONF
 
 found=no
-for a in /usr/spool/mail /usr/mail /var/spool/mail /var/mail
+for a in /usr/spool/mail /usr/mail /var/spool/mail /var/mail /spool/mail
 do
   test -d $a -a $found != yes &&
    echo '#define SYSTEM_MAILBOX "'$a'/$LOGNAME"' >>$ACONF && found=yes
@@ -810,7 +932,7 @@ fi
 
 cat >lookfor <<HERE
 for a in /usr/lib /lib /usr/etc /etc /usr/bin /bin /usr/local/bin /usr/lbin \
- /usr/local/lib /usr/local /usr/.lib
+ /usr/local/lib /usr/local /usr/.lib /local/bin
 do
  if test -f "\$a/\$1"
  then
@@ -822,7 +944,7 @@ exit 1
 HERE
 chmod 0755 lookfor
 
-if lookfor sendmail || lookfor smail
+if lookfor sendmail || lookfor smail || lookfor rmail || lookfor mail
 then
 :
 elif _autotst 2 3 >>$ACONF
@@ -844,7 +966,7 @@ while $FGREP -e "Kernel-locking tests completed." _locktst.rrr >$DEVNULL; \
 do
   if test -z "$tailpid"
   then
-     echo "Waiting for kernel-locking tests to finish..."
+     echo "Waiting for the kernel-locking tests to finish..."
      exec 9>&2 2>$DEVNULL
      tail -f lock.log &
      tailpid=$!
@@ -869,6 +991,7 @@ then
   $RM core
 fi
 
+$RM -r $OLDTESTDIRS 2>$DEVNULL
 $RM _autotst* _locktst* lookfor grepfor 2>$DEVNULL
 
 echo =============================autoconf.h===================================

@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: robust.c,v 1.9 1993/01/19 11:55:25 berg Exp $";
+ "$Id: robust.c,v 1.11 1993/04/02 12:39:20 berg Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -79,7 +79,7 @@ pid_t sfork P((void))			/* this fork can survive a temporary */
   lcking&=~lck_FORK;return i;
 }
 
-void openlog(file)const char*file;
+void opnlog(file)const char*file;
 { int i;
   if(!*file)						   /* empty LOGFILE? */
      file=devnull;				 /* substitute the bitbucket */
@@ -90,9 +90,7 @@ void openlog(file)const char*file;
 }
 
 opena(a)const char*const a;
-{ if(asgnlastf)
-     asgnlastf=0,lastfolder=cstr(lastfolder,a);
-  yell("Opening",a);
+{ setlastfolder(a);yell("Opening",a);
 #ifdef O_CREAT
   return ropen(a,O_WRONLY|O_APPEND|O_CREAT,NORMperm);
 #else

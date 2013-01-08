@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.19 1993/02/10 17:08:03 berg Exp $";
+ "$Id: misc.c,v 1.26 1993/06/21 14:24:41 berg Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -21,16 +21,18 @@ static /*const*/char rcsid[]=
 #include "locking.h"
 #include "mailfold.h"
 
+const char lastfolder[]="LASTFOLDER";
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
- {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout},{"VERBOSE",DEFverbose}};
+ {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout},{"VERBOSE",DEFverbose},
+ {"LOGABSTRACT",DEFlogabstract}};
 int didchd;
 static fakedelivery;
 		       /* line buffered to keep concurrent entries untangled */
 void elog(newt)const char*const newt;
 { int lnew,i;static lold;static char*old;char*p;
 #ifndef O_CREAT
-  lseek(STDERR,0L,SEEK_END);		  /* locking should be done actually */
+  lseek(STDERR,(off_t)0,SEEK_END);	  /* locking should be done actually */
 #endif
   if(!(lnew=strlen(newt))||nextexit)			     /* force flush? */
      goto flush;
@@ -57,6 +59,12 @@ flush:
 void ignoreterm P((void))
 { signal(SIGTERM,SIG_IGN);signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);
   signal(SIGQUIT,SIG_IGN);
+}
+
+void setids(uid,gid)const uid_t uid;const gid_t gid;
+{ if(setrgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
+     setgid(gid);	   /* sets the saved gid as well; we can't use that! */
+  setuid(uid);setgid(gid);
 }
 
 void writeerr(line)const char*const line;
@@ -137,11 +145,13 @@ void terminate P((void))
      fakedelivery=0,retval=retvl2;
   if(getpid()==thepid)
    { if(retval!=EX_OK)
-      { tofile=0;lasttell= -1;		 /* make sure that logabstract knows */
-	lastfolder=fakedelivery?"**Lost**":		/* don't free() here */
-	 retval==EX_TEMPFAIL?"**Requeued**":"**Bounced**";
+      { tofile=0;lasttell= -1;			  /* mark it for logabstract */
+	logabstract(fakedelivery?"**Lost**":
+	 retval==EX_TEMPFAIL?"**Requeued**":"**Bounced**");
       }
-     logabstract();closerc();
+     else
+	logabstract(tgetenv(lastfolder));
+     closerc();
      if(!(lcking&lck_ALLOCLIB))			/* don't reenter malloc/free */
 	exectrap(tgetenv("TRAP"));
      nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
@@ -159,7 +169,7 @@ void suspend P((void))
 	alarm((unsigned)t);	/* badly implemented sleep library functions */
 }
 
-void app_val(sp,val)struct dyna_long*const sp;const long val;
+void app_val(sp,val)struct dyna_long*const sp;const off_t val;
 { if(sp->filled==sp->tspace)			    /* growth limit reached? */
    { if(!sp->offs)
 	sp->offs=malloc(1);
@@ -169,7 +179,7 @@ void app_val(sp,val)struct dyna_long*const sp;const long val;
 }
 
 alphanum(c)const unsigned c;
-{ return c-'0'<='9'-'0'||c-'a'<='z'-'a'||c-'A'<='Z'-'A'||c=='_';
+{ return numeric(c)||c-'a'<='z'-'a'||c-'A'<='Z'-'A'||c=='_';
 }
 
 void firstchd P((void))
@@ -228,7 +238,7 @@ void metaparse(p)const char*p;				    /* result in buf */
 }
 
 void concatenate(p)register char*p;
-{ while(*p!=TMNATE)			  /* concatenate all other arguments */
+{ while(p!=Tmnate)			  /* concatenate all other arguments */
    { while(*p++);
      p[-1]=' ';
    }
@@ -262,6 +272,16 @@ char*cstr(a,b)char*const a;const char*const b;	/* dynamic buffer management */
   return tstrdup(b);
 }
 
+void setlastfolder(folder)const char*const folder;
+{ if(asgnlastf)
+   { char*chp;
+     asgnlastf=0;
+     strcpy(chp=malloc(STRLEN(lastfolder)+1+strlen(folder)+1),lastfolder);
+     chp[STRLEN(lastfolder)]='=';strcpy(chp+STRLEN(lastfolder)+1,folder);
+     sputenv(chp);free(chp);
+   }
+}
+
 char*skpspace(chp)const char*chp;
 { for(;;chp++)
      switch(*chp)
@@ -272,20 +292,25 @@ char*skpspace(chp)const char*chp;
 
 char*gobenv(chp)char*chp;
 { int found,i;
-  for(found=0;alphanum(i=getb());found=1,*chp++=i);
+  found=0;
+  if(alphanum(i=getb())&&!numeric(i))
+     for(found=1;*chp++=i,alphanum(i=getb()););
   *chp='\0';ungetb(i);
   switch(i)
-   { case ' ':case '\t':case '\n':case '=':return chp;
+   { case ' ':case '\t':case '\n':case '=':
+	if(found)
+	   return chp;
    }
   return 0;
 }
 
-void asenvcpy(src)char*src;
+asenvcpy(src)char*src;
 { strcpy(buf,src);
   if(src=strchr(buf,'='))			     /* is it an assignment? */
    { strcpy((char*)(sgetcp=buf2),++src);readparse(src,sgetc,2);sputenv(buf);
-     src[-1]='\0';asenv(src);
+     src[-1]='\0';asenv(src);return 1;
    }
+  return 0;
 }
 
 void asenv(chp)const char*const chp;
@@ -303,7 +328,7 @@ void asenv(chp)const char*const chp;
      else
 	didchd=1;
   else if(!strcmp(buf,logfile))
-     openlog(chp);
+     opnlog(chp);
   else if(!strcmp(buf,Log))
      elog(chp);
   else if(!strcmp(buf,sdelivered))			    /* fake delivery */
@@ -322,7 +347,7 @@ void asenv(chp)const char*const chp;
   else if(!strcmp(buf,lockfile))
      lockit((char*)chp,&globlock);
   else if(!strcmp(buf,eumask))
-     umask((int)strtol(chp,(char**)0,8));
+     umask((mode_t)strtol(chp,(char**)0,8));
   else if(!strcmp(buf,includerc))
      pushrc(chp);
   else if(!strcmp(buf,host))

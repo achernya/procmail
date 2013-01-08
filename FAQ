@@ -2,7 +2,7 @@
 ---------------------- Frequently Asked Questions ----------------------------
 ------------------------------------------------------------------------------
 
-1. How do I go about setting up a mailinglist?
+1. How do I go about setting up a mailinglist or a mail-archive server?
 
 	Look in the mailinglist directory, start reading the INTRO file,
 	it describes it in detail and should get you started.
@@ -21,23 +21,23 @@
 	then you no longer need the .forward files in your home directory,
 	having a .procmailrc file will suffice.
 
-	On some systems .forward files are not checked, in this case it might
-	be worth trying to put a line looking like this:
-		Forward to "|/usr/local/bin/procmail"
+	On some systems .forward files are not checked.
+	It might be possible that your system supports a command like:
+		mail -F "|/usr/local/bin/procmail"
+	to set up forwarding to a program.
+	If that doesn't seem to work it might be worth trying to put a line
+	looking like this:
+		Forward to |/usr/local/bin/procmail
 	or if that doesn't work, try:
 		Pipe to /usr/local/bin/procmail
-	as the only line in your mail spool file (e.g. /usr/mail/$USER), as
-	well as doing a "chmod 06600 /usr/mail/$USER".	For more information
+	as the only line in your mail spool file (e.g. /usr/mail/$LOGNAME), as
+	well as doing a "chmod 06660 /usr/mail/$LOGNAME".  For more information
 	on such systems, do a "man mail".
 
 	If all of this doesn't work, procmail can be called on a periodical
 	basis, either via "cron", "at" or whenever you start reading mail (or
-	log in).  The commands you would need in such a case would be
-	something like:
-		lockfile -ml
-		formail -s procmail </usr/mail/$USER
-		cp /dev/null /usr/mail/$USER
-		lockfile -mu
+	log in).  For a sample script look in the NOTES section of the
+	procmail(1) man page.
 
 3. When I compile everything the compiler complains about invalid or illegal
    pointer combinations, but it produces the executables anyway.
@@ -84,7 +84,7 @@
 8. Where do I look for examples about:
 	One home directory, several machine architectures?
 	Procmail as an integrated local mail delivery agent? (generic,
-	 sendmail, smail, SysV mail)
+	 sendmail, smail, SysV mailsurr)
 	Changing the mail spool directory to $HOME for all users
 	Security considerations (when installing procmail suid root)
 	Exorbitant rcfile formats?
@@ -96,7 +96,11 @@
 	Other examples (e.g. for autoreplies) are most likely to be found by
 	typing:		man procmailex
 
-9. Why do I have to insert my login name after the '#' in the .forward or
+9. How do I use procmail as a general mail filter inside sendmail?
+
+	See EXAMPLES section of the procmail(1) man page.
+
+10. Why do I have to insert my login name after the '#' in the .forward or
    .maildelivery file?
 
 	Some mailers `optimise' maildelivery and take out duplicates from
@@ -106,7 +110,7 @@
 	it will make the .forward files unique, and will ensure that the mailer
 	doesn't optimise away some addresses.
 
-10. How do I view the man pages?
+11. How do I view the man pages?
 
 	If the man(1) program on your system understands the MANPATH
 	environment variable, make sure that the installation directory listed
@@ -117,7 +121,60 @@
 	them, you can view an individual man file by typing something like:
 	nroff -man procmail.1 | more
 
-11. None of the above topics cover my problem.	Should I panic?
+12. The leading From_ line on all my arriving mail shows the wrong time.
+    Before putting procmail in the .forward file everything was OK.
+
+	This is a known bug in sendmail-5.65c+IDA.
+
+13. I sometimes get these `Lock failure on "/usr/mail/$LOGNAME.lock"' errors
+    from procmail.  What do I do about it?
+
+	The problem here is that as long as procmail has not read a
+	$HOME/.procmailrc file, it can hang on to the sgid mail permission
+	(which it needs in order to create a lockfile in /usr/mail).
+	I.e. if procmail delivers mail to a user without a $HOME/.procmailrc
+	file, procmail *can* (and does) use the /usr/mail/$LOGNAME.lock file.
+
+	If, however, it finds a $HOME/.procmailrc file, procmail has to let go
+	of the sgid mail permission because otherwise any ordinary user could
+	misuse that.
+
+	There are several solutions to this problem:
+	- Some systems support the sticky bit on directories (when set only
+	  allows the owner of a file in that directory to rename or remove
+	  it).	This enables you to make /usr/spool/mail drwxrwxrwt.  It is
+	  thus effectively world writeable, but all the mailboxes in it are
+	  protected because only the mailbox owner can remove or rename it.
+	- If your system did not exhibit the !@#$%^&* POSIX semantics for
+	  setgid(), procmail would have been able to switch back and forth
+	  between group mail and the group the recipient belongs to without
+	  creating security holes.
+	- If your system supported setrgid() or setregid() with BSD semantics,
+	  procmail would have been able to switch... (see the previous point).
+	- You could simply put the following at the end of your .procmailrc
+	  file:
+
+		LOCKFILE		# removes any preexisting lockfile
+		LOG=`lockfile $DEFAULT$LOCKEXT`
+		TRAP="rm -f $DEFAULT$LOCKEXT"
+			:0
+			$DEFAULT
+
+	- You could, instead of using /usr/mail/$LOGNAME, use a file below
+	  your home directory as your default mailbox.
+	- Or, you could still use /usr/mail/$LOGNAME as the mailbox, but
+	  simply instruct procmail to use a different lockfile.	 This can
+	  be achieved by putting following recipe at the bottom of
+	  your .procmailrc file:
+
+		:0:$HOME/.lockmail
+		$DEFAULT
+
+	  You have to make sure that all other programs that update your
+	  system mailbox will be using the same lockfile of course.
+
+
+14. None of the above topics cover my problem.	Should I panic?
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?

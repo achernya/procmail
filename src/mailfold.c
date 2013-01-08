@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.19 1993/02/04 12:44:55 berg Exp $";
+ "$Id: mailfold.c,v 1.32 1993/07/01 11:58:32 berg Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -16,6 +16,7 @@ static /*const*/char rcsid[]=
 #include "pipes.h"
 #include "common.h"
 #include "exopen.h"
+#include "goodies.h"
 #include "locking.h"
 #include "mailfold.h"
 #ifndef NO_COMSAT
@@ -24,17 +25,17 @@ static /*const*/char rcsid[]=
 const char scomsat[]="COMSAT";
 #endif
 int logopened,tofile;
-long lasttell;
+off_t lasttell;
 static long lastdump;
 static volatile mailread;	/* if the mail is completely read in already */
 static struct dyna_long escFrom_,confield;	  /* escapes, concatenations */
 			       /* inserts escape characters on outgoing mail */
 static long getchunk(s,fromw,len)const int s;const char*fromw;const long len;
-{ long dist,dif;int i;static char esc[]={ESCAP};
+{ long dist,dif;int i;static const char esc[]=ESCAP;
   dist=fromw-themail;			/* where are we now in transmitting? */
   for(dif=len,i=0;i<escFrom_.filled;)	    /* let's see if we can find this */
      if(!(dif=escFrom_.offs[i++]-dist))			 /* this exact spot? */
-      { rwrite(s,esc,sizeof esc);lastdump++;			/* escape it */
+      { rwrite(s,esc,STRLEN(esc));lastdump++;			/* escape it */
 	if(i>=escFrom_.filled)				      /* last block? */
 	   return len;				/* yes, give all what's left */
 	dif=escFrom_.offs[i]-dist;break;	     /* the whole next block */
@@ -48,11 +49,11 @@ long dump(s,source,len)const int s;const char*source;long len;
 { int i;long part;
   lasttell=i= -1;
   if(s>=0)
-   { if(tofile&&(lseek(s,0L,SEEK_END),fdlock(s)))
+   { if(tofile&&(lseek(s,(off_t)0,SEEK_END),fdlock(s)))
 	nlog("Kernel-lock failed\n");
      lastdump=len;part=tofile==to_FOLDER?getchunk(s,source,len):len;
-     lasttell=lseek(s,0L,SEEK_END);smboxseparator(s);  /* optional separator */
-#ifndef NO_NFS_ATIME_HACK
+     lasttell=lseek(s,(off_t)0,SEEK_END);smboxseparator(s);	 /* optional */
+#ifndef NO_NFS_ATIME_HACK					/* separator */
      if(part&&tofile)		       /* if it is a file, trick NFS into an */
 	len--,part--,rwrite(s,source++,1),sleep(1);	    /* a_time<m_time */
 #endif
@@ -61,8 +62,7 @@ long dump(s,source,len)const int s;const char*source;long len;
       { part=getchunk(s,source,len);
 jin:	while(part&&(i=rwrite(s,source,BLKSIZ<part?BLKSIZ:(int)part)))
 	 { if(i<0)
-	    { i=0;goto writefin;
-	    }
+	      goto writefin;
 	   part-=i;len-=i;source+=i;
 	 }
       }
@@ -77,16 +77,115 @@ writefin:
    }			   /* return an error even if nothing was to be sent */
   tofile=0;return i&&!len?-1:len;
 }
-				       /* open file or new file in directory */
-deliver(boxname)char*const boxname;
-{ struct stat stbuf;
-  tofile=to_FILE;strcpy(buf,boxname);	 /* boxname can be found back in buf */
-  return stat(buf,&stbuf)||!S_ISDIR(stbuf.st_mode)?
-   (tofile=strcmp(devnull,buf)?to_FOLDER:0,opena(buf)):dirmail();
+
+static dirfile(chp,linkonly)char*const chp;const int linkonly;
+{ if(chp)
+   { long i=0;			     /* first let us try to prime i with the */
+#ifndef NOopendir		     /* highest MH folder number we can find */
+     long j;DIR*dirp;struct dirent*dp;char*chp2;
+     if(dirp=opendir(buf))
+      { while(dp=readdir(dirp))		/* there still are directory entries */
+	   if((j=strtol(dp->d_name,&chp2,10))>i&&!*chp2)
+	      i=j;			    /* yep, we found a higher number */
+	closedir(dirp);				     /* aren't we neat today */
+      }
+     else
+	readerr(buf);
+#endif /* NOopendir */
+     ;{ int ok;
+	do ultstr(0,++i,chp);		       /* find first empty MH folder */
+	while((ok=link(buf2,buf))&&errno==EEXIST);
+	if(linkonly)
+	 { if(ok)
+	      goto nolnk;
+	   goto ret;
+	 }
+      }
+     unlink(buf2);goto opn;
+   }
+  ;{ struct stat stbuf;
+     stat(buf2,&stbuf);
+     ultoan((unsigned long)stbuf.st_ino,      /* filename with i-node number */
+      strchr(strcat(buf,tgetenv(msgprefix)),'\0'));
+   }
+  if(linkonly)
+   { yell("Linking to",buf);
+     if(link(buf2,buf))	   /* hardlink the new file, it's a directory folder */
+nolnk:	nlog("Couldn't make link to"),logqnl(buf);
+     goto ret;
+   }
+  if(!myrename(buf2,buf))	       /* rename it, we need the same i-node */
+opn: return opena(buf);
+ret:
+  return -1;
 }
 
-void logabstract P((void))
-{ if(logopened)		      /* make sure that this doesn't get mailed back */
+static ismhdir(chp)char*const chp;
+{ if(chp-1>=buf&&chp[-1]==*MCDIRSEP_&&*chp==chCURDIR)
+   { chp[-1]='\0';return 1;
+   }
+  return 0;
+}
+				       /* open file or new file in directory */
+deliver(boxname,linkfolder)char*boxname,*linkfolder;
+{ struct stat stbuf;char*chp;int mhdir;mode_t cumask;
+  umask(cumask=umask(0));cumask=UPDATE_MASK&~cumask;tofile=to_FILE;
+  asgnlastf=1;
+  if(boxname!=buf)
+     strcpy(buf,boxname);		 /* boxname can be found back in buf */
+  if(*(chp=buf))				  /* not null length target? */
+     chp=strchr(buf,'\0')-1;		     /* point to just before the end */
+  mhdir=ismhdir(chp);				      /* is it an MH folder? */
+  if(!stat(boxname,&stbuf))					/* it exists */
+   { if(cumask&&!(stbuf.st_mode&UPDATE_MASK))
+	chmod(boxname,stbuf.st_mode|UPDATE_MASK);
+     if(!S_ISDIR(stbuf.st_mode))	 /* it exists and is not a directory */
+	goto makefile;				/* no, create a regular file */
+   }
+  else if(!mhdir||mkdir(buf,NORMdirperm))    /* shouldn't it be a directory? */
+makefile:
+   { if(linkfolder)	  /* any leftovers?  Now is the time to display them */
+	concatenate(linkfolder),skipped(linkfolder);
+     tofile=strcmp(devnull,buf)?to_FOLDER:0;return opena(boxname);
+   }
+  if(linkfolder)		    /* any additional directories specified? */
+   { size_t blen;
+     if(blen=Tmnate-linkfolder)		       /* copy the names into safety */
+	Tmnate=(linkfolder=tmemmove(malloc(blen),linkfolder,blen))+blen;
+     else
+	linkfolder=0;
+   }
+  if(mhdir)				/* buf should contain directory name */
+     *chp='\0',chp[-1]= *MCDIRSEP_,strcpy(buf2,buf);	   /* it ended in /. */
+  else					 /* fixup directory name, append a / */
+     strcat(chp,MCDIRSEP_),strcpy(buf2,buf),chp=0;
+  ;{ int fd= -1;		/* generate the name for the first directory */
+     if(unique(buf2,strchr(buf2,'\0'),NORMperm,verbose)&&
+      (fd=dirfile(chp,0))>=0&&linkfolder)	 /* save the file descriptor */
+	for(strcpy(buf2,buf),boxname=linkfolder;boxname!=Tmnate;)
+	 { strcpy(buf,boxname);		/* go through the list of other dirs */
+	   if(*(chp=buf))
+	      chp=strchr(buf,'\0')-1;
+	   mhdir=ismhdir(chp);			      /* is it an MH folder? */
+	   if(stat(boxname,&stbuf))			 /* it doesn't exist */
+	      mkdir(buf,NORMdirperm);				/* create it */
+	   else if(cumask&&!(stbuf.st_mode&UPDATE_MASK))
+	      chmod(buf,stbuf.st_mode|UPDATE_MASK);
+	   if(mhdir)
+	      *chp='\0',chp[-1]= *MCDIRSEP_;
+	   else				 /* fixup directory name, append a / */
+	      strcat(chp,MCDIRSEP_),chp=0;
+	   dirfile(chp,1);		/* link it with the original in buf2 */
+	   while(*boxname++);		  /* skip to the next directory name */
+	 }
+     if(linkfolder)					   /* free our cache */
+	free(linkfolder);
+     return fd;			      /* return the file descriptor we saved */
+   }
+}
+
+void logabstract(lstfolder)const char*const lstfolder;
+{ if(lgabstract>0||logopened&&lgabstract)  /* don't mail it back unrequested */
    { char*chp,*chp2;int i;static const char sfolder[]=FOLDER;
      if(mailread)			  /* is the mail completely read in? */
       { *thebody='\0';		       /* terminate the header, just in case */
@@ -106,7 +205,7 @@ void logabstract P((void))
 	 }
       }
      elog(sfolder);
-     i=strlen(strncpy(buf,lastfolder,MAXfoldlen))+STRLEN(sfolder);
+     i=strlen(strncpy(buf,lstfolder,MAXfoldlen))+STRLEN(sfolder);
      buf[MAXfoldlen]='\0';detab(buf);elog(buf);i-=i%TABWIDTH;	/* last dump */
      do elog(TABCHAR);
      while((i+=TABWIDTH)<LENoffset);
@@ -150,11 +249,11 @@ void logabstract P((void))
 	addr.sin_port=htons((short)s);			    /* network order */
      cat(tgetenv(lgname),"@");			 /* should always fit in buf */
      if(lasttell>=0)					   /* was it a file? */
-	ultstr(0,lasttell,buf2),catlim(buf2);			      /* yep */
+	ultstr(0,(unsigned long)lasttell,buf2),catlim(buf2);	      /* yep */
      catlim(COMSATxtrsep);				 /* custom seperator */
-     if(lasttell>=0&&!strchr(dirsep,*lastfolder))      /* relative filename? */
-	catlim(tgetenv(maildir)),catlim(_MCDIRSEP);   /* prepend current dir */
-     catlim(lastfolder);s=socket(AF_INET,SOCK_DGRAM,UDP_protocolno);
+     if(lasttell>=0&&!strchr(dirsep,*lstfolder))       /* relative filename? */
+	catlim(tgetenv(maildir)),catlim(MCDIRSEP_);   /* prepend current dir */
+     catlim(lstfolder);s=socket(AF_INET,SOCK_DGRAM,UDP_protocolno);
      sendto(s,buf,strlen(buf),0,(const void*)&addr,sizeof(addr));rclose(s);
      yell("Notified comsat:",buf);
    }
@@ -195,7 +294,7 @@ void readmail(rhead,tobesent)const long tobesent;
 	while(thebody=
 	 egrepin("[^\n]\n[\n\t ]",thebody,(long)(pastend-thebody),1))
 	   if(thebody[-1]!='\n')		  /* mark continuated fields */
-	      app_val(&confield,(long)(--thebody-1-themail));
+	      app_val(&confield,(off_t)(--thebody-1-themail));
 	   else
 	      goto eofheader;		   /* empty line marks end of header */
 	thebody=pastend;      /* provide a default, in case there is no body */
@@ -208,42 +307,8 @@ eofheader:;
      f1stchar= *realstart;*(chp=realstart)='\0';escFrom_.filled=0;
      while(chp=egrepin(FROM_EXPR,chp,(long)(pastend-chp),1))
       { while(*--chp!='\n');		       /* where did this line start? */
-	app_val(&escFrom_,(long)(++chp-themail));chp++;		   /* bogus! */
+	app_val(&escFrom_,(off_t)(++chp-themail));chp++;	   /* bogus! */
       }
      *realstart=f1stchar;mailread=1;
    }
-}
-
-dirmail P((void))			/* buf should contain directory name */
-{ char*chp;struct stat stbuf;
-  if((chp=strchr(buf,'\0')-1)-1>=buf&&chp[-1]==*_MCDIRSEP&&*chp==chCURDIR)
-     *chp='\0',strcpy(buf2,buf);			   /* it ended in /. */
-  else
-     chp=0,strcpy(buf2,strcat(buf,_MCDIRSEP));
-  if(unique(buf2,strchr(buf2,'\0'),NORMperm,verbose))
-   { if(chp)
-      { long i=0;		     /* first let us try to prime i with the */
-#ifndef NOopendir		     /* highest MH folder number we can find */
-	long j;DIR*dirp;struct dirent*dp;char*chp2;
-	*chp='\0';yell("Opening directory",buf);
-	if(dirp=opendir(buf))
-	 { while(dp=readdir(dirp))	/* there still are directory entries */
-	      if((j=strtol(dp->d_name,&chp2,10))>i&&!*chp2)
-		 i=j;			    /* yep, we found a higher number */
-	   closedir(dirp);			     /* aren't we neat today */
-	 }
-	else
-	   readerr(buf);
-#endif /* NOopendir */
-	do ultstr(0,++i,chp);		       /* find first empty MH folder */
-	while(link(buf2,buf)&&errno==EEXIST);
-	unlink(buf2);goto opn;
-      }
-     stat(buf2,&stbuf);
-     ultoan((unsigned long)stbuf.st_ino,      /* filename with i-node number */
-      strchr(strcat(buf,tgetenv(msgprefix)),'\0'));
-     if(!myrename(buf2,buf))	       /* rename it, we need the same i-node */
-opn:	return opena(buf);
-   }
-  return -1;
 }

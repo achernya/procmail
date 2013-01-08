@@ -1,12 +1,11 @@
 # BEFORE editing this file, you should make sure that it is not linked to
-# the master version (../.listadmin/listrc.sub) anymore (i.e. make a copy).
-# If the mailinglist is not in active use yet, or if you want to take the
-# chance, you can write out this file without locking.	To do it properly
-# you should create the ../.listadmin/the_lists.lock file with lockfile(1)
-# shortly before writing out the new version of this file (remove the lockfile
-# afterwards of course)
+# the master version (../.etc/rc.submit) anymore (i.e. "delink rc.request"
+# if you do not want your changes to affect all archive servers).
+#
+# New mails can be temporarily stalled by creating the file rc.lock (either in
+# ../.etc for all lists or in the current directory for this list only).
 
-#$Id: rc.submit,v 1.11 1993/02/11 12:08:21 berg Exp $
+#$Id: rc.submit,v 1.22 1993/06/29 15:36:16 berg Exp $
 
 INCLUDERC=$RC_INIT
 INCLUDERC=$RC_CUSTOM
@@ -21,26 +20,35 @@ INCLUDERC=$RC_CUSTOM
 # doing so, also check if this subscriber wants to receive copies.
 #
 
-:5Wh
-	< $size_limit
-	$!^$X_COMMAND:
-	!^Subject:([	 ]*(archive([	 ]+((send|get)(me)?|gimme|retrieve|\
-	 mail|ls|dir(ectory)?|list|show|help|info)([	 ]|$)|[		]*$)|\
-	 (help|info)[	 ]*$)|[^:]*( (add .* to|remove .* from|take .* off|\
-	 put .* on) .* list|subscri(be|ption))
-	$!^X-Loop: $listaddr
-	$!$FROM_MAILER_DAEMON
+:0 Wh
+	* < $size_limit
+	* $!^$X_COMMAND:
+	* !^Subject:([	 ]*(archive([	 ]+((send|get)(me)?|gimme|retrieve|\
+	   mail|ls|dir(ectory)?|list|show|help|info)([	 ]|$))|[	 ]*$)|\
+	   (help|info)[	 ]*$)|[^:]*( (add .* to|(delete|remove) .* from|\
+	   take .* off|put .* on) .* [a-z-]*list|subscri(be|ption))
+	* $!^X-Loop: $listaddr
+	* !^Precedence:.*junk|^FROM_MAILER
 METOO=	| formail -X"From " -xFrom: -xReply-To: -xSender: -xResent-From: \
-	    -xResent-Reply-To: -xResent-Sender: -xResent-From: | \
-	   multigram -b1 -m -l$submit_threshold dist
+	    -xResent-Reply-To: -xResent-Sender: | \
+	   multigram -b1 -m -l$submit_threshold accept
+
+#
+# Check if this is a digested mailinglist.  If yes, processing stops here
+# and the mail will be added to the digest.
+#
+
+	:0 A W :tmp.lock
+	* $$digest_flag
+	| digest
 
 #
 # Check if we are the first mailinglist to distribute this message, if so
 # archive the message.
 #
 
-	:1A c
-	!^X-Mailing-List:
+	:0 A c
+	* !^X-Mailing-List:
 	archive/latest/.
 
 #
@@ -48,15 +56,15 @@ METOO=	| formail -X"From " -xFrom: -xReply-To: -xSender: -xResent-From: \
 # housekeeping chores to keep the archive current).
 #
 
-	:1A c
-	!^X-Mailing-List:
+	:0 Ai c
+	* !^X-Mailing-List:
 	ARCHIVE=| arch_trunc "$-"
 
 #
 # Main header munger for submissions passing through this list.
 #
 
-	: A wfh
+	:0 A wfh
 	| formail -b -IReceived: -IReturn-Receipt-To: -IErrors-To: \
 	   -iReturn-Path: -iX-Envelope-To: -iX-Envelope-From: \
 	   -I"Precedence: list" -I"Resent-Sender: $listreq" \
@@ -66,25 +74,23 @@ METOO=	| formail -X"From " -xFrom: -xReply-To: -xSender: -xResent-From: \
 
 #
 # The following recipe will distribute the message to the subscribers.
-# Note that there are several possibilities, the first one listed here is
-# the cleanest one, but it has the disadvantage that the $listdist alias
-# is accessible to the outside world (can be queried and mailed to directly).
 #
 
-	:1A w: dist.lock
-	!? test -z "$foreign_submit$METOO"
+	:0 A w: dist.lock
+	* !?test -z "$foreign_submit$METOO"
 	! $sendmailOPT $METOO $listdist
-       #! $sendmailOPT $METOO `cat dist` ;
-	# alternate sendmail call
+
+       #! $sendmailOPT $METOO `sed -e '/^(.*)$/ d' dist` ;
+	# alternate sendmail call (if you don't have file-including aliases)
 
 result=$?
 
-	:1Awfh
-	? test 0 != $result
+	:0 A wfh
+	* ? test 0 != $result
 	| formail -A "X-Diagnostic: $SENDMAIL $listdist failed"
 
-	:1Awfh
-	? test -z "$foreign_submit$METOO"
+	:0 A wfh
+	* ?test -z "$foreign_submit$METOO"
 	| formail -A "X-Diagnostic: Not on the subscriber list"
 
 HOST=continue_with_rc.request

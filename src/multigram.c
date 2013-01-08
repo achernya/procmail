@@ -8,6 +8,8 @@
  *	This program also contains some swiss-army-knife mailinglist	*
  *	support features.						*
  *									*
+ *	Most notably:	flist	A program that should be setuid root.	*
+ *									*
  *	Seems to be relatively bug free.				*
  *									*
  *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
@@ -15,25 +17,27 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: multigram.c,v 1.22 1993/02/10 17:08:06 berg Exp $";
+ "$Id: multigram.c,v 1.30 1993/06/07 12:37:18 berg Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1993/02/10 17:08:06 $";
+static /*const*/char rcsdate[]="$Date: 1993/06/07 12:37:18 $";
 #include "includes.h"
 #include "sublib.h"
 #include "shell.h"
 #include "ecommon.h"
 
+#include "targetdir.h"	  /* see ../mailinglist/install.sh2 for more details */
+
 #define BUFSTEP		16
 #define COPYBUF		16384
 /*#define SPEEDBUF	COPYBUF	       /* uncomment to get a speed increase? */
 #define SCALE_WEIGHT	0x7fff
+#define EXCL_THRESHOLD	30730
 
 #define DEFmaxgram	4
 #define DEFminweight	(SCALE_WEIGHT/4)	      /* sanity cutoff value */
 #define DEFbest_matches 2
 
-#define PROCMAIL	"../.bin/procmail"	  /* some configurable paths */
-#define DEFAULTS_DIR	".etc"
+#define DEFAULTS_DIR	".etc"			  /* some configurable paths */
 #define GLOCKFILE	"../.etc/rc.lock"
 #define RCMAIN		"./.etc/rc.main"
 #define LLOCKFILE	"rc.lock"
@@ -51,9 +55,9 @@ static /*const*/char rcsdate[]="$Date: 1993/02/10 17:08:06 $";
 #define REMOV2_DELIM "addresses below this line can be automatically removed)"
 #define NOT_METOO	"(-n)"
 
-struct string{char*text,*itext;size_t buflen;};
+struct string{char*text,*itext;size_t textlen,buflen;};
 
-static remov_delim;
+static remov_delim,maxgram;
 
 strnIcmp(a,b,l)const char*a,*b;size_t l;			     /* stub */
 { return strncmp(a,b,l);
@@ -110,7 +114,8 @@ static void elog(a)const char*const a;
 { fputs(a,stderr);
 }
 							/* the program names */
-static const char idhash[]="idhash",flist[]="flist",dirsep[]=DIRSEP;
+static const char idhash[]="idhash",flist[]="flist",senddigest[]="senddigest",
+ dirsep[]=DIRSEP;
 static const char*progname="multigram";
 
 void nlog(a)const char*const a;		    /* log error with identification */
@@ -124,9 +129,11 @@ static char*lastdirsep(filename)const char*filename;
   return(char*)filename;
 }
 						   /* check rc.lock file age */
-static void rclock(file,stbuf)const char*const file;struct stat*const stbuf;
-{ while(!stat(file,stbuf)&&time((time_t*)0)-stbuf->st_mtime<DEFlocktimeout)
-     sleep(DEFlocksleep);			     /* wait, if appropriate */
+static rclock(file,stbuf)const char*const file;struct stat*const stbuf;
+{ int waited=0;
+  while(!stat(file,stbuf)&&time((time_t*)0)-stbuf->st_mtime<DEFlocktimeout)
+     waited=1,sleep(DEFlocksleep);		     /* wait, if appropriate */
+  return waited;
 }
 
 static char*argstr(first,last)const char*first,*last;		/* construct */
@@ -137,49 +144,108 @@ static char*argstr(first,last)const char*first,*last;		/* construct */
 
 static PROGID;
 
+static matchgram(fuzzstr,hardstr)
+const struct string*const fuzzstr;struct string*const hardstr;
+{ size_t minlen,maxlen;unsigned maxweight;int meter;
+  register size_t gramsize;
+  if((minlen=hardstr->textlen=strlen(hardstr->text))>(maxlen=fuzzstr->textlen))
+     minlen=fuzzstr->textlen,maxlen=hardstr->textlen;
+  if((gramsize=minlen-1)>maxgram)
+     gramsize=maxgram;
+  maxweight=SCALE_WEIGHT/(gramsize+1);
+  meter=(int)((unsigned long)SCALE_WEIGHT/2*minlen/maxlen)-SCALE_WEIGHT/2;
+  do					    /* reset local multigram counter */
+   { register lmeter=0;size_t cmaxlen=maxlen;
+     ;{ register const char*fzz,*hrd;
+	fzz=fuzzstr->itext;
+	do
+	 { for(hrd=fzz+1;hrd=strchr(hrd,*fzz);)		 /* is it present in */
+	      if(!strncmp(++hrd,fzz+1,gramsize))	      /* own string? */
+	       { if(cmaxlen>gramsize+1)
+		    cmaxlen--;
+		  goto dble_gram;		     /* skip until it's last */
+	       }
+	   for(hrd=hardstr->itext;hrd=strchr(hrd,*fzz);)	/* otherwise */
+	       if(!strncmp(++hrd,fzz+1,gramsize))	 /* search it in the */
+		{ lmeter++;break;			       /* dist entry */
+		}
+dble_gram:;
+	 }
+	while(*(++fzz+gramsize));				/* next gram */
+      }
+     if(lmeter)
+      { unsigned weight;
+	if(cmaxlen>minlen)
+	   cmaxlen=minlen;
+	meter+=lmeter*(weight=maxweight/(unsigned)(cmaxlen-gramsize));
+	meter-=weight*
+	 (unsigned long)((lmeter+=gramsize-cmaxlen)<0?-lmeter:lmeter)/cmaxlen;
+      }
+   }
+  while(gramsize--);			 /* search all gramsizes down to one */
+  return meter;
+}
+
 main(minweight,argv)char*argv[];
-{ struct string fuzzstr,hardstr;FILE*hardfile;const char*addit=0;
-  struct match{char*fuzz,*hard;int metric;long lentry,offs1,offs2;}
+{ struct string fuzzstr,hardstr,excstr,exc2str;FILE*hardfile;
+  const char*addit=0;
+  struct match{char*fuzz,*hard;int metric;long lentry;off_t offs1,offs2;}
    **best,*curmatch=0;
-  unsigned best_matches,maxgram,maxweight,charoffs=0,remov=0,renam=0,
+  unsigned best_matches,charoffs=0,remov=0,renam=0,
    chkmetoo=(char*)progid-(char*)progid;
   int lastfrom;
   static const char usage[]=
- "Usage: multigram [-cdmr] [-b nnn] [-l nnn] [-w nnn] [-a address] filename\n";
+"Usage: multigram [-cdmr] [-b nnn] [-l nnn] [-w nnn] [-ax address] filename\n";
   if(minweight)			      /* sanity check, any arguments at all? */
    { char*chp;
      if(!strcmp(chp=lastdirsep(argv[0]),flist))		 /* suid flist prog? */
-      { struct stat stbuf;
-	progname=flist;*chp='\0';	    /* security check, 3 hardlinks!? */
-	if(!chdir(argv[0])&&!lstat(flist,&stbuf)&&S_ISREG(stbuf.st_mode)&&
-	 stbuf.st_mode&S_ISUID&&stbuf.st_uid==geteuid()&&stbuf.st_nlink==3&&
-	 !chdir(chPARDIR))
-	 { static const char request[]=REQUEST,xenvlpto[]=XENVELOPETO,
-	    rcrequest[]=RCREQUEST,rcpost[]=RCPOST,list[]=LIST,
-	    *pmexec[]={PROCMAIL,RCSUBMIT,RCINIT,0,0,rcrequest,rcpost,0};
+      { struct stat stbuf;char*arg;
+	static const char request[]=REQUEST,listid[]=LISTID,
+	 rcrequest[]=RCREQUEST,rcpost[]=RCPOST,list[]=LIST,
+	 defdir[]=DEFAULTS_DIR,targetdir[]=TARGETDIR,
+	 *pmexec[]={PROCMAIL,RCSUBMIT,RCINIT,0,0,0,rcrequest,rcpost,0};
 #define Endpmexec(i)	(pmexec[maxindex(pmexec)-(i)])
-	   char*arg;
-	   if(minweight!=2)		       /* wrong number of arguments? */
-	    { elog("Usage: flist listname[-request]\n");return EX_USAGE;
-	    }
-	   chp=strchr(arg=argv[1],'\0');	       /* check for -request */
-	   if(chp-arg>STRLEN(request)&&!strcmp(chp-=STRLEN(request),request))
-	      *chp='\0',pmexec[1]=rcrequest,Endpmexec(1)=0,Endpmexec(2)=rcpost;
-	   else
-	      chp=0;
-	   if(chdir(arg))		     /* goto the list's subdirectory */
-	      pmexec[1]=RCMAIN,Endpmexec(2)=0,chdir(DEFAULTS_DIR);
-	   Endpmexec(4)=argstr(list,arg);	    /* pass on the list name */
-	   if(chp)				  /* was it a -request list? */
-	      *chp= *request;		     /* then restore the leading '-' */
-	   Endpmexec(3)=argstr(xenvlpto,arg);setuid(stbuf.st_uid);
-	   setgid(stbuf.st_gid);rclock(GLOCKFILE,&stbuf);	    /* stall */
-	   rclock(LLOCKFILE,&stbuf);
-	   execve(pmexec[0],(char*const*)pmexec,environ);  /* start procmail */
-	   nlog("Couldn't exec \"");elog(pmexec[0]);elog("\"\n");
-	   return EX_UNAVAILABLE;				    /* panic */
+	progname=flist;*chp='\0';
+	if(chdir(targetdir))
+	 { nlog("Couldn't chdir to \"");elog(targetdir);elog("\"\n");
+	   return EX_NOPERM;
 	 }
-	nlog("Missing permissions\n");return EX_NOPERM;
+	if(stat(defdir,&stbuf))
+	 { nlog("Can't find \"");elog(defdir);elog("\" in \"");
+	   elog(targetdir);elog("\"\n");return EX_NOINPUT;
+	 }
+	if(minweight!=2)		       /* wrong number of arguments? */
+	 { elog("Usage: flist listname[-request]\n");return EX_USAGE;
+	 }
+	chp=strchr(arg=argv[1],'\0');		       /* check for -request */
+	if(chp-arg>STRLEN(request)&&!strcmp(chp-=STRLEN(request),request))
+	   *chp='\0',pmexec[1]=rcrequest,Endpmexec(1)=0,Endpmexec(2)=rcpost;
+	else
+	   chp=0;
+	if(!strcmp(arg,chPARDIR)||strpbrk(arg,dirsep))
+	 { nlog("Bogus listname\n");return EX_NOPERM;
+	 }
+	if(geteuid()==ROOT_uid)		  /* continue as the list maintainer */
+	 { struct passwd*pass;
+	   if(!(pass=getpwnam(listid)))
+	    { nlog("User \");elog(listid);elog(\" unknown\n");
+	      return EX_NOUSER;
+	    }
+	   setgid(pass->pw_gid);initgroups(listid,pass->pw_gid);
+	   setuid(pass->pw_uid);endpwent();
+	 }
+	else
+	   setgid(stbuf.st_gid),setuid(stbuf.st_uid);
+	if(chdir(arg))			     /* goto the list's subdirectory */
+	   pmexec[1]=RCMAIN,Endpmexec(2)=0,chdir(defdir);
+	Endpmexec(5)=INIT_PATH;
+	Endpmexec(4)=argstr(list,arg);		    /* pass on the list name */
+	if(chp)					  /* was it a -request list? */
+	   *chp= *request;		     /* then restore the leading '-' */
+	Endpmexec(3)=argstr(XENVELOPETO,arg);
+	while(rclock(GLOCKFILE,&stbuf)||rclock(LLOCKFILE,&stbuf));  /* stall */
+	execve(pmexec[0],(char*const*)pmexec,environ);nlog("Couldn't exec \"");
+	elog(pmexec[0]);elog("\"\n");return EX_UNAVAILABLE;	    /* panic */
       }
      setgid(getgid());setuid(getuid());		  /* revoke suid permissions */
      if(!strcmp(chp,idhash))				  /* idhash program? */
@@ -192,7 +258,33 @@ main(minweight,argv)char*argv[];
 	   hash=hash*67067L+i;
 	printf("%lx",hash);return EX_OK;
       }
-     minweight=SCALE_WEIGHT;best_matches=maxgram=0;
+     if(!strcmp(chp,senddigest))		      /* senddigest program? */
+      { struct stat stbuf;
+	progname=senddigest;
+	if(minweight<5)
+	 { elog(
+	 "Usage: senddigest maxage maxsize bodyfile trailerfile [file] ...\n");
+	   return EX_USAGE;
+	 }
+	if(!stat(argv[3],&stbuf))
+	 { time_t newt;off_t size;
+	   newt=stbuf.st_mtime;size=stbuf.st_size;
+	   if(!stat(argv[minweight=4],&stbuf))
+	    { off_t maxsize;
+	      if(stbuf.st_mtime+strtol(argv[1],(char**)0,10)<newt)
+		 return EX_OK;				   /* digest too old */
+	      maxsize=strtol(argv[2],(char**)0,10);goto statd;
+	      do
+	       { if(!stat(argv[minweight],&stbuf))
+statd:		    if((size+=stbuf.st_size)>maxsize)	  /* digest too big? */
+		       return EX_OK;
+	       }
+	      while(argv[++minweight]);
+	    }
+	 }
+	return 1;
+      }
+     minweight=SCALE_WEIGHT;best_matches=maxgram=0;exc2str.text=excstr.text=0;
      while((chp= *++argv)&&*chp=='-')
 	for(chp++;;)
 	 { int c;
@@ -205,6 +297,14 @@ main(minweight,argv)char*argv[];
 		 if(!*chp&&!(chp= *++argv))
 		    goto usg;
 		 addit=chp;break;
+	      case 'x':
+		 if(!*chp&&!(chp= *++argv))
+		    goto usg;
+		 if(excstr.text)
+		    exc2str.text=chp;
+		 else
+		    excstr.text=chp;
+		 break;
 	      case 'b':case 'l':case 'w':
 	       { int i;
 		 ;{ const char*ochp;
@@ -227,6 +327,7 @@ main(minweight,argv)char*argv[];
 \n\t-m\t\tcheck for metoo\
 \n\t-l nnn\t\tlower bound metric\
 \n\t-r\t\trename address on list\
+\n\t-x address\texclude this address from the search (max. 2)\
 \n\t-w nnn\t\twindow width used when matching\n");return EX_USAGE;
 	      case '-':
 		 if(!*chp)
@@ -240,6 +341,11 @@ main(minweight,argv)char*argv[];
 lastopt:
      if(!chp||*++argv||renam+remov+!!addit>1)
 	goto usg;
+     if(excstr.text)
+      { excstr.textlen=strlen(excstr.text);lowcase(&excstr);
+	if(exc2str.text)
+	   exc2str.textlen=strlen(exc2str.text),lowcase(&exc2str);
+      }
      if(!(hardfile=fopen(chp,remov||renam||addit?"r+":"r")))
       { nlog("Couldn't open \"");elog(chp);elog("\"\n");return EX_IOERR;
       }
@@ -252,7 +358,7 @@ usg:
    { elog(usage);return EX_USAGE;
    }
   if(addit)			      /* special subfunction, to add entries */
-   { int lnl;long lasttell;				 /* to the dist file */
+   { int lnl;off_t lasttell;				 /* to the dist file */
      for(lnl=1,lasttell=0;;)
       { switch(getc(hardfile))			    /* step through the file */
 	 { case '\n':
@@ -285,7 +391,7 @@ usg:
      while(i--);
    }
   for(lastfrom= -1;readstr(stdin,&fuzzstr,0);)
-   { int meter,maxmetric;size_t fuzzlen;long linentry,offs1,offs2;
+   { int meter,maxmetric;long linentry;off_t offs1,offs2;
      ;{ char*chp,*echp;int parens;
 	echp=strchr(chp=fuzzstr.text,'\0')-1;
 	do
@@ -317,8 +423,13 @@ shftleft:     tmemmove(chp,chp+1,strlen(chp));
 	if(*(chp=fuzzstr.text)=='<'&&*(echp=strchr(chp,'\0')-1)=='>'
 	 &&!strchr(chp,','))			      /* strip '<' and '>' ? */
 	   *echp='\0',tmemmove(chp,chp+1,echp-chp);
-	if(!(fuzzlen=strlen(chp)))
+	if(!(fuzzstr.textlen=strlen(chp)))
 	   continue;
+	lowcase(&fuzzstr);
+	if(excstr.text&&matchgram(&fuzzstr,&excstr)>=EXCL_THRESHOLD||
+	 exc2str.text&&matchgram(&fuzzstr,&exc2str)>=EXCL_THRESHOLD)
+	 { free(fuzzstr.itext);continue;
+	 }
 	;{ int i=0;
 	   do
 	    { if(best[i]->metric==-SCALE_WEIGHT&&!strcmp(best[i]->fuzz,chp))
@@ -333,55 +444,18 @@ shftleft:     tmemmove(chp,chp+1,strlen(chp));
 	curmatch->fuzz=tstrdup(chp);curmatch->hard=malloc(1);
 	curmatch->metric= -SCALE_WEIGHT;
       }
-     lowcase(&fuzzstr);fseek(hardfile,0L,SEEK_SET);
-     maxmetric=best[best_matches]->metric;
+     fseek(hardfile,(off_t)0,SEEK_SET);maxmetric=best[best_matches]->metric;
      for(remov_delim=offs2=linentry=0;
       offs1=offs2,readstr(hardfile,&hardstr,1);)
-      { size_t minlen,hardlen,maxlen;register size_t gramsize;
-	offs2=ftell(hardfile);linentry++;
+      { offs2=ftell(hardfile);linentry++;
 	if(*hardstr.text=='(')
 	   continue;				   /* unsuitable for matches */
-	lowcase(&hardstr);
-	if((minlen=hardlen=strlen(hardstr.text))>(maxlen=fuzzlen))
-	   minlen=fuzzlen,maxlen=hardlen;
-	if((gramsize=minlen-1)>maxgram)
-	   gramsize=maxgram;
-	maxweight=SCALE_WEIGHT/(gramsize+1);
-	meter=(int)((unsigned long)SCALE_WEIGHT/2*minlen/maxlen)-
-	 SCALE_WEIGHT/2;
-	do				    /* reset local multigram counter */
-	 { register lmeter=0;size_t cmaxlen=maxlen;
-	   ;{ register const char*fzz,*hrd;
-	      fzz=fuzzstr.itext;
-	      do
-	       { for(hrd=fzz+1;hrd=strchr(hrd,*fzz);)	 /* is it present in */
-		    if(!strncmp(++hrd,fzz+1,gramsize))	      /* own string? */
-		     { if(cmaxlen>gramsize+1)
-			  cmaxlen--;
-		       goto dble_gram;		     /* skip until it's last */
-		     }
-		 for(hrd=hardstr.itext;hrd=strchr(hrd,*fzz);)	/* otherwise */
-		    if(!strncmp(++hrd,fzz+1,gramsize))	 /* search it in the */
-		     { lmeter++;break;			       /* dist entry */
-		     }
-dble_gram:;    }
-	      while(*(++fzz+gramsize));				/* next gram */
-	    }
-	   if(lmeter)
-	    { unsigned weight;
-	      if(cmaxlen>minlen)
-		 cmaxlen=minlen;
-	      meter+=lmeter*(weight=maxweight/(unsigned)(cmaxlen-gramsize));
-	      meter-=weight*
-	       (unsigned long)((lmeter+=gramsize-cmaxlen)<0?-lmeter:lmeter)/
-	       cmaxlen;
-	    }
-	 }
-	while(gramsize--);		 /* search all gramsizes down to one */
+	lowcase(&hardstr);meter=matchgram(&fuzzstr,&hardstr);
 	free(hardstr.itext);			 /* check if we had any luck */
 	if(meter>maxmetric&&(remov_delim||!renam&&!remov))
-	 { curmatch->metric=maxmetric=meter;curmatch->lentry=linentry;
-	   free(curmatch->hard);hardlen++;
+	 { size_t hardlen;
+	   curmatch->metric=maxmetric=meter;curmatch->lentry=linentry;
+	   free(curmatch->hard);hardlen=hardstr.textlen+1;
 	   hardlen+=strlen(hardstr.text+hardlen)+1;
 	   curmatch->hard=malloc(hardlen+=strlen(hardstr.text+hardlen)+1);
 	   tmemmove(curmatch->hard,hardstr.text,hardlen);
@@ -411,8 +485,8 @@ dupl_addr:;
      if((mp= *best)->metric>=minweight)
       { struct match*worse;
 	if(renam)
-	 { long line;int i,w1;
-	   maxweight>>=1;
+	 { long line;int i,w1;unsigned maxweight;
+	   maxweight=SCALE_WEIGHT/(maxgram+1)>>1;;
 	   for(i=1,line=mp->lentry,w1=mp->metric,worse=0;
 	    i<=best_matches&&(mp=best[i++])->metric>=minweight;)
 	      if(mp->lentry==line&&mp->metric+maxweight<w1)
@@ -425,7 +499,7 @@ remv1:	       { worse=mp;mp= *best;goto remv;
 	   nlog("Couldn't find a proper address pair\n");goto norenam;
 	 }
 	if(remov)
-remv:	 { char*buf;long offs1,offs2;size_t readin;
+remv:	 { char*buf;off_t offs1,offs2;size_t readin;
 	   buf=malloc(COPYBUF);offs1=mp->offs1;offs2=mp->offs2;
 	   while(fseek(hardfile,offs2,SEEK_SET),
 	    readin=fread(buf,1,COPYBUF,hardfile))

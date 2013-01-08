@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.17 1993/02/04 12:44:52 berg Exp $*/
+/*$Id: includes.h,v 1.24 1993/06/21 14:24:25 berg Exp $*/
 
 #include "../autoconf.h"
 #include "../config.h"
@@ -9,15 +9,13 @@
 #ifndef _HPUX_SOURCE
 #define _HPUX_SOURCE	      /* sad, but needed on HP-UX when compiling -Aa */
 #endif
-#ifndef _CONVEX_SOURCE
-#define _CONVEX_SOURCE			  /* same story with Convex and -std */
-#endif
 
-#include <sys/types.h>		/* pid_t mode_t uid_t gid_t */
+#include <sys/types.h>		/* pid_t mode_t uid_t gid_t off_t */
 #ifndef UNISTD_H_MISSING
 #include <unistd.h>		/* open() read() write() close() dup() pipe()
-				/* fork() getuid() getpid() execve()
-				   execvp() sleep() */
+				/* fork() getuid() getgid() getpid() execve()
+				   execvp() sleep() setuid() setgid()
+				   setrgid() chown() */
 #endif
 #include <stdio.h>		/* setbuf() fclose() stdin stdout stderr
 				/* fopen() fread() fwrite() fgetc() getc()
@@ -45,7 +43,8 @@
 #ifndef SYS_UTSNAME_H_MISSING
 #include <sys/utsname.h>	/* uname() utsname */
 #endif
-#include <sys/stat.h>		/* stat() S_ISDIR() S_ISREG() struct stat */
+#include <sys/stat.h>		/* stat() S_ISDIR() S_ISREG() struct stat
+				/* chmod() mkdir() */
 #include <signal.h>		/* signal() kill() alarm() SIG_IGN SIGHUP
 				/* SIGINT SIGQUIT SIGALRM SIGTERM */
 #ifndef STRING_H_MISSING
@@ -55,9 +54,10 @@
 #endif
 #include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN */
 #ifndef SYSEXITS_H_MISSING
-#include <sysexits.h>		/* EX_OK EX_USAGE EX_NOUSER EX_UNAVAILABLE
-				/* EX_OSERR EX_OSFILE EX_CANTCREAT EX_IOERR
-				   EX_TEMPFAIL EX_NOPERM */
+#include <sysexits.h>		/* EX_OK EX_USAGE EX_NOINPUT EX_NOUSER
+				/* EX_UNAVAILABLE EX_OSERR EX_OSFILE
+				   EX_CANTCREAT EX_IOERR EX_TEMPFAIL EX_NOPERM
+				   */
 #endif
 
 #ifdef STDLIB_H_MISSING
@@ -98,9 +98,10 @@ char*strpbrk();
 #endif
 #ifdef SYSEXITS_H_MISSING
 		/* Standard exit codes, original list maintained
-		   by Eric Allman (eric@berkeley, ucbvax!eric)	 */
+		   by Eric Allman (eric@berkeley.edu) */
 #define EX_OK		0
 #define EX_USAGE	64
+#define EX_NOINPUT	66
 #define EX_NOUSER	67
 #define EX_UNAVAILABLE	69
 #define EX_OSERR	71
@@ -126,7 +127,7 @@ char*strpbrk();
 #define SEEK_END	2
 #endif
 #ifndef tell
-#define tell(fd)	lseek(fd,0L,SEEK_CUR)
+#define tell(fd)	lseek(fd,(off_t)0,SEEK_CUR)
 #endif
 
 #ifndef EWOULDBLOCK
@@ -259,6 +260,7 @@ extern int uname();					 /* so we fix it :-) */
 #ifndef strchr		   /* for very old K&R compatible include files with */
 #ifdef P						/* new K&R libraries */
 #ifdef const
+#ifdef void
 extern char*strchr();
 extern char*strpbrk();
 extern char*strstr();
@@ -266,11 +268,30 @@ extern void*memmove();
 #endif
 #endif
 #endif
+#endif
 
 #define Const			/*const*/     /* Convex cc doesn't grok this */
 
+#ifdef const
+#ifndef P				      /* no prototypes without const */
+#define P(args) ()
+#endif
+#endif
+
 #ifdef NOrename
 #define rename(old,new) (-(link(old,new)||unlink(old)))
+#endif
+
+#ifdef NOsetrgid
+#ifdef NOsetregid
+#define setrgid(gid)	(-1)
+#else
+#define setrgid(gid)	setregid(gid,-1)
+#endif
+#endif
+
+#ifdef NOmkdir
+#define mkdir(dir,mode) (-1)
 #endif
 
 #ifdef NOmemmove
@@ -293,5 +314,6 @@ extern void*memmove();
 #define maxindex(x)	(sizeof(x)/sizeof((x)[0])-1)
 #define STRLEN(x)	(sizeof(x)-1)
 #define ioffsetof(s,m)	((int)offsetof(s,m))
+#define numeric(x)	((unsigned)((x)-'0')<='9'-'0')
 
 #define mx(a,b)		((a)>(b)?(a):(b))

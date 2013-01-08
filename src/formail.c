@@ -8,9 +8,9 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formail.c,v 1.21 1993/02/02 15:27:07 berg Exp $";
+ "$Id: formail.c,v 1.24 1993/06/23 12:56:01 berg Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1993/02/02 15:27:07 $";
+static /*const*/char rcsdate[]="$Date: 1993/06/23 12:56:01 $";
 #include "includes.h"
 #include <ctype.h>		/* iscntrl() */
 #include "formail.h"
@@ -81,9 +81,8 @@ FILE*mystdout;
 size_t nrskip,nrtotal= -1,buflen,buffilled;
 long totallen;
 char*buf,*logsummary;
-struct field*rdheader;
-static struct field*iheader,*Iheader,*aheader,*Aheader,*xheader,*Xheader,
- *Rheader,*nheader;
+struct field*rdheader,*xheader,*Xheader;
+static struct field*iheader,*Iheader,*aheader,*Aheader,*Rheader,*nheader;
 
 static void logfolder P((void))	 /* estimate the no. of characters needed to */
 { size_t i;char num[8*sizeof totallen*4/10+1];	       /* represent totallen */
@@ -118,7 +117,8 @@ static PROGID;
 main(lastm,argv)const char*const argv[];
 { int i,split=0,force=0,bogus=1,every=0,areply=0,trust=0,digest=0,nowait=0,
    keepb=0,minfields=(char*)progid-(char*)progid,conctenate=0;
-  size_t j,lnl;char*chp,*namep;struct field*fldp,*fp2,**afldp,*fdate;
+  size_t j,lnl,escaplen;char*chp,*namep,*escap=ESCAP;
+  struct field*fldp,*fp2,**afldp,*fdate;
   if(lastm)			       /* sanity check, any argument at all? */
 #define Qnext_arg()	if(!*chp&&!(chp=(char*)*++argv))goto usg
      while(chp=(char*)*++argv)
@@ -159,6 +159,7 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 		  }
 		 continue;
 	      case FM_BOGUS:bogus=0;continue;
+	      case FM_QPREFIX:Qnext_arg();escap=chp;break;
 	      case FM_ADD_IFNOT:case FM_ADD_ALWAYS:case FM_REN_INSERT:
 	      case FM_DEL_INSERT:case FM_EXTRACT:case FM_EXTRC_KEEP:
 	      case FM_ReNAME:Qnext_arg();
@@ -196,7 +197,7 @@ invfield:	     { nlog("Invalid field-name:");logqnl(chp?chp:"");
 	 }
       }
 parsedoptions:
-  mystdout=stdout;signal(SIGPIPE,SIG_IGN);
+  escaplen=strlen(escap);mystdout=stdout;signal(SIGPIPE,SIG_IGN);
   if(split)
    { oldstdout=dup(STDOUT);fclose(stdout);startprog((const char*Const*)argv);
      if(!minfields)			       /* no user specified minimum? */
@@ -243,7 +244,7 @@ startover:
 	if(i>=0&&(i!=maxindex(sest)||fldp==rdheader))	  /* found anything? */
 	 { char*saddr;char*tmp;			     /* determine the weight */
 	   nowm=trust?sest[i].wtrepl:areply?i:sest[i].wrepl;chp+=j;
-	   saddr=tmp=malloc(j=fldp->tot_len-j);tmemmove(tmp,chp,j);
+	   tmp=malloc(j=fldp->tot_len-j);tmemmove(tmp,chp,j);
 	   tmp[j-1]='\0';chp=pstrspn(tmp," \t\n");
 	   for(saddr=0;;chp=skipwords(chp))		/* skip RFC 822 wise */
 	    { switch(*chp)
@@ -270,7 +271,7 @@ startover:
 		  }
 	       }
 	      else if(sest[i].head==returnpath)		/* nill Return-Path: */
-	       { saddr=0;nowm=maxindex(sest)+2;			 /* override */
+	       { saddr=0;lastm=maxindex(sest)+2;		 /* override */
 newnamep:	 if(namep)
 		    free(namep);
 		 namep=saddr;
@@ -346,10 +347,6 @@ newnamep:	 if(namep)
 	      putcs('\n');
 	    }
 	 }
-	else if(findf(fldp,xheader))		   /* extract field contents */
-	   putssn(chp+lnl,fldp->tot_len-lnl);
-	else if(findf(fldp,Xheader))			   /* extract fields */
-	   putssn(chp,fldp->tot_len);
 	if(findf(fldp,Iheader))				    /* delete fields */
 	 { *afldp=fldp->fld_next,free(fldp);fldp= *afldp;continue;
 	 }
@@ -361,14 +358,12 @@ newnamep:	 if(namep)
       }					/* restore the saved contents of buf */
      tmemmove(buf,parkedbuf,buffilled=lenparkedbuf);free(parkedbuf);
    }
-  if(xheader||Xheader)			     /* we're just extracting fields */
-     clearfield(&rdheader),clearfield(&nheader);	    /* throw it away */
-  else			     /* otherwise, display the new & improved header */
-   { flushfield(&rdheader);flushfield(&nheader);dispfield(Aheader);
-     dispfield(iheader);dispfield(Iheader);lputcs('\n');  /* make sure it is */
-   }						/* followed by an empty line */
+  flushfield(&rdheader);flushfield(&nheader);dispfield(Aheader);
+  dispfield(iheader);dispfield(Iheader);
   if(namep)
      free(namep);
+  if(!(xheader||Xheader))		 /* we're not just extracting fields */
+     lputcs('\n');		/* make sure it is followed by an empty line */
   if(!keepb&&(areply||xheader||Xheader))		    /* decision time */
    { logfolder();				   /* we throw away the rest */
      if(split)
@@ -390,7 +385,7 @@ fromanyway:
 	    *pstrspn(chp+k," \t")!='\n')
 	      goto accuhdr;		     /* ok, postmark found, split it */
 	   if(bogus)						   /* disarm */
-	      lputcs(ESCAP);
+	      lputssn(escap,escaplen);
 	 }
 	else if(split&&digest&&(lnl||every)&&digheadr())	  /* digest? */
 accuhdr: { for(i=minfields;--i&&readhead()&&digheadr(););   /* found enough? */
@@ -435,7 +430,10 @@ putsp:	lputcs(' ');
 	   rdheader=0;
 	   do			       /* careful, they can contain newlines */
 	    { fp2=fldp->fld_next;chp=fldp->fld_text;
-	      do lputcs(ESCAP),lputssn(chp,(p=strchr(chp,'\n')+1)-chp);
+	      do
+	       { lputssn(escap,escaplen);
+		 lputssn(chp,(p=strchr(chp,'\n')+1)-chp);
+	       }
 	      while((chp=p)<fldp->fld_text+fldp->tot_len);
 	      free(fldp);					/* delete it */
 	    }
@@ -443,7 +441,7 @@ putsp:	lputcs(' ');
 	 }
 	else
 	 { if(buffilled>1)	  /* we don't escape empty lines, looks neat */
-	      lputcs(ESCAP);
+	      lputssn(escap,escaplen);
 	   goto flbuf;
 	 }
      else if(rdheader)

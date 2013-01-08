@@ -1,8 +1,9 @@
-/*$Id: misc.h,v 1.10 1993/02/02 15:27:15 berg Exp $*/
+/*$Id: misc.h,v 1.14 1993/06/21 14:24:44 berg Exp $*/
 
 void
  elog P((const char*const newt)),
  ignoreterm P((void)),
+ setids Q((const uid_t uid,const gid_t gid)),
  writeerr P((const char*const line)),
  progerr P((const char*const line)),
  chderr P((const char*const dir)),
@@ -14,7 +15,7 @@ void
  sterminate P((void)),
  terminate P((void)),
  suspend P((void)),
- app_val P((struct dyna_long*const sp,const long val)),
+ app_val P((struct dyna_long*const sp,const off_t val)),
  firstchd P((void)),
  srequeue P((void)),
  slose P((void)),
@@ -22,12 +23,13 @@ void
  catlim P((const char*src)),
  setdef P((const char*const name,const char*const contents)),
  metaparse P((const char*p)),
- asenvcpy P((char*src)),
+ setlastfolder P((const char*const folder)),
  asenv P((const char*const chp)),
  concatenate P((char*p));
 int
  forkerr Q((const pid_t pid,const char*const a)),
  nextrcfile P((void)),
+ asenvcpy P((char*src)),
  alphanum P((const unsigned c));
 char
  *lastdirsep P((const char*filename)),
@@ -42,6 +44,7 @@ const char
 long
  renvint P((const long i,const char*const env));
 
+extern const char lastfolder[];
 extern didchd;
 
 #define MAXvarvals	maxindex(strenvvar)

@@ -1,18 +1,17 @@
-/*$Id: mailfold.h,v 1.4 1992/11/24 16:00:07 berg Exp $*/
+/*$Id: mailfold.h,v 1.7 1993/05/28 14:43:40 berg Exp $*/
 
 long
  dump P((const s,const char*source,long len));
 int
- deliver P((char*const boxname)),
- dirmail P((void));
+ deliver P((char*boxname,char*linkfolder));
 void
- logabstract P((void)),
+ logabstract P((const char*const lstfolder)),
  concon P((const ch)),
  readmail P((int rhead,const long tobesent));
 
 extern const char scomsat[];
 extern logopened,tofile;
-extern long lasttell;
+extern off_t lasttell;
 
 #define to_FILE		1		  /* when we are writing a real file */
 #define to_FOLDER	2		 /* when we are writing a filefolder */

@@ -1,6 +1,6 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 1.18 1993/02/19 15:04:30 berg Exp $*/
+/*$Id: manconf.c,v 1.25 1993/06/23 12:56:08 berg Exp $*/
 
 #include "../patchlevel.h"
 #include "procmail.h"
@@ -52,9 +52,14 @@ static void putsesc(a)const char*a;
      putcesc(*a++);
 }
 
+const char*const*gargv;
+
 static void pname(name)const char*const name;
-{ putchar('s');putchar('/');putchar('\\');putchar('+');putsesc(name);
-  putchar('\\');putchar('+');putchar('/');
+{ static cmdcount;
+  if(!cmdcount)
+     freopen(*++gargv,"w",stdout),cmdcount=64;
+  cmdcount--;putchar('s');putchar('/');putchar('@');putsesc(name);putchar('@');
+  putchar('/');
 }
 
 static void pnr(name,value)const char*const name;const long value;
@@ -87,8 +92,9 @@ static void pc(name,value)const char*const name;const int value;
 { pname(name);putcesc(value);puts("/g");
 }
 
-main P((void))
+main(argc,argv)const char*const argv[];
 { char*p,*q;
+  gargv=argv;
 #ifdef CF_no_procmail_yet
   ps("CF_procmail","If procmail is\1\
 .I not\1\
@@ -102,7 +108,7 @@ yourself.");
 #ifndef MAILBOX_SEPARATOR
   ps("DOT_FORWARD",".forward");
   ps("FW_content",
-   "|\"IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
+   "\"|IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
 #else
   ps("DOT_FORWARD",".maildelivery");
   ps("FW_content",
@@ -115,7 +121,7 @@ yourself.");
    ", and procmail is invoked with one of the following user or group ids: ",
    trusted_ids,",",""," or ");
   plist("KERNEL_LOCKING",
-   "consistenly uses the following kernel locking strategies: ",krnllocks,"",
+   "consistently uses the following kernel locking strategies: ",krnllocks,"",
    "doesn't use any additional kernel locking strategies"," and ");
 #ifdef LD_ENV_FIX
   ps("LD_ENV_FIX","\1.PP\1For security reasons, procmail will wipe out all\
@@ -152,6 +158,8 @@ is case sensitive, and some users have login names with uppercase letters in\
   ps("TOsubstitute",TOsubstitute);
   ps("FROMDkey",FROMDkey);
   ps("FROMDsubstitute",FROMDsubstitute);
+  ps("FROMMkey",FROMMkey);
+  ps("FROMMsubstitute",FROMMsubstitute);
   ps("DEFshellmetas",DEFshellmetas);
   ps("DEFmaildir",DEFmaildir);
   ps("DEFdefault",DEFdefault);
@@ -178,8 +186,10 @@ is case sensitive, and some users have login names with uppercase letters in\
   pc("VERSIONOPT",VERSIONOPT);
   pc("PRESERVOPT",PRESERVOPT);
   pc("TEMPFAILOPT",TEMPFAILOPT);
+  pc("MAILFILTOPT",MAILFILTOPT);
   pc("FROMWHOPT",FROMWHOPT);
   pc("ALTFROMWHOPT",ALTFROMWHOPT);
+  pc("ARGUMENTOPT",ARGUMENTOPT);
   pc("DELIVEROPT",DELIVEROPT);
   pn("MINlinebuf",MINlinebuf);
   ps("FROM",FROM);
@@ -197,12 +207,13 @@ is case sensitive, and some users have login names with uppercase letters in\
   pc("IGNORE_WRITERR",RECFLAGS[IGNORE_WRITERR]);
   ps("FROM_EXPR",FROM_EXPR);
   pc("UNIQ_PREFIX",UNIQ_PREFIX);
-  pc("ESCAP",ESCAP);
+  ps("ESCAP",ESCAP);
   ps("UNKNOWN",UNKNOWN);
   ps("OLD_PREFIX",OLD_PREFIX);
   pc("FM_SKIP",FM_SKIP);
   pc("FM_TOTAL",FM_TOTAL);
   pc("FM_BOGUS",FM_BOGUS);
+  pc("FM_QPREFIX",FM_QPREFIX);
   pc("FM_CONCATENATE",FM_CONCATENATE);
   pc("FM_FORCE",FM_FORCE);
   pc("FM_REPLY",FM_REPLY);
@@ -229,5 +240,6 @@ is case sensitive, and some users have login names with uppercase letters in\
   ps("MY_ALT_MAIL_ADDR",skltmark(0,&p));
   ps("PM_MAILINGLIST",skltmark(2,&p));
   ps("PM_MAILINGLISTR",skltmark(2,&p));
+  ps("BINDIR",BINDIR);
   return EX_OK;
 }

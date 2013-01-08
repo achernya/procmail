@@ -1,4 +1,4 @@
-#$Id: Makefile.1,v 1.14 1993/02/18 17:19:31 berg Exp $
+#$Id: Makefile.1,v 1.18 1993/06/23 12:55:29 berg Exp $
 
 HIDEMAKE=$(MAKE)
 
@@ -8,7 +8,7 @@ make:
 	@$(SHELL) -c "exit 0"
 
 bins: config.check src/Makefile
-	cd src; $(MAKE) $(NBINS) multigram
+	cd src; $(MAKE) $(NBINS)
 
 mans: config.check man/Makefile
 	cd man; $(MAKE) $(NMANS)
@@ -88,6 +88,7 @@ install.bin: $(BINS)
 	@-mkdir $(BINDIR) 2>$(DEVNULL); exit 0
 	@chmod 0755 $(BINS)
 	$(INSTALL) $(BINS) $(BINDIR)
+	@-dirname / >$(DEVNULL) || $(INSTALL) examples/dirname $(BINDIR)
 	@echo Housekeeping file >install.bin
 
 install: install.man install.bin
@@ -108,8 +109,9 @@ deinstall:
 
 clean: config.check
 	-for a in $(SUBDIRS); do cd $$a; $(MAKE) $@; cd ..; done; exit 0
-	$(RM) $(MANS) $(BINS) libcheck install.man install.bin suid.sh \
-	 _Makefile core autoconf.h.tmp
+	cd mailinglist; $(RM) targetdir.h list.id.* id.test
+	$(RM) $(MANS) $(BINS) install.man install.bin suid.sh _Makefile \
+	 core autoconf.h.tmp
 
 realclean: clean _init
 	$(RM) config.check

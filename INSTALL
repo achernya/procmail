@@ -1,8 +1,9 @@
 Discusses:
 		1. Getting the lot to compile
-		2. DEBUGGING AID
-		3. Setting up the environment
-		4. Extra options if you are a system administrator
+		2. IMPORTANT info for people with remote filesystems (like NFS)
+		3. DEBUGGING AID
+		4. Setting up the environment
+		5. Extra options if you are a system administrator
 
 				---
 
@@ -12,7 +13,7 @@ Discusses:
 To install procmail, lockfile and formail: edit Makefile & config.h accordingly
 and type 'make install'.
 Intended configurable options in Makefile are:
-	the install-destinations
+	the install-destinations and the LOCKINGTEST directories.
 Intended configurable options in config.h are:
 	MMDF support, standard environment presettings, trusted userids.
 
@@ -69,7 +70,52 @@ N.B. If you encounter any difficulty at all in installing procmail (e.g. if you
 
 				---
 
-2. DEBUGGING AID
+2. IMPORTANT info for people with remote filesystems (like NFS)
+   ------------------------------------------------------------
+
+The autoconf script tries to determine what kernel locking functions are
+available *and* reliable on your system.  In order to do this it exercises
+all the available locking methods (fcntl(), lockf() and flock()) on some
+sample files extensively.
+
+These tests produce results which depend on the filesystem which is being
+used to perform the tests.  If you haven't defined LOCKINGTEST in the Makefile
+(you can include as many directories as you want) autoconf will prompt you
+to enter any additional directories (preferably on distinct filesystems)
+you want it to run the tests on.
+
+When specifying directories to test, it would probably be advisable to
+pick exactly those directories which belong to a unique fileserver-fileclient
+pair.  I.e. one local file system will suffice.	 Only if you have remote
+filesystems, you might have to specify several.
+This makes sure that the locking tests will properly reflect the (lowest common
+denominator) locking capabilities on all filesystems available.
+
+If you have a very heterogenous environment (like several OS versions
+on machines (perhaps even from different vendors) that have NFS mounted file
+systems all over each other), then it could happen that some tests which
+are reliable with one remote filesystem, turn out to be unreliable across
+another (it all depends on the OS versions of clients and servers).
+
+If do not want to perform the locking tests on all those filesystems, but
+if you know what locking methods are unreliable anyway, then you can edit
+some defines in the config.h file (NO_fcntl_LOCK, NO_lockf_LOCK and
+NO_flock_LOCK).	 These can be uncommented by hand to prevent procmail
+from using them.
+
+The most typical case would be if you happen to be using NFS.  Autoconf
+normally is very well capable of finding out if your lockd is reliable enough.
+In a very heterogenous environment (many different servers, many different
+lockd's (of perhaps different version and patchlevel)) however, it might
+be hard to determine if all the lockd's are equally reliable.  In such a
+case (typically on SunOS :-), you might consider uncommenting both
+NO_fcntl_LOCK and NO_lockf_LOCK (NO_flock_LOCK normally doesn't rely on the
+infamous lockd, so you can leave it commented out).  But, only do so if you
+think you know it better than autoconf.
+
+				---
+
+3. DEBUGGING AID
    -------------
 
 Since procmail is intended to run completely independent of any terminals, it
@@ -87,7 +133,7 @@ following assignment at the top of your rcfile:
 Therefore a suggested command line for your first trial run (no rcfiles
 needed) would be:
 
-	procmail VERBOSE=on LOGFILE=/dev/tty
+	procmail VERBOSE=on
 
 (now type in a pseudo mail-message)
 
@@ -98,13 +144,13 @@ after your troubles have been solved.
 
 If you run procmail by hand and pipe in some sample mail, then make
 sure that if you kill procmail, you use "kill pid" and NOT "kill -9 pid".
-Should procmail seem to hang, check if the $LOCKFILE is still present.
-If you kill procmail with "kill pid" it will clean up the $LOCKFILE
+Should procmail seem to hang, check if any lockfiles are still present.
+If you kill procmail with "kill pid" it will clean up any lockfiles it created
 itself.
 
 				---
 
-3. Setting up the environment
+4. Setting up the environment
    --------------------------
 
 Every user that wants to use procmail should have a .forward and a
@@ -116,7 +162,7 @@ MMDF users should note that they need a .maildelivery file *instead* of the
 
 				---
 
-4. Extra options if you are a system administrator
+5. Extra options if you are a system administrator
    -----------------------------------------------
 
 If you are a system administrator you can decide to install procmail
@@ -139,4 +185,4 @@ To obtain specific instructions on the best installation, type "make recommend"
 
 				---
 
-For more info about the program, see the man page or the FAQ list.
+For more info about the program, see the man pages or the FAQ list.

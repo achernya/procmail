@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.19 1993/02/11 12:07:58 berg Exp $*/
+/*$Id: config.h,v 1.27 1993/07/01 11:58:23 berg Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -37,7 +37,8 @@
    TRUSTED_IDS should be defined as a comma-separated null-terminated
    list of strings */
 
-#define TRUSTED_IDS	{"root","daemon","uucp","mail","x400",0}
+#define TRUSTED_IDS	{"root","daemon","uucp","mail","x400",\
+			 "list","lists",0}
 
 /*#define NO_USER_TO_LOWERCASE_HACK	/* uncomment if your getpwnam() is
 					   case insensitive or if procmail
@@ -77,11 +78,14 @@
 #define NOBODY_gid	0xfffe	      /* default gid when no valid recipient */
 #define ROOT_uid	0
 
+#define UPDATE_MASK	S_IXOTH
 #define INIT_UMASK	(S_IRWXG|S_IRWXO)			   /* == 077 */
-#define NORMperm	(S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH)
-	     /* == 0666, normal mode bits used to create files, before umask */
+#define NORMperm	\
+ (S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH|UPDATE_MASK)
+	     /* == 0667, normal mode bits used to create files, before umask */
+#define NORMdirperm	(S_IRWXU|S_IRWXG|S_IRWXO)		  /* == 0777 */
 #define LOCKperm	0	  /* mode bits used while creating lockfiles */
-#define MAX_LOCK_SIZE	0	  /* lockfiles are expected not to be longer */
+#define MAX_LOCK_SIZE	16	  /* lockfiles are expected not to be longer */
 #ifndef SMALLHEAP
 #define DEFlinebuf	2048		 /* default max expanded line length */
 #define BLKSIZ		16384		  /* blocksize while reading/writing */
@@ -101,9 +105,14 @@
  "^((Resent-)?(To|Cc|Bcc)|(X-Envelope|Apparently)-To):(.*[^a-zA-Z])?"
 #define FROMDkey	"^FROM_DAEMON"
 #define FROMDsubstitute "^(Precedence:.*(junk|bulk|list)|\
-(((Resent-)?(From|Sender)|X-Envelope-From):|From )(.*[^.@a-z0-9])?(\
-Post(ma(st(er)?|n)|office)|Mailer|daemon|mmdf|root|uucp|LISTSERV|owner|\
-request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
+(((Resent-)?(From|Sender)|X-Envelope-From):|From )(.*[^.%@a-z0-9])?(\
+Post(ma?(st(e?r)?|n)|office)|Mailer|daemon|mmdf|root|uucp|LISTSERV|owner|\
+request|bounce|serv(ices?|er))([^.!:a-z0-9]|$))"     /* matches most daemons */
+#define FROMMkey	"^FROM_MAILER"
+#define FROMMsubstitute "^(((Resent-)?(From|Sender)|X-Envelope-From):|From )\
+(.*[^.%@a-z0-9])?(\
+Post(ma(st(er)?|n)|office)|Mailer|daemon|mmdf|root|uucp|serv(ices?|er))\
+([^.!:a-z0-9]|$)"			      /* matches most mailer-daemons */
 #define DEFshellmetas	"&|<>~;?*[]"		    /* never put '$' in here */
 #define DEFmaildir	"$HOME"
 #define DEFdefault	"$ORGMAIL"
@@ -115,12 +124,13 @@ request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
 #define DEFtimeout	(DEFlocktimeout-64)	   /* 64 seconds to clean up */
 #define DEFnoresretry	4      /* default nr of retries if no resources left */
 #define nfsTRY		2     /* nr of times-1 to ignore spurious NFS errors */
+#define DEFlogabstract	-1    /* abstract by default, but don't mail it back */
 #define COMSAThost	"localhost"    /* where the biff/comsat daemon lives */
 #define COMSATservice	"biff"	    /* the service name of the comsat daemon */
 #define COMSATprotocol	"udp" /* if you change this, comsat() needs patching */
 #define COMSATxtrsep	":"		 /* mailbox-spec extension separator */
 #define SERV_ADDRsep	'@'	      /* when overriding in COMSAT=serv@addr */
-#define DEFcomsat	"no"		      /* when an rcfile is specified */
+#define DEFcomsat	"no"		/* when an rcfile has been specified */
 
 #define BinSh		"/bin/sh"
 #define RootDir		"/"
@@ -138,20 +148,26 @@ request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
 #define VERSIONOPT	'v'			/* option to display version */
 #define PRESERVOPT	'p'			     /* preserve environment */
 #define TEMPFAILOPT	't'		      /* return EX_TEMPFAIL on error */
+#define MAILFILTOPT	'm'	     /* act as a general purpose mail filter */
 #define FROMWHOPT	'f'			   /* set name on From_ line */
 #define ALTFROMWHOPT	'r'		/* alternate and obsolete form of -f */
+#define ARGUMENTOPT	'a'					   /* set $1 */
 #define DELIVEROPT	'd'		  /* deliver mail to named recipient */
 #define PM_USAGE	\
  "Usage: procmail [-vpt] [-f fromwhom] [parameter=value | rcfile] ...\
-\n   Or: procmail [-vpt] [-f fromwhom] -d recipient ...\n"
+\n   Or: procmail [-pt] [-f fromwhom] [-a argument] -d recipient ...\
+\n   Or: procmail [-pt] -m [parameter=value] ... rcfile mail_from rcpt_to ...\
+\n"
 #define PM_HELP		\
  "\t-v\t\tdisplay the version number and exit\
 \n\t-p\t\tpreserve (most of) the environment upon startup\
 \n\t-t\t\tfail softly if mail is undeliverable\
 \n\t-f fromwhom\t(re)generate the leading 'From ' line\
-\n\t-d recipient\texplicit delivery mode\n"
+\n\t-a argument\twill set $1\
+\n\t-d recipient\texplicit delivery mode\
+\n\t-m\t\tact as a general purpose mail filter\n"
 #define PM_QREFERENCE	\
- "\nRecipe flag quick reference:\
+ "Recipe flag quick reference:\
 \n\tH\tegrep the header (default)\
 \n\tB\tegrep the body\
 \n\tD\tdistinguish case\
@@ -192,7 +208,7 @@ request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
 #define IGNORE_WRITERR		    11
 
 #define UNIQ_PREFIX	'_'	  /* prepended to temporary unique filenames */
-#define ESCAP		'>'
+#define ESCAP		">"
 
 		/* some formail-specific configuration options: */
 
@@ -202,6 +218,7 @@ request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
 #define FM_SKIP		'+'		      /* skip the first nnn messages */
 #define FM_TOTAL	'-'	    /* only spit out a total of nnn messages */
 #define FM_BOGUS	'b'			 /* leave bogus Froms intact */
+#define FM_QPREFIX	'p'			  /* define quotation prefix */
 #define FM_CONCATENATE	'c'	      /* concatenate continued header-fields */
 #define FM_FORCE	'f'   /* force formail to accept an arbitrary format */
 #define FM_REPLY	'r'		    /* generate an auto-reply header */
@@ -223,10 +240,11 @@ request|bounce|serv(ices?|er))([^.a-z0-9]|$))"	     /* matches most daemons */
 #define FM_DEL_INSERT	'I'			/* delete and insert a field */
 #define FM_ReNAME	'R'				   /* rename a field */
 #define FM_USAGE	"\
-Usage: formail [+nnn] [-nnn] [-bcfrktnedq] [-m nnn] [-l folder]\
- [-xXaAiI field]\n\t[-R ofield nfield] [-s prg arg ...]\n"
+Usage: formail [+nnn] [-nnn] [-bcfrktnedq] [-p prefix] [-m nnn] [-l folder]\n\
+\t[-xXaAiI field] [-R ofield nfield] [-s prg arg ...]\n"
 #define FM_HELP		\
  "\t-b\tdon't escape bogus mailbox headers\
+\n\t-p prefix\tdefine quotation prefix\
 \n\t-c\tconcatenate continued header-fields\
 \n\t-f\tforce formail to pass along any non-mailbox format\
 \n\t-r\tgenerate an auto-reply header, preserve fields with -i\

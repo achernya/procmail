@@ -1,6 +1,6 @@
 #! /bin/sh
 :
-#$Id: mansed,v 1.6 1992/11/24 15:59:43 berg Exp $
+#$Id: mansed,v 1.10 1993/06/21 14:24:00 berg Exp $
 
 test 5 != $# &&
  echo "Don't start this script directly, use \`make'" && exit 1
@@ -47,24 +47,33 @@ fi
 .fi
 .ad
 ..
+.de Sx
+.PP
+.ne \\$1
+.Rs
+..
+.de Ex
+.Re
+.PP
+..
 HERE
 cat "$SRC"
-expr match "$DEST" '.*[18]$' >$DEVNULL && cat <<HERE
+expr "X$DEST" : '.*[18]$' >$DEVNULL && cat <<HERE
 .Sh SOURCE
 This program is part of the
 .I procmail mail-processing-package
-(+PM_VERSION+) available at your nearest USENET comp.sources.misc archive, or
+(@PM_VERSION@) available at your nearest USENET comp.sources.misc archive, or
 at ftp.informatik.rwth-aachen.de (137.226.112.172) as
 .BR pub/unix/procmail.tar.Z .
 .Sh MAILINGLIST
 There exists a mailinglist for questions relating to any program in the
 procmail package:
 .RS
-+PM_MAILINGLIST+
+@PM_MAILINGLIST@
 .RS
 for submitting questions/answers.
 .RE
-+PM_MAILINGLISTR+
+@PM_MAILINGLISTR@
 .RS
 for subscription requests.
 .RE
@@ -74,11 +83,17 @@ cat <<HERE
 .Sh AUTHOR
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .Rs
-+MY_MAIL_ADDR+
-+MY_ALT_MAIL_ADDR+
+@MY_MAIL_ADDR@
+@MY_ALT_MAIL_ADDR@
 .Re
 HERE
- )| sed -f man.sed >"$DEST"
+ )| sed -f man.sed |
+ if test -f man.sed.1
+ then
+   sed -f man.sed.0 | sed -f man.sed.1
+ else
+   sed -f man.sed.0
+ fi >"$DEST"
 
 if test -f "$DEST"
 then

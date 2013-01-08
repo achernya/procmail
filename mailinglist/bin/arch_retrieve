@@ -1,10 +1,11 @@
 #! /bin/sh
-: &&O= || exec /bin/sh $0 $argv:q # we're in a csh, feed myself to sh
-#$Id: arch_retrieve,v 1.9 1993/02/11 14:00:08 berg Exp $
+:
+#$Id: arch_retrieve,v 1.15 1993/05/05 15:15:55 berg Exp $
 
 test=test		# /bin/test
 echo=echo		# /bin/echo
 ls=ls			# /bin/ls
+rm=rm			# /bin/rm
 sed=sed			# /bin/sed
 cat=cat			# /bin/cat
 formail=formail		# /usr/local/bin/formail
@@ -22,21 +23,30 @@ $cat /dev/null >$tmpfrom
 
 case "$X_ENVELOPE_TO" in
   *$list-request*) wrongaddress="" ;;
-  *) wrongaddress="
-WARNING:
+  *) wrongaddress="WARNING:
 	Please try to use '$listreq'
 	the next time when issuing archive server requests.
 " ;;
 esac
 
 $formail -k -xSubject: |
- $sed -e '/^--/,$ d' -e 's/^[	 ]*archive[	 ]//' \
-  -e 's/[	 ]archive\/*/ /g' |
- ( sendhelp=no
+ $sed -e '/^--/,$ d' -e 's/^[	 ]*archive/ARCHIVE/' \
+  -e 's/[	 ]archive\/\/*/ /g' |
+ (  oldwrongaddress="$wrongaddress"
+    wrongaddress="WARNING:
+	Please make sure to start the Subject: of requests to the archive-
+	server with the word archive.
+$wrongaddress"
+   sendhelp=""
+   ILLEGAL=""
    while read line
    do
       set dummy $line
       shift
+      case "$1" in
+	 archive|ARCHIVE) shift
+	    $test ! -z "$wrongaddress" && wrongaddress="$oldwrongaddress";;
+      esac
       case "$1" in
 	 send|sendme|get|getme|gimme|retrieve|mail|\
 	 SEND|SENDME|GET|GETME|GIMME|RETRIEVE|MAIL)
@@ -44,7 +54,8 @@ $formail -k -xSubject: |
 	    do
 	       $echo $from "$1" >>$tmpfrom
 	       case "$1" in
-		  */../*|../*|*/..|..|[-/]*) ;;
+		  */../*|../*|*/..|..|[-/]*)
+		     $test -z "$ILLEGAL" && ILLEGAL="$1";;
 		  *)
 		   ( $formail -rt -I"Subject: archive retrieval: $1" \
 		      -i"From: $listreq" -A"X-Loop: $listaddr" \
@@ -70,7 +81,8 @@ $formail -k -xSubject: |
 	    do
 	       $echo $from "$1" ls >>$tmpfrom
 	       case "$1" in
-		  */../*|../*|*/..|..|[-/]*) ;;
+		  */../*|../*|*/..|..|[-/]*)
+		     $test -z "$ILLEGAL" && ILLEGAL="$1";;
 		  *)
 		   ( $formail -rt -I"Subject: archive retrieval: ls $1" \
 		      -i"From: $listreq" -A"X-Loop: $listaddr" \
@@ -90,15 +102,18 @@ $formail -k -xSubject: |
 	       esac
 	    done ;;
 	 "") ;;
-	 *) sendhelp=yes ;;
+	 *) $test -z "$sendhelp" && sendhelp="$1" ;;
       esac
    done
-   if $test yes = $sendhelp
+   if $test ! -z "$sendhelp" -o ! -z "$ILLEGAL"
    then
-       ( $formail -rt -I"Subject: archive retrieval: ls $1" \
+       ( $formail -rt -I"Subject: archive retrieval error" \
 	  -i"From: $listreq" -A"X-Loop: $listaddr" -I"Precedence: bulk" \
 	  <$tmprequest
 	 $test ! -z "$wrongaddress" && $echo "$wrongaddress" && wrongaddress=""
+	 $test ! -z "$sendhelp" && $echo "Unknown command $sendhelp."
+	 $test ! -z "$ILLEGAL" && $echo "Illegal filename $ILLEGAL requested."
+	 $echo ""
 	 $echo "This archive server knows the following commands:"
 	 $echo ""
 	 $echo "get filename ..."
