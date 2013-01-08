@@ -1,4 +1,4 @@
-#$Id: Makefile,v 1.56 1994/06/01 18:52:01 berg Exp $
+#$Id: Makefile,v 1.62 1994/08/25 11:50:56 berg Exp $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
@@ -16,9 +16,14 @@ MAN5SUFFIX= 5
 MAN1DIR	  = $(MANDIR)/man$(MAN1SUFFIX)
 MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 
-##############################
+# Uncomment to install compressed man pages (possibly add extra suffix
+# to the definitions of MAN?DIR by hand)
+#MANCOMPRESS = compress
+
+############################*#
 # Things that can be made are:
 #
+# help (or targets)	Displays this list you are looking at
 # init (or makefiles)	Performs some preliminary sanity checks on your system
 #			and generates Makefiles accordingly
 # bins			Preinstalls only the binaries to ./new
@@ -39,7 +44,7 @@ MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 # lockfile		Preinstalls just all lockfile related stuff to ./new
 # setid			Creates the setid binary needed by the SmartList
 #			installation
-########################
+######################*#
 
 # Makefile.0 - mark, don't (re)move this, a sed script needs it
 
@@ -78,9 +83,11 @@ GCC_WARNINGS = -O2 -pedantic -Wimplicit -Wreturn-type -Wunused -Wformat \
 # The place to put your favourite extra cc flag
 CFLAGS0 = -O #$(GCC_WARNINGS)
 LDFLAGS0= -s
+# Read my libs :-)
+LIBS=
 
 CFLAGS1 = $(CFLAGS0) #-posix -Xp
-LDFLAGS1= $(LDFLAGS0) #-lcposix
+LDFLAGS1= $(LDFLAGS0) $(LIBS) #-lcposix
 
 ####CC	= cc # gcc
 # object file extension
@@ -99,10 +106,8 @@ MANS5S	= procmailrc procmailsc procmailex
 
 # Makefile - mark, don't (re)move this, a sed script needs it
 
-HIDEMAKE=$(MAKE)
-
 all: init
-	$(HIDEMAKE) make $@
+	$(MAKE) make $@
 
 make:
 	@$(BSHELL) -c "exit 0"
@@ -113,14 +118,16 @@ init:
 	$(BSHELL) ./initmake $(BSHELL) "$(SHELL)" "$(RM)" "$(MV)" "$(LN)" \
 	 "$(SEARCHLIBS)" \
 	 "$(LIBPATHS)" \
-	 $(DEVNULL) "$(HIDEMAKE)" $(O) \
+	 $(DEVNULL) "$(MAKE)" $(O) \
 	 "$(CC)" "$(CFLAGS1)" "$(LDFLAGS1)" "$(BINSS)" \
-	 "$(MANS1S)" "$(MANS5S)" "$(SUBDIRS)" \
+	 "$(MANS1S)" \
+	 "$(MANS5S)" "$(SUBDIRS)" \
 	 "$(BINDIR)"
 
 makefiles makefile Makefiles Makefile: init
 	@$(BSHELL) -c "exit 0"
 
+help target targets \
 bins mans install.bin install.man install recommend install-suid clean setid \
 realclean veryclean clobber deinstall autoconf.h $(BINSS) multigram: init
-	$(HIDEMAKE) make $@
+	$(MAKE) make $@

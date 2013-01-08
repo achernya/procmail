@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.49 1994/06/28 16:56:26 berg Exp $";
+ "$Id: mailfold.c,v 1.55 1994/08/23 12:16:12 berg Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -74,6 +74,8 @@ jin:	while(part&&(i=rwrite(s,source,BLKSIZ<part?BLKSIZ:(int)part)))
 writefin:
      if(tofile&&fdunlock())
 	nlog("Kernel-unlock failed\n");
+     if(tofile==to_FOLDER&&len&&lasttell>=0&&!ftruncate(s,lasttell))
+	nlog("Truncated file to former size\n");    /* undo appended garbage */
      i=rclose(s);
    }			   /* return an error even if nothing was to be sent */
   tofile=0;
@@ -199,24 +201,26 @@ void logabstract(lstfolder)const char*const lstfolder;
 { if(lgabstract>0||logopened&&lgabstract)  /* don't mail it back unrequested */
    { char*chp,*chp2;int i;static const char sfolder[]=FOLDER;
      if(mailread)			  /* is the mail completely read in? */
-      { *thebody='\0';		       /* terminate the header, just in case */
+      { i= *thebody;*thebody='\0';     /* terminate the header, just in case */
 	if(eqFrom_(chp=themail))		       /* any "From " header */
 	 { if(chp=strchr(themail,'\n'))
-	      *chp++='\0';
+	      *chp='\0';
 	   else
 	      chp=thebody;			  /* preserve mailbox format */
-	   elog(themail);elog(newline);			     /* (any length) */
+	   elog(themail);elog(newline);*chp='\n';	     /* (any length) */
 	 }
+	*thebody=i;			   /* eliminate the terminator again */
 	if(!(lcking&lck_ALLOCLIB)&&		/* don't reenter malloc/free */
 	 (chp=egrepin(NSUBJECT,chp,(long)(thebody-chp),0)))
-	 { for(chp2= --chp;*--chp2!='\n'&&*chp2;);
-	   if(chp-++chp2>MAXSUBJECTSHOW)	    /* keep it within bounds */
-	      chp2[MAXSUBJECTSHOW]='\0';
-	   *chp='\0';detab(chp2);elog(" ");elog(chp2);elog(newline);
+	 { size_t subjlen;
+	   for(chp2= --chp;*--chp2!='\n';);
+	   if((subjlen=chp-++chp2)>MAXSUBJECTSHOW)
+	      subjlen=MAXSUBJECTSHOW;		    /* keep it within bounds */
+	   ((char*)tmemmove(buf,chp2,subjlen))[subjlen]='\0';detab(buf);
+	   elog(" ");elog(buf);elog(newline);
 	 }
       }
-     elog(sfolder);
-     i=strlen(strncpy(buf,lstfolder,MAXfoldlen))+STRLEN(sfolder);
+     elog(sfolder);i=strlen(strncpy(buf,lstfolder,MAXfoldlen))+STRLEN(sfolder);
      buf[MAXfoldlen]='\0';detab(buf);elog(buf);i-=i%TABWIDTH;	/* last dump */
      do elog(TABCHAR);
      while((i+=TABWIDTH)<LENoffset);
@@ -315,7 +319,7 @@ void readmail(rhead,tobesent)const long tobesent;
      if(rhead)			      /* did we read in a new header anyway? */
       { confield.filled=0;concnd='\n';
 	while(thebody=strchr(thebody,'\n'))
-	   switch(*++thebody)			  /* mark continuated fields */
+	   switch(*++thebody)			    /* mark continued fields */
 	    { case '\t':case ' ':app_val(&confield,(off_t)(thebody-1-themail));
 	      default:
 		 continue;		   /* empty line marks end of header */
@@ -324,8 +328,9 @@ void readmail(rhead,tobesent)const long tobesent;
 	    }
 	thebody=pastend;      /* provide a default, in case there is no body */
 eofheader:
-	contlengthoffset=0;
-	if(chp=egrepin("^Content-Length:",themail,(long)(thebody-themail),0))
+	contlengthoffset=0;		      /* traditional Berkeley format */
+	if(!berkeley&&				  /* ignores Content-Length: */
+	   (chp=egrepin("^Content-Length:",themail,(long)(thebody-themail),0)))
 	   contlengthoffset=chp-themail;
       }
      else			       /* no new header read, keep it simple */
@@ -338,35 +343,39 @@ eofheader:
   if((chp=thebody)>themail)
      chp--;
   if(contlengthoffset)
-   { unsigned places;long cntlen,actcntlen;	    /* minus one, for safety */
-     chp=themail+contlengthoffset;cntlen=filled-(thebody-themail)-1;
-     for(actcntlen=places=0;;
-	 *chp++=cntlen>0?(actcntlen=actcntlen*10+9,'9'):' ',places++)
+   { unsigned places;long cntlen,actcntlen;charNUM(num,cntlen);
+     chp=themail+contlengthoffset;cntlen=filled-(thebody-themail);
+     if(filled>1&&themail[filled-2]=='\n')		 /* no phantom '\n'? */
+	cntlen--;		     /* make sure it points to the last '\n' */
+     for(actcntlen=places=0;;)
       { switch(*chp)
 	 { default:					/* fill'r up, please */
+	      if(places<=sizeof num-2)
+		 *chp++='9',places++,actcntlen=(unsigned long)actcntlen*10+9;
+	      else
+		 *chp++=' ';		 /* ultra long Content-Length: field */
 	      continue;
 	   case '\n':case '\0':;		      /* ok, end of the line */
 	 }
 	break;
       }
-     if(cntlen>0)			       /* any Content-Length at all? */
-      { charNUM(num,cntlen);
-	ultstr(places,cntlen,num);		       /* our preferred size */
-	if(!num[places])	       /* does it fit in the existing space? */
-	   tmemmove(chp-places,num,places),actcntlen=cntlen;	      /* yup */
-	chp=thebody+actcntlen;		  /* skip the actual no we specified */
-      }
+     if(cntlen<=0)			       /* any Content-Length at all? */
+	cntlen=0;
+     ultstr(places,cntlen,num);			       /* our preferred size */
+     if(!num[places])		       /* does it fit in the existing space? */
+	tmemmove(themail+contlengthoffset,num,places),actcntlen=cntlen;
+     chp=thebody+actcntlen;		  /* skip the actual no we specified */
    }
   ffrom(chp);mailread=1;	  /* eradicate From_ in the rest of the body */
 }
-
+			  /* tries to locate the timestamp on the From_ line */
 char*findtstamp(start,end)const char*start,*end;
-{ start=skpspace(start);start+=strcspn(start," \t\n");
-  if(skpspace(start)>=(end-=25))
-     return (char*)start;
-  while(!(end[13]==':'&&end[15]==':')&&--end>start);
-  ;{ int spc=0;
-     while(end-->start)
+{ start=skpspace(start);start+=strcspn(start," \t\n");	/* jump over address */
+  if(skpspace(start)>=(end-=25))		       /* enough space left? */
+     return (char*)start;	 /* no, too small for a timestamp, stop here */
+  while(!(end[13]==':'&&end[15]==':')&&--end>start);	  /* search for :..: */
+  ;{ int spc=0;						 /* found it perhaps */
+     while(end-->start)		      /* now skip over the space to the left */
       { switch(*end)
 	 { case ' ':case '\t':spc=1;
 	      continue;
@@ -375,6 +384,6 @@ char*findtstamp(start,end)const char*start,*end;
 	   continue;
 	break;
       }
-     return (char*)end+1;
+     return (char*)end+1;	   /* this should be right after the address */
    }
 }

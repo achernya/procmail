@@ -1,13 +1,13 @@
 
-#$Id: Makefile.0,v 1.31 1994/06/01 17:22:13 berg Exp $
+#$Id: Makefile.0,v 1.36 1994/08/24 18:52:05 berg Exp $
 
 PM_OBJ=cstdio.$(O) common.$(O) exopen.$(O) goodies.$(O) locking.$(O) \
  mailfold.$(O) misc.$(O) pipes.$(O) regexp.$(O) robust.$(O) sublib.$(O) \
- acommon.$(O) mcommon.$(O)
+ acommon.$(O) mcommon.$(O) lastdirsep.$(O)
 LF_OBJ=exopen.$(O) sublib.$(O) acommon.$(O) mcommon.$(O)
 FM_OBJ=common.$(O) fields.$(O) formisc.$(O) sublib.$(O) ecommon.$(O) \
  acommon.$(O)
-MG_OBJ=sublib.$(O) ecommon.$(O) mcommon.$(O) hsort.$(O)
+MG_OBJ=sublib.$(O) ecommon.$(O) mcommon.$(O) hsort.$(O) lastdirsep.$(O)
 
 all:	$(BINSS)
 
@@ -38,12 +38,11 @@ multigram: multigram.$(O) $(MG_OBJ) setid
 _autotst: _autotst.$(O) sublib.c sublib.h
 	$(CC) $(CFLAGS) $@.$(O) -o $@ $(LDFLAGS)
 
-# to fully support "make -n"
-HIDEMAKE = $(MAKE)
-
 ../autoconf.h: autoconf Makefile
+	@echo No this was not make -n >make_n
 	$(SHELL) ./autoconf $(SHELL) "$(RM)" "$(MV)" $(DEVNULL) \
-	 "$(FGREP)" "$(HIDEMAKE)" $(O) "$(LOCKINGTEST)" $@
+	 "$(FGREP)" "$(MAKE)" $(O) "$(LOCKINGTEST)" \
+	 "$(BINDIR)" $@
 
 autoconf.h: ../autoconf.h
 
@@ -80,10 +79,12 @@ goodies.$(O): shell.h misc.h pipes.h common.h cstdio.h goodies.h
 
 hsort.$(O): ../autoconf.h ../config.h includes.h hsort.h
 
+lastdirsep.$(O): ../autoconf.h ../config.h includes.h lastdirsep.h
+
 lockfile.$(O): ../autoconf.h ../config.h includes.h sublib.h exopen.h mcommon.h
 
 locking.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
-locking.$(O): misc.h pipes.h exopen.h locking.h
+locking.$(O): misc.h pipes.h exopen.h locking.h lastdirsep.h
 
 mailfold.$(O): ../autoconf.h ../config.h includes.h procmail.h acommon.h
 mailfold.$(O): sublib.h robust.h shell.h misc.h pipes.h common.h exopen.h
@@ -96,7 +97,7 @@ misc.$(O): robust.h shell.h misc.h pipes.h common.h cstdio.h exopen.h regexp.h
 misc.$(O): mcommon.h goodies.h locking.h mailfold.h
 
 multigram.$(O): ../autoconf.h ../config.h includes.h sublib.h hsort.h shell.h
-multigram.$(O): ecommon.h mcommon.h targetdir.h
+multigram.$(O): ecommon.h mcommon.h lastdirsep.h targetdir.h
 
 pipes.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
 pipes.$(O): misc.h pipes.h common.h cstdio.h exopen.h mcommon.h goodies.h
@@ -105,7 +106,7 @@ pipes.$(O): mailfold.h
 procmail.$(O): ../patchlevel.h ../autoconf.h ../config.h includes.h procmail.h
 procmail.$(O): acommon.h sublib.h robust.h shell.h misc.h pipes.h common.h
 procmail.$(O): cstdio.h exopen.h regexp.h mcommon.h goodies.h locking.h
-procmail.$(O): mailfold.h
+procmail.$(O): mailfold.h lastdirsep.h
 
 regexp.$(O): ../autoconf.h ../config.h includes.h procmail.h robust.h shell.h
 regexp.$(O): misc.h regexp.h
@@ -116,6 +117,7 @@ robust.$(O): misc.h pipes.h common.h mailfold.h shell.h
 sublib.$(O): ../autoconf.h ../config.h includes.h sublib.h shell.h
 
 gethome.$(O) setid.$(O) recommend.$(O): ../autoconf.h ../config.h includes.h
+recommend.$(O): lastdirsep.h
 
 gethome.$(O): gethome.c
 	@$(CC) -c $(CFLAGS) $*.c
@@ -135,13 +137,13 @@ gethome: gethome.$(O) setid
 setid: setid.$(O)
 	@$(CC) $(CFLAGS) $@.$(O) -o $@ $(LDFLAGS)
 
-recommend: recommend.$(O) sublib.$(O)
-	@$(CC) $(CFLAGS) $@.$(O) sublib.$(O) -o $@ $(LDFLAGS)
+recommend: recommend.$(O) sublib.$(O) lastdirsep.$(O)
+	@$(CC) $(CFLAGS) $@.$(O) sublib.$(O) lastdirsep.$(O) -o $@ $(LDFLAGS)
 
 ../man/man.sed: manconf.c ../autoconf.h ../config.h includes.h procmail.h
-../man/man.sed: ../patchlevel.h
+../man/man.sed: ../patchlevel.h lastdirsep.h lastdirsep.$(O)
 	@$(CC) $(CFLAGS) "-DBINDIR=\"$(BINDIR)\"" -o _autotst manconf.c \
-	 $(LDFLAGS)
+	 lastdirsep.$(O) $(LDFLAGS)
 	@./_autotst $@ $@.0 $@.1
 	@$(RM) _autotst
 
@@ -151,7 +153,7 @@ clean:
 	 $(FM_OBJ) multigram.$(O) $(MG_OBJ) $(BINSS) multigram ../autoconf.h \
 	 _autotst* lookfor _locktst* grepfor recommend recommend.$(O) manconf \
 	 _Makefile lock.log *core* targetdir.h setid setid.$(O) gethome \
-	 gethome.$(O)
+	 gethome.$(O) make_n
 
 Makefile: ../Makefile Makefile.0
 	@echo "You have made changes to the master Makefile, in order for"

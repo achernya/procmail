@@ -1,19 +1,19 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: procmail.man,v 1.51 1994/06/28 14:49:23 berg Exp $
+.Id $Id: procmail.man,v 1.59 1994/08/23 14:47:21 berg Exp $
 .TH PROCMAIL 1 \*(Dt BuGless
 .na
 .SH NAME
 procmail \- autonomous mail processor
 .SH SYNOPSIS
 .B procmail
-.RB [ \-@PRESERVOPT@@TEMPFAILOPT@@OVERRIDEOPT@ ]
+.RB [ \-@PRESERVOPT@@TEMPFAILOPT@@OVERRIDEOPT@@BERKELEYOPT@ ]
 .RB [ "\-@FROMWHOPT@ \fIfromwhom\fP" ]
 .RI [ "parameter\fB=\fPvalue " | " rcfile" ]
 \&.\|.\|.
 .br
 .B procmail
-.RB [ \-@TEMPFAILOPT@@OVERRIDEOPT@ ]
+.RB [ \-@TEMPFAILOPT@@OVERRIDEOPT@@BERKELEYOPT@ ]
 .RB [ "\-@FROMWHOPT@ \fIfromwhom\fP" ]
 .RB [ "\-@ARGUMENTOPT@ \fIargument\fP" ]
 .B \-@DELIVEROPT@
@@ -21,7 +21,7 @@ procmail \- autonomous mail processor
 \&.\|.\|.
 .br
 .B procmail
-.RB [ \-@PRESERVOPT@@TEMPFAILOPT@ ]
+.RB [ \-@PRESERVOPT@@TEMPFAILOPT@@BERKELEYOPT@ ]
 .B \-@MAILFILTOPT@
 .RI [ "parameter\fB=\fPvalue" ]
 \&.\|.\|.
@@ -49,10 +49,12 @@ When invoked, it first sets some environment variables to default values,
 reads the mail message from stdin until an EOF, separates the body from the
 header, and then, if no command line arguments are present, it starts to look
 for a file named
-.B @PROCMAILRC@
-in your home directory.  According to the processing recipes in this file,
+.BR @PROCMAILRC@ .
+According to the processing recipes in this file,
 the mail message that just arrived gets distributed into the right folder
-(and more).@ETCRC_desc@
+(and more).  If no rcfile is found, or processing of the rcfile falls off
+the end, procmail will store the mail in the default system
+mailbox.@ETCRC_desc@
 .PP
 If running suid root or with root privileges, procmail will be able to
 perform as a functionally enhanced, backwards compatible mail delivery agent.
@@ -99,7 +101,8 @@ Equivalent to a
 .SH OPTIONS
 .TP 0.5i
 .B \-@VERSIONOPT@
-Procmail will print its version number and exit.
+Procmail will print its version number, display its compile time
+configuration and exit.
 .TP
 .B \-@PRESERVOPT@
 Preserve any old environment.  Normally procmail clears the environment
@@ -133,6 +136,11 @@ generate a new one).
 Instead of allowing anyone to generate `@FROM@' lines, simply override
 the fakes.
 .TP
+.B \-@BERKELEYOPT@
+Assume traditional Berkeley mailbox format, ignore any
+.B Content-Length:
+fields.
+.TP
 .I "\fB\-@ARGUMENTOPT@\fP argument"
 This will set $1 to be equal to
 .IR argument .
@@ -155,7 +163,7 @@ ordinary mail).  This option is incompatible with
 Turns procmail into a general purpose mail filter.  In this mode one rcfile
 must be specified on the command line.  After the rcfile, procmail will
 accept an unlimited number of arguments.@ETCRCS_desc@
-For some typical usage of this option you should look in the
+For some advanced usage of this option you should look in the
 .B EXAMPLES
 section below.
 .SH ARGUMENTS
@@ -177,7 +185,7 @@ command line.  The following ones will only be parsed if the preceding ones
 have a not matching HOST-directive entry, or in case they should not exist.
 .PP
 If no rcfiles are specified, it looks for
-.BR $HOME/@PROCMAILRC@ .
+.BR @PROCMAILRC@ .
 If not even that can be found, processing will continue according to
 the default settings of the environment variables and the ones specified
 on the command line.
@@ -188,6 +196,9 @@ man page.
 A small sample rcfile can be found in the
 .B NOTES
 section below.
+.PP
+Skip the rest of this EXAMPLES section unless you are a system administrator
+who is vaguely familiar with sendmail.cf syntax.
 .PP
 The
 .B \-@MAILFILTOPT@
@@ -205,11 +216,11 @@ to filter mail through the procmail mailer (please note the leading tab
 to continue the rule, and the tab to separate the comments):
 .Sx 4
 R$*<@some.where>$*
-        $#procmail $@/etc/some.rc $:$1@some.where.procmail$2
+        $#procmail $@/etc/procmailrcs/some.rc $:$1@some.where.procmail$2
 R$*<@$*.procmail>$*
         $1<@$2>$3       Already filtered, map back
 .Ex
-And /etc/some.rc could be as simple as:
+And /etc/procmailrcs/some.rc could be as simple as:
 .Sx 6
 :0                              # sink all junk mail
 * ^Subject:.*junk
@@ -218,8 +229,8 @@ And /etc/some.rc could be as simple as:
 :0                              # pass along all other mail
 ! \-oi \-f "$@"
 .Ex
-Do watch out when sending mail from within the /etc/some.rc file, if
-you send mail to addresses which match the first rule again, you could
+Do watch out when sending mail from within the /etc/procmailrcs/some.rc file,
+if you send mail to addresses which match the first rule again, you could
 be creating an endless mail loop.
 .SH FILES
 .TP 2.3i
@@ -227,9 +238,11 @@ be creating an endless mail loop.
 to set the recipient's LOGNAME, HOME and SHELL variable defaults
 .TP
 .B @SYSTEM_MBOX@
-system mailbox@ETCRC_files@@ETCRCS_files@
+system mailbox; both the system mailbox and the immediate directory
+it is in will be created everytime procmail starts and either one is
+not present@ETCRC_files@@ETCRCS_files@
 .TP
-.B $HOME/@PROCMAILRC@
+.B @PROCMAILRC@
 default rcfile
 .TP
 .B @SYSTEM_MBOX@@DEFlockext@
@@ -387,7 +400,8 @@ The unrecognised options on the command line are ignored, proceeding as
 usual.
 .TP
 Program failure (nnn) of "x"
-Program that was started by procmail returned nnn instead of EX_OK (=@EX_OK@);
+Program that was started by procmail returned nnn instead of
+EXIT_SUCCESS (=@EX_OK@);
 if nnn is negative, then this is the signal the program died on.
 .TP
 Renaming bogus "x" into "x"
@@ -410,6 +424,10 @@ Timeout has occurred on program or filter "x".
 Timeout, was waiting for "x"
 Timeout has occurred on program, filter or file "x".  If it was a program or
 filter, then it didn't seem to be running anymore.
+.TP
+Truncated file to former size
+The file could not be delivered to successfully, so the file was truncated
+to its former size.
 .TP
 Truncating "x" and retrying lock
 "x" does not seem to be a valid filename or the file is not empty.
@@ -435,6 +453,9 @@ Procmail now tries to kernel-lock the most recently opened file(descriptor).
 .TP
 Assigning "x"
 Environment variable assignment.
+.TP
+Assuming identity of the recipient, VERBOSE=off
+Dropping all privileges (if any), implicitly turns off extended diagnostics.
 .TP
 Bypassed locking "x"
 The mail spool directory was not accessible to procmail, it relied solely
@@ -489,7 +510,7 @@ or global) you specified in your rcfile).
 In the unlikely event that you absolutely need to kill procmail before it has
 finished, first try and use the regular kill command (i.e.
 .I not
-kill -9, see the subsection
+kill \-9, see the subsection
 .I Signals
 for suggestions), otherwise some
 .I lockfiles
@@ -515,15 +536,19 @@ field is not handled correctly.
 .SH MISCELLANEOUS
 If there is an existing
 .B Content-Length:
-field in the header of the mail procmail will trim it to report the right
-size.  Procmail does not extend the field in length.
+field in the header of the mail and the
+.B \-@BERKELEYOPT@
+flag is not specified, procmail will trim the field to report the correct
+size.  Procmail does not change the fieldwidth.
 .PP
 If there is no
 .B Content-Length:
-field and procmail appends to regular mailfolders, any lines in the body of
-the message that look like postmarks are prepended with `@ESCAP@' (disarms
-bogus mailheaders).  The regular expression that is used to search for these
-postmarks is:
+field or the
+.B \-@BERKELEYOPT@
+has been specified and procmail appends to regular mailfolders, any lines in
+the body of the message that look like postmarks are prepended with `@ESCAP@'
+(disarms bogus mailheaders).  The regular expression that is used to search
+for these postmarks is:
 .RS
 `@FROM_EXPR@'
 .RE
@@ -539,7 +564,7 @@ When in explicit delivery mode, procmail will generate a leading `@FROM@'
 line if none is present.  If one is already present procmail will leave it
 intact.@TRUSTED_IDS@
 .PP
-For security reasons procmail will only use an absolute or $HOME relative
+For security reasons procmail will only use an absolute or $HOME-relative
 rcfile if it is either owned by the recipient or root and not world writable,
 or if the directory it is contained in is not world writable.
 .PP
@@ -574,7 +599,7 @@ To make `egrepping' of headers more consistent, procmail concatenates all
 continued header fields; but only internally.  When delivering the mail, line
 breaks will appear as before.
 .PP
-If procmail is called under a name not starting with `procmail' (i.e. if it
+If procmail is called under a name not starting with `procmail' (e.g. if it
 is linked to another name and invoked as such), it comes up in explicit
 delivery mode, and expects the recipients' names as command line arguments
 (as if \-@DELIVEROPT@ had been specified).
@@ -625,15 +650,17 @@ or whenever you start reading mail):
 .Sx 17
 #!/bin/sh
 
+ORGMAIL=@SYSTEM_MBOX@
+
 if cd $HOME &&
- test \-s @SYSTEM_MBOX@ &&
+ test \-s $ORGMAIL &&
  lockfile \-r0 \-l3600 .newmail.lock 2>/dev/null
 then
   trap "rm \-f .newmail.lock" 1 2 3 15
   umask 077
   lockfile \-l3600 \-ml
-  cat @SYSTEM_MBOX@ >>.newmail &&
-   cat /dev/null >@SYSTEM_MBOX@
+  cat $ORGMAIL >>.newmail &&
+   cat /dev/null >$ORGMAIL
   lockfile \-mu
   formail \-@FM_SPLIT@ procmail <.newmail &&
    rm \-f .newmail
@@ -649,11 +676,17 @@ PATH=/bin:/usr/bin:@BINDIR@
 MAILDIR=$HOME/Mail      #you'd better make sure it exists
 DEFAULT=$MAILDIR/mbox
 LOGFILE=$MAILDIR/from
+
 :0:
 * ^From.*berg
 from_me
+
 :0
 * ^Subject:.*Flame
 /dev/null
 .fi
 .ad
+.PP
+Other examples for rcfile recipes can be looked up in the
+.BR procmailex (5)
+man page.

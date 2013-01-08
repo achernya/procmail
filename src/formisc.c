@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formisc.c,v 1.28 1994/06/28 16:56:13 berg Exp $";
+ "$Id: formisc.c,v 1.30 1994/08/12 17:34:02 berg Exp $";
 #endif
 #include "includes.h"
 #include "formail.h"
@@ -22,12 +22,12 @@ static char*skipcomment(start)char*start;
       { case '\0':start--;
 	case ')':return start;
 	case '\\':start++;
-	   break;
-	case '(':start=skipcomment(start);
+	   break;	     /* Prithee, breaking the 11th commandment here: */
+	case '(':start=skipcomment(start);	 /* Thou shalt not re-curse! */
       }
 }
-						 /* skips an RFC 822 address */
-char*skipwords(start)char*start;
+
+char*skipwords(start)char*start;		 /* skips an RFC 822 address */
 { int delim,hitspc,machref;char*target,*oldstart;
   hitspc=machref=0;target=oldstart=start;
   if(*start=='<')
@@ -35,7 +35,7 @@ char*skipwords(start)char*start;
   for(;;)
    { switch(*start)
       { case '<':					/* machine reference */
-	   if(machref)					/* can not be nested */
+	   if(machref)					 /* cannot be nested */
 	    { target=oldstart;hitspc=0;			    /* so start over */
 	      goto inc;
 	    }
@@ -45,7 +45,7 @@ char*skipwords(start)char*start;
 inc:	   start++;
 	   continue;
 	case ',':case ';':	      /* sendmail extended RFC-822 behaviour */
-	   if(machref)
+	   if(machref)		 /* allow embedded ,; in a machine reference */
 	    { machref=2;
 	      goto special;
 	    }
@@ -53,7 +53,7 @@ inc:	   start++;
 	default:
 	   if(!machref&&hitspc==3&&target>oldstart)
 	case '\0':case '>':
-	    { if(machref==2)
+	    { if(machref==2)	/* embedded ,; so you have to encapsulate it */
 	       { *target++='>';tmemmove(oldstart+1,oldstart,target++-oldstart);
 		 *oldstart='<';
 	       }
@@ -164,12 +164,12 @@ void startprog(argv)const char*Const*const argv;
 	   if(!WIFSTOPPED(excode))		      /* collect any zombies */
 	    { children--;
 	      if((excode=WIFEXITED(excode)?
-		  WEXITSTATUS(excode):-WTERMSIG(excode))!=EX_OK)
+		  WEXITSTATUS(excode):-WTERMSIG(excode))!=EXIT_SUCCESS)
 		 retval=excode;
 	    }
 	while((child=fork())==-1&&children)	       /* reap some children */
 	   for(--children;(excode=waitfor((pid_t)0))!=NO_PROCESS;)
-	    { if(excode!=EX_OK)
+	    { if(excode!=EXIT_SUCCESS)
 		 retval=excode;
 	      if(--children<=maxchild)
 		 break;

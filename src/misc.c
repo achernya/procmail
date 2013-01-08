@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.55 1994/06/28 16:56:31 berg Exp $";
+ "$Id: misc.c,v 1.59 1994/08/18 13:45:06 berg Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -34,7 +34,7 @@ struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
 #define MAXvarvals	 maxindex(strenvvar)
 #define MAXvarstrs	 maxindex(strenstr)
 
-const char lastfolder[]="LASTFOLDER";
+const char lastfolder[]="LASTFOLDER",maildir[]="MAILDIR";
 int didchd;
 char*globlock;
 static time_t oldtime;
@@ -82,7 +82,7 @@ void setids P((void))
 	setgid(gid);	   /* sets the saved gid as well; we can't use that! */
      setruid(uid);setuid(uid);setegid(gid);rcstate=rc_NORMAL;
 #if !DEFverbose
-     verbose=0;
+     verbose=0;			/* to avoid peeking in rcfiles using SIGUSR1 */
 #endif
    }
 }
@@ -101,11 +101,8 @@ int forkerr(pid,a)const pid_t pid;const char*const a;
 
 void progerr(line,xitcode)const char*const line;int xitcode;
 { charNUM(num,thepid);
-  nlog("Program failure (");
-  if(xitcode<0)
-     xitcode= -xitcode,elog("-");
-  ultstr(0,(unsigned long)xitcode,num);elog(num);
-  elog(") of");logqnl(line);
+  nlog("Program failure (");ltstr(0,(long)xitcode,num);elog(num);elog(") of");
+  logqnl(line);
 }
 
 void chderr(dir)const char*const dir;
@@ -119,14 +116,14 @@ void readerr(file)const char*const file;
 void verboff P((void))
 { verbose=0;
 #ifdef SIGUSR1
-  qsignal(SIGUSR1,(void(*)())verboff);
+  qsignal(SIGUSR1,verboff);
 #endif
 }
 
 void verbon P((void))
 { verbose=1;
 #ifdef SIGUSR2
-  qsignal(SIGUSR2,(void(*)())verbon);
+  qsignal(SIGUSR2,verbon);
 #endif
 }
 
@@ -209,10 +206,10 @@ void sterminate P((void))
 
 void Terminate P((void))
 { ignoreterm();
-  if(retvl2!=EX_OK)
+  if(retvl2!=EXIT_SUCCESS)
      fakedelivery=0,retval=retvl2;
   if(getpid()==thepid)
-   { if(retval!=EX_OK)
+   { if(retval!=EXIT_SUCCESS)
       { tofile=0;lasttell= -1;			  /* mark it for logabstract */
 	logabstract(fakedelivery?"**Lost**":
 	 retval==EX_TEMPFAIL?"**Requeued**":"**Bounced**");
@@ -224,7 +221,7 @@ void Terminate P((void))
 	exectrap(traps);
      nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
    }					/* flush the logfile & exit procmail */
-  elog("");exit(fakedelivery==2?EX_OK:retval);
+  elog("");exit(fakedelivery==2?EXIT_SUCCESS:retval);
 }
 
 void suspend P((void))
@@ -244,16 +241,15 @@ int alphanum(c)const unsigned c;
 { return numeric(c)||c-'a'<='z'-'a'||c-'A'<='Z'-'A'||c=='_';
 }
 
-void firstchd P((void))
-{ if(!didchd)				       /* have we been here already? */
-   { const char*p;
-     didchd=1;			      /* no, well, then try an initial chdir */
-     if(chdir(p=tgetenv(maildir)))
-      { chderr(p);
-	if(chdir(p=tgetenv(home)))
-	   chderr(p);
-      }
-   }
+char*pmrc2buf P((void))
+{ sgetcp=pmrc;readparse(buf,sgetc,2);
+  return buf;
+}
+
+void setmaildir(newdir)const char*const newdir;		    /* destroys buf2 */
+{ char*chp;
+  didchd=1;*(chp=strcpy(buf2,maildir)+STRLEN(maildir))='=';
+  strcpy(++chp,newdir);sputenv(buf2);
 }
 
 void srequeue P((void))
@@ -305,13 +301,6 @@ void concatenate(p)register char*p;
      p[-1]=' ';
    }
   *p=p[-1]='\0';
-}
-
-char*lastdirsep(filename)const char*filename;	 /* finds the next character */
-{ const char*p;					/* following the last DIRSEP */
-  while(p=strpbrk(filename,dirsep))
-     filename=p+1;
-  return (char*)filename;
 }
 
 char*cat(a,b)const char*const a,*const b;
@@ -400,7 +389,10 @@ void asenv(chp)const char*const chp;
    }
   else if(!strcmp(buf,dropprivs))			  /* drop privileges */
    { if(renvint(0L,chp))
+      { if(verbose)
+	   nlog("Assuming identity of the recipient, VERBOSE=off\n");
 	setids();
+      }
    }
   else if(!strcmp(buf,sdelivered))			    /* fake delivery */
    { if(renvint(0L,chp))				    /* is it really? */
@@ -423,7 +415,7 @@ void asenv(chp)const char*const chp;
      if(strcmp(chp,name=hostname()))
       { yell("HOST mismatched",name);
 	if(rc<0||!nextrcfile())			  /* if no rcfile opened yet */
-	   retval=EX_OK,Terminate();		  /* exit gracefully as well */
+	   retval=EXIT_SUCCESS,Terminate();	  /* exit gracefully as well */
 	closerc();
       }
    }

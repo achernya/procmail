@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 1.26 1994/06/24 10:45:08 berg Exp $*/
+/*$Id: procmail.h,v 1.29 1994/08/12 17:58:07 berg Exp $*/
 
 #include "includes.h"
 
@@ -10,6 +10,10 @@
 
 #ifndef DEFsendmail
 #define DEFsendmail SENDMAIL
+#endif
+
+#ifndef DEFPATH
+#define DEFPATH		defPATH
 #endif
 
 #ifndef SYSTEM_MBOX
@@ -68,12 +72,12 @@ int
 
 extern char*buf,*buf2,*loclock,*tolock,*Stdout,*themail,*thebody;
 extern const char shell[],lockfile[],newline[],binsh[],unexpeof[],*const*gargv,
- *const*restargv,*sgetcp,*rcfile,dirsep[],devnull[],lgname[],executing[],
- oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],maildir[],host[],
+ *const*restargv,*sgetcp,pmrc[],*rcfile,dirsep[],devnull[],lgname[],
+ executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],host[],
  *defdeflock,*argv0,errwwriting[],slogstr[];
 extern long filled,lastscore;
 extern int sh,pwait,retval,retvl2,lcking,rcstate,rc,ignwerr,lexitcode,
- asgnlastf,accspooldir,crestarg,skiprc,savstdout;
+ asgnlastf,accspooldir,crestarg,skiprc,savstdout,berkeley;
 extern size_t linebuf;
 extern volatile nextexit;
 extern pid_t thepid;

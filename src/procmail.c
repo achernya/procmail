@@ -12,7 +12,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: procmail.c,v 1.86 1994/06/30 13:52:34 berg Exp $";
+ "$Id: procmail.c,v 1.99 1994/08/29 17:15:25 berg Exp $";
 #endif
 #include "../patchlevel.h"
 #include "procmail.h"
@@ -30,24 +30,26 @@ static /*const*/char rcsid[]=
 #include "goodies.h"
 #include "locking.h"
 #include "mailfold.h"
+#include "lastdirsep.h"
 
 static const char orgmail[]="ORGMAIL",*const nullp,From_[]=FROM,
  exflags[]=RECFLAGS,drcfile[]="Rcfile:",systm_mbox[]=SYSTEM_MBOX,
  pmusage[]=PM_USAGE,*etcrc=ETCRC,misrecpt[]="Missing recipient\n",
  extrns[]="Extraneous ",ignrd[]=" ignored\n",conflicting[]="Conflicting ",
- pardir[]=chPARDIR,suppressed[]=" suppressed\n",
+ pardir[]=chPARDIR,suppressed[]=" suppressed\n",curdir[]={chCURDIR,'\0'},
  insufprivs[]="Insufficient privileges\n";
 char*buf,*buf2,*loclock,*tolock;
 const char shell[]="SHELL",lockfile[]="LOCKFILE",newline[]="\n",binsh[]=BinSh,
  unexpeof[]="Unexpected EOL\n",*const*gargv,*const*restargv= &nullp,*sgetcp,
- *rcfile=PROCMAILRC,dirsep[]=DIRSEP,devnull[]=DevNull,lgname[]="LOGNAME",
- executing[]="Executing",oquote[]=" \"",cquote[]="\"\n",procmailn[]="procmail",
- whilstwfor[]=" whilst waiting for ",home[]="HOME",maildir[]="MAILDIR",
+ pmrc[]=PROCMAILRC,*rcfile=pmrc,dirsep[]=DIRSEP,devnull[]=DevNull,
+ lgname[]="LOGNAME",executing[]="Executing",oquote[]=" \"",cquote[]="\"\n",
+ procmailn[]="procmail",whilstwfor[]=" whilst waiting for ",home[]="HOME",
  host[]="HOST",*defdeflock,*argv0="",errwwriting[]="Error while writing to",
  slogstr[]="%s \"%s\"";
 char*Stdout;
-int retval=EX_CANTCREAT,retvl2=EX_OK,sh,pwait,lcking,rcstate,rc= -1,ignwerr,
- lexitcode=EX_OK,asgnlastf,accspooldir,crestarg,skiprc,savstdout;
+int retval=EX_CANTCREAT,retvl2=EXIT_SUCCESS,sh,pwait,lcking,rcstate,rc= -1,
+ ignwerr,lexitcode=EXIT_SUCCESS,asgnlastf,accspooldir,crestarg,skiprc,
+ savstdout,berkeley;
 size_t linebuf=mx(DEFlinebuf+XTRAlinebuf,STRLEN(systm_mbox)<<1);
 volatile int nextexit;			       /* if termination is imminent */
 pid_t thepid;
@@ -77,7 +79,7 @@ main(argc,argv)const char*const argv[];
   ;{ int presenviron,Deliverymode,override;char*fromwhom=0;
      const char*idhint=0;gid_t egid=getegid();
      Deliverymode=mailfilter=override=0;
-     openlog(procmailn,LOG_PID,LOG_MAIL);		  /* for the syslogd */
+     Openlog(procmailn,LOG_PID,LOG_MAIL);		  /* for the syslogd */
      if(argc)			       /* sanity check, any argument at all? */
       { Deliverymode=strncmp(lastdirsep(argv0=argv[0]),procmailn,
 	 STRLEN(procmailn));
@@ -85,7 +87,20 @@ main(argc,argv)const char*const argv[];
 	   for(;;)				       /* processing options */
 	    { switch(*++chp2)
 	       { case VERSIONOPT:elog(VERSION);
-		    return EX_OK;
+		    elog("\nLocking strategies:\tdotlocking");
+#ifndef NOfcntl_lock
+		    elog(", fcntl()");		    /* a peek under the hood */
+#endif
+#ifdef USElockf
+		    elog(", lockf()");
+#endif
+#ifdef USEflock
+		    elog(", flock()");
+#endif
+		    elog("\nDefault rcfile:\t\t");elog(pmrc);
+		    elog("\nSystem mailbox:\t\t");elog(systm_mbox);
+		    elog(newline);
+		    return EXIT_SUCCESS;
 		 case HELPOPT1:case HELPOPT2:elog(pmusage);elog(PM_HELP);
 		    elog(PM_QREFERENCE);
 		    return EX_USAGE;
@@ -94,6 +109,8 @@ main(argc,argv)const char*const argv[];
 		 case MAILFILTOPT:mailfilter=1;
 		    continue;
 		 case OVERRIDEOPT:override=1;
+		    continue;
+		 case BERKELEYOPT:berkeley=1;
 		    continue;
 		 case TEMPFAILOPT:retval=EX_TEMPFAIL;
 		    continue;
@@ -219,8 +236,7 @@ privileged:				       /* move stdout out of the way */
 	qsignal(SIGINT,sbounce);qsignal(SIGHUP,sbounce);
 	qsignal(SIGQUIT,slose);signal(SIGALRM,(void(*)())ftimeout);
 	ultstr(0,(unsigned long)uid,buf);
-	chp2=!passinvk||!*passinvk->pw_name?buf:passinvk->pw_name;
-	filled=0;
+	chp2=!passinvk||!*passinvk->pw_name?buf:passinvk->pw_name;filled=0;
 	;{ const char*fwhom;size_t lfr,linv;int tstamp;
 	   tstamp=fromwhom&&*fromwhom==REFRESH_TIME&&!fromwhom[1];fwhom=chp2;
 	   if(fromwhom&&!tstamp)
@@ -316,7 +332,8 @@ no_from:       { tstamp=0;	   /* no existing From_, so nothing to stamp */
 #endif
 	      if(argv[++argc])			  /* more than one recipient */
 		 if(pidchild=sfork())
-		  { if(forkerr(pidchild,procmailn)||waitfor(pidchild)!=EX_OK)
+		  { if(forkerr(pidchild,procmailn)||
+		       waitfor(pidchild)!=EXIT_SUCCESS)
 		       retvl2=retval;
 		    pidchild=0;		      /* loop for the next recipient */
 		  }
@@ -330,8 +347,7 @@ no_from:       { tstamp=0;	   /* no existing From_, so nothing to stamp */
 	if(Deliverymode)
 	 { if(!(pass=getpwnam(chp2)))  /* chp2 should point to the recipient */
 	    { static const char unkuser[]="Unknown user";
-	      nlog(unkuser);logqnl(chp2);
-	      syslog(LOG_ERR,slogstr,unkuser,chp2);
+	      nlog(unkuser);logqnl(chp2);syslog(LOG_ERR,slogstr,unkuser,chp2);
 	      return EX_NOUSER;
 	    }
 	   if(enoughprivs(passinvk,euid,egid,pass->pw_uid,pass->pw_gid))
@@ -381,8 +397,8 @@ nospecial:	     { static const char densppr[]=
 		       nlog(densppr);logqnl(rcfile);
 		       syslog(LOG_ALERT,slogstr,densppr,rcfile);
 		     }
-		    else
-		       passinvk= &spassinvk;	    /* no security violation */
+		    else			    /* no security violation */
+		       mailfilter=2,passinvk= &spassinvk;
 		  }				      /* accept new identity */
 	       }
 #endif
@@ -414,8 +430,8 @@ Setuser: { gid=pass->pw_gid;uid=pass->pw_uid;
 	   free(spassinvk.pw_shell);
 	 }
       }
-     setdef(orgmail,systm_mbox);setdef(maildir,DEFmaildir);
-     if(!presenviron||!mailfilter)
+     setdef(orgmail,systm_mbox);
+     if(!presenviron||!mailfilter)	  /* by default override environment */
       { setdef(host,hostname());sputenv(lastfolder);sputenv(exitcode);
 	initdefenv();
 	;{ const char*const*kp;static const char*const prestenv[]=PRESTENV;
@@ -427,12 +443,14 @@ Setuser: { gid=pass->pw_gid;uid=pass->pw_uid;
       }		/* set fdefault and find out the name of our system lockfile */
      sgetcp=fdefault;readparse(buf,sgetc,2);fdefault=tstrdup(buf);
      strcpy(chp2=strchr(strcpy(buf,chp=(char*)getenv(orgmail)),'\0'),lockext);
-     defdeflock=tstrdup(buf);*chp2='\0';buf[i=lastdirsep(chp)-chp]='\0';
+     defdeflock=tstrdup(buf);sgid=egid;accspooldir=3;	/* presumed innocent */
+     if(mailfilter)
+	goto no_mbox;	      /* when running as mailfilter, forget $DEFAULT */
      ;{ struct stat stbuf;			   /* strip off the basename */
-	sgid=gid;					/* presumed innocent */
        /*
 	*	do we need sgidness to access the mail-spool directory/files?
 	*/
+	*chp2='\0';buf[i=lastdirsep(chp)-chp]='\0';sgid=gid;
 	if(!stat(buf,&stbuf))
 	 { accspooldir=!!(stbuf.st_mode&(S_IWGRP|S_IWOTH))<<1|
 	    uid==stbuf.st_uid;
@@ -446,6 +464,8 @@ Setuser: { gid=pass->pw_gid;uid=pass->pw_uid;
 	   else if(stbuf.st_mode&S_ISGID)
 keepgid:      sgid=stbuf.st_gid;   /* keep the gid from the parent directory */
 	 }
+	else			/* panic, mail-spool directory not available */
+	   setids(),mkdir(buf,NORMdirperm);  /* try creating the last member */
        /*
 	*	check if the default-mailbox-lockfile is owned by the
 	*	recipient, if not, mark it for further investigation, it
@@ -525,27 +545,29 @@ bogusbox:	  { ultoan((unsigned long)stbuf.st_ino,	  /* i-node numbered */
 	   if(!xcreat(chp,NORMperm,(time_t*)0,doCHECK))		/* try again */
 	      break;
 	   if(lstat(chp,&stbuf))		      /* nothing in the way? */
-fishy:	    { nlog("Couldn't create");logqnl(chp);sputenv(orgmail);
+fishy:	    { nlog("Couldn't create");logqnl(chp);
+no_mbox:      sputenv(orgmail);
 	      if(!strcmp(chp,fdefault))			/* DEFAULT the same? */
-		 fdefault="";					 /* so panic */
+		 free((char*)fdefault),fdefault="";		 /* so panic */
 	      break;
 	    }
 	 }					/* bad news, be conservative */
 	doumask(INIT_UMASK);
       }
-     while(chp=(char*)argv[argc])      /* interpret command line specs first */
-       /*
-	*	really change the uid now, since it would not be safe to
-	*	evaluate the extra command line arguments otherwise
-	*/
-      { setids();argc++;
-	if(!asenvcpy(chp)&&mailfilter)
-	 { gargv= &nullp;
-	   for(restargv=argv+argc;restargv[crestarg];crestarg++);
-	   break;
+     if(mailfilter!=2)		 /* special, can't be any command line specs */
+	while(chp=(char*)argv[argc])   /* interpret command line specs first */
+	  /*
+	   *	really change the uid now, since it would not be safe to
+	   *	evaluate the extra command line arguments otherwise
+	   */
+	 { setids();argc++;
+	   if(!asenvcpy(chp)&&mailfilter)
+	    { gargv= &nullp;
+	      for(restargv=argv+argc;restargv[crestarg];crestarg++);
+	      break;
+	    }
+	   resettmout();
 	 }
-	resettmout();
-      }
    }
   ;{ int succeed,lastcond,prevcond;struct dyna_long ifstack;
      ifstack.filled=ifstack.tspace=0;ifstack.offs=0;
@@ -581,22 +603,24 @@ fake_rc:	 readerr(buf);
 	       }
 	      suppmunreadable=0;
 findrc:	      i=0;		    /* should we keep the current directory? */
+	      if(rcfile==pmrc)		    /* the default .procmailrc file? */
+		 strcpy((char*)(rcfile=buf2),pmrc2buf());
 	      if(strchr(dirsep,*rcfile)||		   /* absolute path? */
 		 (mailfilter||*rcfile==chCURDIR&&strchr(dirsep,rcfile[1]))&&
 		 (i=1))				     /* mailfilter or ./ pfx */
 		 *buf='\0';		/* do not put anything in front then */
-	      else
-		 cat(tgetenv(home),MCDIRSEP);	  /* prepend $HOME directory */
-	      if(stat(strcat(buf,rcfile),&stbuf)?	      /* accessible? */
-	       rcstate==rc_NOSGID:stbuf.st_mode&S_IRUSR)  /* owner-readable? */
+	      else		     /* prepend default procmailrc directory */
+		 lastdirsep(pmrc2buf())[1]='\0';
+	      strcat(buf,rcfile);			/* append the rcfile */
+	      if(mailfilter!=2&&			 /* nothing special? */
+		 (stat(buf,&stbuf)?			      /* accessible? */
+		  rcstate==rc_NOSGID:stbuf.st_mode&S_IRUSR))	/* readable? */
 		 setids();				/* then transmogrify */
 	    }
 	   while(0>bopen(buf));			   /* try opening the rcfile */
 	   if(i)		  /* opened rcfile in the current directory? */
 	    { if(!didchd)
-	       { didchd=1;*(chp=strcpy(buf2,maildir)+STRLEN(maildir))='=';
-		 *++chp=chCURDIR;*++chp='\0';sputenv(buf2);
-	       }
+		 setmaildir(curdir);
 	    }
 	   else
 	     /*
@@ -625,7 +649,16 @@ findrc:	      i=0;		    /* should we keep the current directory? */
 	   *	have opened his/her .procmailrc (don't remove these, since
 	   *	the rcfile might have been created after the first stat)
 	   */
-	   yell(drcfile,buf);setids();firstchd();
+	   yell(drcfile,buf);setids();
+	   if(!didchd)			       /* have we done this already? */
+	    { *lastdirsep(pmrc2buf())='\0';
+	      if(chdir(chp=buf))      /* no, well, then try an initial chdir */
+	       { chderr(buf);
+		 if(chdir(chp=(char*)tgetenv(home)))
+		    chderr(chp),chp=(char*)curdir;
+	       }
+	      setmaildir(chp);
+	    }
 startrc:   succeed=lastcond=prevcond=0;
 	 }
 	unlock(&loclock);			/* unlock any local lockfile */
@@ -778,6 +811,7 @@ jinregs:			   regsp=regs;	/* start over and look again */
 				      while(weight!=0&&
 					    MIN32<score&&
 					    score<MAX32&&
+					    rest>=0&&
 					    (chp2=
 				       bregexec(re,(const uchar*)startchar,
 					(const uchar*)chp,(size_t)rest,
@@ -863,8 +897,8 @@ copyrest:		     strcpy(buf,chp2);
 plusinfty:	       score=MAX32;
 		    if(score<=MIN32)	       /* chop off at minus infinity */
 mininfty:	       score=MIN32,i=0;
-		    if(verbose)	     /* not entirely correct, but it will do */
-		     { if(scoreany)
+		    if(verbose)
+		     { if(scoreany)  /* not entirely correct, but it will do */
 			{ charNUM(num,long);
 			  nlog("Score: ");ltstr(7,(long)(score-lscore),num);
 			  elog(num);elog(" ");
@@ -914,7 +948,7 @@ progrm:	   if(testb('!'))				 /* forward the mail */
 		    if(eqFrom_(startchar))    /* leave off any leading From_ */
 		       do
 			  while(i= *startchar++,--tobesent&&i!='\n');
-		       while(*startchar=='>'&&eqFrom_(startchar+1));
+		       while(*startchar=='>');
 		  }				 /* it confuses some mailers */
 		 goto forward;
 	       }
@@ -925,9 +959,9 @@ progrm:	   if(testb('!'))				 /* forward the mail */
 	      if(i)
 	       { metaparse(buf2);
 		 if(!sh&&buf+1==Tmnate)		      /* just a pipe symbol? */
-		  { *buf='|';*(char*)(Tmnate++)='\0';
+		  { *buf='|';*(char*)(Tmnate++)='\0';		  /* fake it */
 		    goto tostdout;
-		  }						  /* fake it */
+		  }
 forward:	 if(locknext)
 		  { if(!tolock)	   /* an explicit lockfile specified already */
 		     { *buf2='\0';  /* find the implicit lockfile ('>>name') */
@@ -1027,7 +1061,8 @@ forward:	 if(locknext)
 			  else
 			   { int excode;
 			     succeed=1;	  /* wait for our significant other? */
-			     if(pwait&&(excode=waitfor(pidchild))!=EX_OK)
+			     if(pwait&&
+				(excode=waitfor(pidchild))!=EXIT_SUCCESS)
 			      { if(!(pwait&2)||verbose)	 /* do we report it? */
 				   progerr(procmailn,excode);
 				succeed=0;
@@ -1096,7 +1131,7 @@ nomore_rc:
   ;{ int succeed;
      concon('\n');succeed=0;
      if(*(chp=(char*)fdefault))				     /* DEFAULT set? */
-      { setuid(uid);firstchd();
+      { setuid(uid);
 	if(strcmp(chp,devnull)&&strcmp(chp,"|"))  /* neither /dev/null nor | */
 	 { cat(chp,lockext);
 	   if(!globlock||strcmp(buf,globlock))		  /* already locked? */
@@ -1113,7 +1148,7 @@ nomore_rc:
 	else
 	   succeed=1;
      if(succeed)				     /* should we panic now? */
-mailed: retval=EX_OK;			  /* we're home free, mail delivered */
+mailed: retval=EXIT_SUCCESS;		  /* we're home free, mail delivered */
    }
   unlock(&loclock);Terminate();
 }

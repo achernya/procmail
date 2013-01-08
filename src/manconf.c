@@ -1,25 +1,27 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 1.42 1994/06/28 16:56:28 berg Exp $*/
+/*$Id: manconf.c,v 1.50 1994/08/23 17:37:30 berg Exp $*/
 
 #include "../patchlevel.h"
 #include "procmail.h"
+#include "lastdirsep.h"
 
 #define pn(name,val)	pnr(name,(long)(val))
 
 static char pm_version[]=VERSION,ffileno[]=DEFfileno;
-const char dirsep[]=DIRSEP;
+const char dirsep[]=DIRSEP,pmrc[]=PROCMAILRC;
+char pmrc2[]=PROCMAILRC;			     /* need a writable copy */
 static const char*const keepenv[]=KEEPENV,*const prestenv[]=PRESTENV,
  *const trusted_ids[]=TRUSTED_IDS,*const etcrc=ETCRC,
  *const krnllocks[]={
 #ifndef NOfcntl_lock
-  "fcntl(2)",
+  "\1.BR fcntl (2)",
 #endif
 #ifdef USElockf
-  "lockf(3)",
+  "\1.BR lockf (3)",
 #endif
 #ifdef USEflock
-  "flock(2)",
+  "\1.BR flock (2)",
 #endif
   0};
 
@@ -35,13 +37,13 @@ static char*skltmark(nl,current)char**current;
 
 static void putcesc(i)
 { switch(i)
-   { case '|':printf("\\\\h'-\\\\w' 'u' ");
+   { case '|':case ':':printf("\\\\h'-\\\\w' 'u' ");	 /* breaking nospace */
 	break;
      case '\\':i='e';
 	goto twoesc;
-     case '\1':i='\n';
+     case '\1':i='\n';			    /* \1 doubles for nroff newlines */
 	goto singesc;
-     case '\2':i='\\';
+     case '\2':i='\\';			 /* \2 doubles for nroff backslashes */
 	goto singesc;
      case '\t':i='t';
 	goto fin;
@@ -113,7 +115,6 @@ administrator), you have to make sure it is invoked when your mail arrives.");
 procmail when mail arrives, you can control the invocation of procmail \
 yourself.");
 #endif
-  puts("/^\\.ex/,/^\\.ex/ d");
 #ifndef MAILBOX_SEPARATOR
   ps("DOT_FORWARD",".forward");
   ps("FW_content","\"|IFS=' '&&exec /usr/local/bin/procmail -f-||\
@@ -132,8 +133,8 @@ exit 75 \2fB#\2fP\2fIYOUR_USERNAME\2fP\"");
 it will generate an additional `@FAKE_FIELD@' line to help distinguish\1\
 fake mails.",""," or ");
   plist("KERNEL_LOCKING",
-   "consistently uses the following kernel locking strategies: ",krnllocks,"",
-   "doesn't use any additional kernel locking strategies"," and ");
+   "consistently uses the following kernel locking strategies:",krnllocks,"",
+   "\1doesn't use any additional kernel locking strategies","\1and");
 #ifdef LD_ENV_FIX
   ps("LD_ENV_FIX","\1.PP\1For security reasons, procmail will wipe out all\
  environment variables starting with LD_ upon startup.");
@@ -151,10 +152,10 @@ is case sensitive, and some users have login names with uppercase letters in\
   ps("SYSTEM_MBOX",SYSTEM_MBOX);
   ps("ETCRC_desc",etcrc?"\1.PP\1If no rcfiles and no\1.B \2-@PRESERVOPT@\1have\
  been specified on the command line, procmail will, prior to reading\
- $HOME/@PROCMAILRC@, interpret commands from\1.B @ETCRC@\1(if present).\1\
+ @PROCMAILRC@, interpret commands from\1.B @ETCRC@\1(if present).\1\
 Care must be taken when creating @ETCRC@, because, if circumstances\
  permit, it will be executed with root privileges (contrary to the\
- $HOME/@PROCMAILRC@ file of course).":"");
+ @PROCMAILRC@ file of course).":"");
   ps("ETCRC_files",etcrc?"\1.TP\1.B @ETCRC@\1initial global rcfile":"");
   ps("DROPPRIVS",etcrc?"\1.TP\1.B DROPPRIVS\1If set to `yes' procmail\
  will drop all privileges it might have had (suid or sgid).  This is\
@@ -162,21 +163,25 @@ Care must be taken when creating @ETCRC@, because, if circumstances\
  @ETCRC@ file is executed on behalf of the recipient.":"");
   ps("ETCRC_warn",etcrc?"\1.PP\1The\1.B @ETCRC@\1file might be executed\
  with root privileges, so be very careful of what you put in it.\1\
+.B SHELL\1\
+will be equal to that of the current recipient, so if procmail has to invoke\
+ the shell, you'd better set it to some safe value first.\1\
 See also:\1.BR DROPPRIVS .":"");
   ps("ETCRC",etcrc?etcrc:"");
 #ifdef ETCRCS
   ps("ETCRCS_desc","\1If the rcfile is an absolute path starting with\
 \1.B @ETCRCS@\
-\1 without backward references (i.e. the parent directory cannot\
+\1without backward references (i.e. the parent directory cannot\
  be mentioned) procmail will, only if no security violations are found,\
  take on the identity of the owner of the rcfile (or symbolic link).");
   ps("ETCRCS_files","\1.TP\1.B @ETCRCS@\1special privileges path for rcfiles");
   ps("ETCRCS_warn","\1.PP\1Keep in mind that if\1.BR chown (1)\1is permitted\
  on files in\1.BR @ETCRCS@ ,\1that they can be chowned to root\
- (or anyone else) by their current owners.");
+ (or anyone else) by their current owners.\1For maximum security, make\
+ sure this directory is\1.I executable\1to root only.");
   ps("ETCRCS_error","\1.TP\1Denying special privileges for \"x\"\1\
 Procmail will not take on the identity that comes with the rcfile because\1\
-a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
+a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1or variable\
  assignments on the command line) or procmail had insufficient privileges\
  to do so.");
   ps("ETCRCS",ETCRCS);
@@ -197,7 +202,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
   pn("DEFlinebuf",DEFlinebuf);
   ps("BOGUSprefix",BOGUSprefix);
   ps("FAKE_FIELD",FAKE_FIELD);
-  ps("PROCMAILRC",PROCMAILRC);
+  ps("PROCMAILRC",pmrc);
   pn("HOSTNAMElen",HOSTNAMElen);
   pn("DEFsuspend",DEFsuspend);
   pn("DEFlocksleep",DEFlocksleep);
@@ -208,7 +213,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
   ps("FROMMkey",FROMMkey);
   ps("FROMMsubstitute",FROMMsubstitute);
   ps("DEFshellmetas",DEFshellmetas);
-  ps("DEFmaildir",DEFmaildir);
+  *lastdirsep(pmrc2)='\0';ps("DEFmaildir",pmrc2);
   ps("DEFdefault",DEFdefault);
   ps("DEFmsgprefix",DEFmsgprefix);
   ps("DEFsendmail",DEFsendmail);
@@ -237,6 +242,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
   pc("REFRESH_TIME",REFRESH_TIME);
   pc("ALTFROMWHOPT",ALTFROMWHOPT);
   pc("OVERRIDEOPT",OVERRIDEOPT);
+  pc("BERKELEYOPT",BERKELEYOPT);
   pc("ARGUMENTOPT",ARGUMENTOPT);
   pc("DELIVEROPT",DELIVEROPT);
   pn("MINlinebuf",MINlinebuf);
@@ -266,6 +272,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
   pc("FM_SKIP",FM_SKIP);
   pc("FM_TOTAL",FM_TOTAL);
   pc("FM_BOGUS",FM_BOGUS);
+  pc("FM_BERKELEY",FM_BERKELEY);
   pc("FM_QPREFIX",FM_QPREFIX);
   pc("FM_CONCATENATE",FM_CONCATENATE);
   pc("FM_FORCE",FM_FORCE);
@@ -290,7 +297,7 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
   pc("FM_FIRST_UNIQ",FM_FIRST_UNIQ);
   pc("FM_LAST_UNIQ",FM_LAST_UNIQ);
   pc("FM_ReNAME",FM_ReNAME);
-  pn("EX_OK",EX_OK);
+  pn("EX_OK",EXIT_SUCCESS);
   *(p=strchr(strchr(q=strchr(pm_version,' ')+1,' ')+1,' '))='\0';p++;
   ps("PM_VERSION",q);
   ps("MY_MAIL_ADDR",skltmark(1,&p));
@@ -307,5 +314,5 @@ a security violation was found (e.g. \1.B \2-@PRESERVOPT@\1 or variable\
 #endif
   ps("SETRUID",setruid(getuid())?"":	/* is setruid() a valid system call? */
    " (or if procmail is already running with the recipient's euid and egid)");
-  return EX_OK;
+  return EXIT_SUCCESS;
 }

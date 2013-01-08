@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: pipes.c,v 1.33 1994/06/28 16:56:36 berg Exp $";
+ "$Id: pipes.c,v 1.35 1994/08/12 17:34:19 berg Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -144,7 +144,7 @@ int pipthrough(line,source,len)char*line,*source;const long len;
      if(dump(PWRO,source,len)&&!ignwerr)  /* send in the text to be filtered */
 	writeerr(line),lexitcode=EX_IOERR,stermchild();
      ;{ int excode;	      /* optionally check the exitcode of the filter */
-	if(pwait&&(excode=waitfor(pidfilt))!=EX_OK)
+	if(pwait&&(excode=waitfor(pidfilt))!=EXIT_SUCCESS)
 	 { pidfilt=0;
 	   if(pwait&2)				  /* do we put it on report? */
 	    { pwait=4;			     /* no, we'll look the other way */
@@ -156,7 +156,7 @@ perr:	      progerr(line,excode);	      /* I'm going to tell my mommy! */
 	   stermchild();
 	 }
       }
-     rclose(PWRB);exit(EX_OK);			  /* allow parent to proceed */
+     rclose(PWRB);exit(EXIT_SUCCESS);		  /* allow parent to proceed */
    }
   rclose(PWRB);rclose(PWRI);getstdin(PRDI);
   if(forkerr(pidchild,procmailn))
@@ -188,7 +188,7 @@ long pipin(line,source,len)char*const line;char*source;long len;
 		    writeerr(line);
 		 else
 		    len=0;
-		 if(pwait&&(excode=strcmp(t1,t3)?1:EX_OK)!=EX_OK)
+		 if(pwait&&(excode=strcmp(t1,t3)?1:EXIT_SUCCESS)!=EXIT_SUCCESS)
 		  { if(!(pwait&2)||verbose)	  /* do we put it on report? */
 		       progerr(line,excode);
 		    len=1;
@@ -209,7 +209,7 @@ long pipin(line,source,len)char*const line;char*source;long len;
   if((len=dump(PWRO,source,len))&&(!ignwerr||(len=0)))
      writeerr(line);		       /* pipe was shut in our face, get mad */
   ;{ int excode;			    /* optionally check the exitcode */
-     if(pwait&&(excode=waitfor(pidchild))!=EX_OK)
+     if(pwait&&(excode=waitfor(pidchild))!=EXIT_SUCCESS)
       { if(!(pwait&2)||verbose)			  /* do we put it on report? */
 	   progerr(line,excode);
 	len=1;
@@ -256,9 +256,7 @@ jumpback:;
   pidchild=0;					/* child must be gone by now */
   if(!(pwait&2))
      pipw=0;				    /* keep quiet about any failures */
-  if(!*filled)
-     return realloc(bf,1);		     /* +1 for housekeeping purposes */
-  return realloc(bf,*filled+1);			/* minimise the buffer space */
+  return realloc(bf,*filled+1);	     /* minimise+1 for housekeeping purposes */
 }
 
 char*fromprog(name,dest,max)char*name;char*const dest;size_t max;
@@ -315,7 +313,7 @@ void exectrap(tp)const char*const tp;
       }
      ;{ int newret;
 	if(!forkerr(pidchild,buf)&&
-	   (newret=waitfor(pidchild))!=EX_OK&&
+	   (newret=waitfor(pidchild))!=EXIT_SUCCESS&&
 	   forceret==-2)
 	   retval=newret;		       /* supersede the return value */
       }

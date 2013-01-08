@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.44 1994/06/24 10:44:57 berg Exp $*/
+/*$Id: includes.h,v 1.48 1994/08/12 17:34:04 berg Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -29,14 +29,14 @@
 				/* fork() getuid() geteuid() getgid() getegid()
 				   getpid() execve() execvp() sleep() setuid()
 				   setgid() setruid() setrgid() setegid()
-				   chown() nice() */
+				   chown() nice() ftruncate() */
 #else
 #undef UNISTD_H_MISSING
 #endif
 #include <stdio.h>		/* setbuf() fclose() stdin stdout stderr
 				/* fopen() fread() fwrite() fgetc() getc()
 				   fdopen() putc() fputs() printf() sprintf()
-				   fprintf() sscanf() FILE EOF */
+				   fprintf() sscanf() FILE EOF fileno() */
 #ifndef STDDEF_H_MISSING
 #include <stddef.h>		/* ptrdiff_t size_t */
 #else
@@ -44,7 +44,7 @@
 #endif
 #ifndef STDLIB_H_MISSING
 #include <stdlib.h>		/* getenv() malloc() realloc() free()
-				/* strtol() exit() */
+				/* strtol() exit() EXIT_SUCCESS */
 #endif
 #include <time.h>		/* time() ctime() time_t */
 #include <fcntl.h>		/* fcntl() struct flock O_RDONLY O_WRONLY
@@ -57,7 +57,7 @@
 #endif
 #ifndef SYS_WAIT_H_MISSING
 #include <sys/wait.h>		/* wait() waitpid() WIFEXITED() WIFSTOPPED()
-				/* WEXITSTATUS() WTERMSIG() */
+				/* WEXITSTATUS() WTERMSIG() WNOHANG */
 #else
 #undef SYS_WAIT_H_MISSING
 #endif
@@ -83,10 +83,9 @@
 #endif
 #include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN EXDEV */
 #ifndef SYSEXITS_H_MISSING
-#include <sysexits.h>		/* EX_OK EX_USAGE EX_NOINPUT EX_NOUSER
-				/* EX_UNAVAILABLE EX_OSERR EX_OSFILE
-				   EX_CANTCREAT EX_IOERR EX_TEMPFAIL EX_NOPERM
-				   */
+#include <sysexits.h>		/* EX_USAGE EX_NOINPUT EX_NOUSER EX_UNAVAILABLE
+				   EX_OSERR EX_OSFILE EX_CANTCREAT EX_IOERR
+				   EX_TEMPFAIL EX_NOPERM */
 #endif
 
 #ifdef STDLIB_H_MISSING
@@ -141,7 +140,6 @@ double pow();
 #undef SYSEXITS_H_MISSING
 		/* Standard exit codes, original list maintained
 		   by Eric Allman (eric@berkeley.edu) */
-#define EX_OK		0
 #define EX_USAGE	64
 #define EX_NOINPUT	66
 #define EX_NOUSER	67
@@ -152,6 +150,10 @@ double pow();
 #define EX_IOERR	74
 #define EX_TEMPFAIL	75
 #define EX_NOPERM	77
+#endif
+
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS	0
 #endif
 
 #if O_SYNC
@@ -300,12 +302,19 @@ extern int errno;
 
 #ifdef SYSLOG_H_MISSING
 #undef SYSLOG_H_MISSING
-#define openlog(ident,logopt,facility)	0
+#define Openlog(ident,logopt,facility)	0
 #define syslog				(void)
+#define closelog()
 #define LOG_EMERG			0
 #define LOG_ALERT			0
 #define LOG_ERR				0
 #define LOG_NOTICE			0
+#else
+#ifdef LOG_MAIL
+#define Openlog(ident,logopt,facility)	openlog(ident,logopt,facility)
+#else
+#define Openlog(ident,logopt,facility)	openlog(ident,logopt)
+#endif
 #endif
 
 #ifndef NOuname
@@ -397,9 +406,21 @@ extern void*memmove();
 #define mkdir(dir,mode) (-1)
 #endif
 
+#ifdef NOftruncate
+#undef NOftruncate
+#define ftruncate(fildes,length)	(-1)
+#endif
+
 #ifdef NOwaitpid
 #undef NOwaitpid
 #define waitpid(pid,stat_loc,options)	0
+#else
+#ifndef WNOHANG
+#ifdef waitpid
+#undef waitpid
+#endif
+#define waitpid(pid,stat_loc,options)	0
+#endif
 #endif
 
 #ifdef NOmemmove

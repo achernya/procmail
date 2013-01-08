@@ -8,9 +8,9 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: formail.c,v 1.53 1994/06/28 16:56:10 berg Exp $";
+ "$Id: formail.c,v 1.62 1994/08/18 13:44:52 berg Exp $";
 #endif
-static /*const*/char rcsdate[]="$Date: 1994/06/28 16:56:10 $";
+static /*const*/char rcsdate[]="$Date: 1994/08/18 13:44:52 $";
 #include "includes.h"
 #include <ctype.h>		/* iscntrl() */
 #include "formail.h"
@@ -96,12 +96,13 @@ int lexitcode;					     /* dummy, for waitfor() */
 pid_t child= -1;
 unsigned long rhash;
 FILE*mystdout;
-int nrskip,nrtotal= -1,retval=EX_OK;
+int nrskip,nrtotal= -1,retval=EXIT_SUCCESS;
 size_t buflen,buffilled;
 long totallen;
 char*buf,*logsummary;
 struct field*rdheader,*xheader,*Xheader,*uheader,*Uheader;
 static struct field*iheader,*Iheader,*aheader,*Aheader,*Rheader,*nheader;
+static int areply;
 
 static void logfolder P((void))	 /* estimate the no. of characters needed to */
 { size_t i;charNUM(num,totallen);		       /* represent totallen */
@@ -112,6 +113,66 @@ static void logfolder P((void))	 /* estimate the no. of characters needed to */
      do putssn(tabchar,STRLEN(tabchar));
      while((i+=TABWIDTH)<LENoffset);
      ultstr(7,totallen,num);putssn(num,strlen(num));putcs('\n');
+   }
+}
+
+static void renfield(pointer,oldl,newname,newl)struct field**const pointer;
+ size_t oldl;const size_t newl;const char*const newname;    /* rename fields */
+{ struct field*p;size_t i;char*chp;
+  p= *pointer;(chp=p->fld_text)[p->tot_len-1]='\0';
+  if(eqFrom_(chp))				       /* continued From_ to */
+     for(;chp=strstr(chp,"\n>");*++chp=' ');	  /* continued regular field */
+  if(newl==STRLEN(From_)&&eqFrom_(newname))
+   { for(chp=p->fld_text;chp=strchr(chp,'\n');)		/* continued regular */
+	if(*++chp==' '||*chp=='\t')		 /* to continued From_ field */
+	   *chp='>';
+     for(chp=p->fld_text;chp=strstr(chp,"\n ");*++chp='>');
+     goto replaceall;
+   }
+  if(newname[newl-1]==HEAD_DELIMITER)		     /* completely new field */
+replaceall:
+     oldl=p->id_len;			     /* replace the old one entirely */
+  p->fld_text[p->tot_len-1]='\n';p->tot_len=(i=p->tot_len-oldl)+newl;
+  if(newl>oldl)
+     *pointer=p=realloc(p,FLD_HEADSIZ+p->tot_len);
+  chp=p->fld_text;tmemmove(chp+newl,chp+oldl,i);tmemmove(chp,newname,newl);
+}
+
+static void procfields P((void))
+{ struct field*fldp,**afldp;
+  fldp= *(afldp= &rdheader);
+  while(fldp)
+   { struct field*fp2;
+     if(fp2=findf(fldp,&Rheader))		  /* explicitly rename field */
+      { renfield(afldp,fp2->id_len,(char*)fp2->fld_text+fp2->id_len,
+	 fp2->tot_len-fp2->id_len);
+	goto fixfldp;
+      }
+     if((fp2=findf(fldp,&iheader))&&
+	!(areply&&fldp->id_len>=fp2->tot_len-1))
+      { renfield(afldp,(size_t)0,old_,STRLEN(old_));	/* implicitly rename */
+fixfldp:
+	fldp= *afldp;
+      }
+     if(findf(fldp,&Iheader))				    /* delete fields */
+	goto delfld;
+     ;{ struct field*uf;
+	if((uf=findf(fldp,&uheader))&&!uf->fld_ref)
+	   uf->fld_ref=afldp;			   /* first uheader, keep it */
+	else if(fp2=findf(fldp,&Uheader))
+	 { if(fp2->fld_ref)
+	    { if(afldp==&(*fp2->fld_ref)->fld_next)
+		 afldp=fp2->fld_ref;
+	      delfield(fp2->fld_ref);		       /* delete old Uheader */
+	    }
+	   fp2->fld_ref=afldp;				/* keep last Uheader */
+	 }
+	else if(uf)			    /* delete all following uheaders */
+delfld:	 { fldp=delfield(afldp);
+	   continue;
+	 }
+      }
+     fldp= *(afldp= &(*afldp)->fld_next);
    }
 }
     /* checks if the last field in rdheader looks like a known digest header */
@@ -135,12 +196,12 @@ static int artheadr P((void))	     /* could it be the start of an article? */
 static PROGID;
 
 main(lastm,argv)int lastm;const char*const argv[];
-{ int i,split=0,force=0,bogus=1,every=0,areply=0,trust=0,digest=0,nowait=0,
-   keepb=0,minfields=(char*)progid-(char*)progid,conctenate=0,babyl=0,
-   babylstart;
+{ int i,split=0,force=0,bogus=1,every=0,trust=0,digest=0,nowait=0,keepb=0,
+   minfields=(char*)progid-(char*)progid,conctenate=0,babyl=0,babylstart,
+   berkeley=0,forgetclen;
   off_t maxlen,insoffs,ctlength;FILE*idcache=0;pid_t thepid;
   size_t j,lnl,escaplen;char*chp,*namep,*escap=ESCAP;
-  struct field*fldp,*fp2,**afldp,*fdate,*fcntlength;
+  struct field*fldp,*fp2,**afldp,*fdate,*fcntlength,*fsubject,*fFrom_;
   if(lastm)			       /* sanity check, any argument at all? */
 #define Qnext_arg()	if(!*chp&&!(chp=(char*)*++argv))goto usg
      while(chp=(char*)*++argv)
@@ -183,6 +244,7 @@ main(lastm,argv)int lastm;const char*const argv[];
 		  }
 		 goto usg;
 	      case HELPOPT1:case HELPOPT2:elog(fmusage);elog(FM_HELP);
+		 elog(FM_HELP2); /* had to split up FM_HELP, compiler limits */
 		 goto xusg;
 	      case FM_DUPLICATE:case FM_MINFIELDS:Qnext_arg();chp++;
 	      default:chp--;
@@ -206,6 +268,8 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 		 continue;
 	      case FM_BOGUS:bogus=0;
 		 continue;
+	      case FM_BERKELEY:berkeley=1;
+		 continue;
 	      case FM_QPREFIX:Qnext_arg();escap=chp;
 		 break;
 	      case FM_ADD_IFNOT:case FM_ADD_ALWAYS:case FM_REN_INSERT:
@@ -213,13 +277,12 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 	      case FM_FIRST_UNIQ:case FM_LAST_UNIQ:case FM_ReNAME:Qnext_arg();
 		 i=breakfield(chp,lnl=strlen(chp));
 		 switch(lastm)
-		  { case FM_DEL_INSERT:case FM_REN_INSERT:case FM_EXTRACT:
-		    case FM_FIRST_UNIQ:case FM_LAST_UNIQ:case FM_EXTRC_KEEP:
-		       if(-i!=lnl)
-		    default:
-			  if(i<=0)
-			     goto invfield;
-		    case FM_ReNAME:;
+		  { default:
+		       if(-i!=lnl)	  /* it is not an early ending field */
+		    case FM_ADD_IFNOT:case FM_ADD_ALWAYS:
+			  if(i<=0)	      /* and it is not a valid field */
+			     goto invfield;			 /* complain */
+		    case FM_ReNAME:;		       /* everything allowed */
 		  }
 		 chp[lnl]='\n';			       /* terminate the line */
 		 afldp=addfield(lastm==FM_REN_INSERT?&iheader:
@@ -238,11 +301,17 @@ number:		 if(*chp-'0'>(unsigned)9)	    /* the number is not >=0 */
 		       break;
 		     }				   /* second field attached? */
 		    lastm=i;
-		    if((i=breakfield(chp,(size_t)(namep-chp)))>0)
+		    if((i=breakfield(chp,(size_t)(namep-chp)))<0) /* partial */
+		       if(lastm>0)		     /* complete first field */
+			  goto invfield;	   /* impossible combination */
+		       else
+			  i= -i;
+		    if(i)
 		       tmemmove((char*)fldp->fld_text+lnl,chp,i),copied=1;
-		    else if(namep>chp&&lastm<=0|| /* first field ended early */
+		    else if(namep>chp||				 /* garbage? */
 			    !(chp=(char*)*++argv)||	 /* look at next arg */
-			    (i=breakfield(chp,strlen(chp)))<=0) /* no field? */
+			    !(i=breakfield(chp,strlen(chp)))||	/* fieldish? */
+			    i<0&&(i= -i,lastm>0))  /* impossible combination */
 invfield:	     { nlog("Invalid field-name:");logqnl(chp?chp:"");
 		       goto usg;
 		     }
@@ -300,6 +369,14 @@ xusg:
   while(i--);
   fdate=0;addfield(&fdate,date,STRLEN(date)); /* fdate is only for searching */
   fcntlength=0;addfield(&fcntlength,cntlength,STRLEN(cntlength));   /* ditto */
+  fFrom_=0;addfield(&fFrom_,From_,STRLEN(From_));
+  fsubject=0;addfield(&fsubject,subject,STRLEN(subject));	 /* likewise */
+  forgetclen=digest||		      /* forget Content-Length: for a digest */
+	     berkeley||				      /* for Berkeley format */
+	     keepb&&			    /* if we're keeping the body and */
+	      (areply||					     /* autoreplying */
+	       Xheader&&			    /* or eXtracting without */
+	       !findf(fcntlength,&Xheader));	  /* getting Content-Length: */
   if(areply)					       /* when auto-replying */
      addfield(&iheader,xloop,STRLEN(xloop));	  /* preserve X-Loop: fields */
   if(babyl)						/* skip BABYL leader */
@@ -322,7 +399,7 @@ xusg:
   else
 startover:
      while(readhead());				 /* read in the whole header */
-  ;{ size_t lenparkedbuf;void*parkedbuf;
+  ;{ size_t lenparkedbuf;void*parkedbuf;int wasafrom_;
      if(rdheader)
       { char*tmp,*tmp2;
 	if(!strncmp(tmp=(char*)rdheader->fld_text,Article_,STRLEN(Article_)))
@@ -337,8 +414,9 @@ startover:
       }
      namep=0;totallen=0;i=maxindex(rex);
      do rex[i].rexl=0;
-     while(i--);
-     clear_uhead(uheader);clear_uhead(Uheader);	 /* all state has been reset */
+     while(i--);			      /* reset all state information */
+     clear_uhead(uheader);clear_uhead(Uheader);
+     wasafrom_=!force&&rdheader&&eqFrom_(rdheader->fld_text);procfields();
      for(fldp=rdheader;fldp;fldp=fldp->fld_next)    /* go through the linked */
       { int nowm;				    /* list of header-fields */
 	if(conctenate)
@@ -419,12 +497,12 @@ startover:
 		    nowm-=(maxindex(sest)+2)*1;	     /* depreciate bangpaths */
 		 if(!namep||nowm>lastm)		/* better than previous ones */
 		  { saddr=strcpy(malloc(strlen(saddr)+1),saddr);lastm=nowm;
-		    goto newnamep;
+		    goto pnewname;
 		  }
 	       }
 	      else if(sest[i].head==returnpath)		/* nill Return-Path: */
 	       { saddr=0;lastm=maxindex(sest)+2;		 /* override */
-newnamep:	 if(namep)
+pnewname:	 if(namep)
 		    free(namep);
 		 namep=saddr;
 	       }
@@ -479,12 +557,12 @@ dupfound:  fseek(idcache,(off_t)0,SEEK_SET);	 /* rewind, for any next run */
 	   msid->rexp[msid->rexl-1]='\n';	      /* restore the newline */
 	 }
 	if(!split)			  /* not splitting?  terminate early */
-	   return dupid?EX_OK:1;
+	   return dupid?EXIT_SUCCESS:1;
 	if(dupid)			       /* duplicate? suppress output */
 	   closemine(),opensink();
       }
      ctlength=0;
-     if(!digest&&(fldp=findf(fcntlength,&rdheader)))
+     if(!forgetclen&&(fldp=findf(fcntlength,&rdheader)))
       { *(chp=(char*)fldp->fld_text+fldp->tot_len-1)='\0';   /* terminate it */
 	ctlength=strtol((char*)fldp->fld_text+STRLEN(cntlength),(char**)0,10);
 	*chp='\n';			     /* restore the trailing newline */
@@ -522,8 +600,15 @@ dupfound:  fseek(idcache,(off_t)0,SEEK_SET);	 /* rewind, for any next run */
 	 }
 	if(msid->rexl)			 /* do we add an In-Reply-To: field? */
 	   loadbuf(inreplyto,STRLEN(inreplyto)),loadsaved(msid),addbuf();
-      }				       /* are we allowed to add From_ lines? */
-     else if(!force&&(!rdheader||!eqFrom_(rdheader->fld_text)))	 /* missing? */
+	procfields();
+      }
+     else if(!force&&		       /* are we allowed to add From_ lines? */
+	     (!rdheader||!eqFrom_(rdheader->fld_text))&&   /* is it missing? */
+	     ((fldp=findf(fFrom_,&aheader))&&STRLEN(From_)+1>=fldp->tot_len||
+	      !wasafrom_&&			    /* if there was no From_ */
+	      !findf(fFrom_,&iheader)&&		   /* and From_ is not being */
+	      !findf(fFrom_,&Iheader)&&				/* supressed */
+	      !findf(fFrom_,&Rheader)))
       { struct field*old;time_t t;	     /* insert a From_ line up front */
 	t=time((time_t*)0);old=rdheader;rdheader=0;
 	loadbuf(From_,STRLEN(From_));
@@ -559,40 +644,14 @@ dupfound:  fseek(idcache,(off_t)0,SEEK_SET);	 /* rewind, for any next run */
 	    }
 	   else
 	      addfield(&nheader,fldp->fld_text,fldp->tot_len);
-     if((fldp= *(afldp= &rdheader))&&logsummary&&eqFrom_(fldp->fld_text))
-	concatenate(fldp),putssn(fldp->fld_text,fldp->tot_len);
-     while(fldp)
-      { lnl=fldp->id_len;chp=fldp->fld_text;
-	if(logsummary)
-	 { if(lnl==STRLEN(subject)&&!strnIcmp(chp,subject,lnl))
-	    { concatenate(fldp);chp[i=fldp->tot_len-1]='\0';detab(chp);
-	      putcs(' ');putssn(chp,i>=MAXSUBJECTSHOW?MAXSUBJECTSHOW:i);
-	      putcs('\n');
-	    }
+     if(logsummary)
+      { if(eqFrom_(rdheader->fld_text))
+	   putssn(rdheader->fld_text,rdheader->tot_len);
+	if(fldp=findf(fsubject,&rdheader))
+	 { concatenate(fldp);(chp=fldp->fld_text)[i=fldp->tot_len-1]='\0';
+	   detab(chp);putcs(' ');
+	   putssn(chp,i>=MAXSUBJECTSHOW?MAXSUBJECTSHOW:i);putcs('\n');
 	 }
-	if(findf(fldp,&Iheader))			    /* delete fields */
-	   goto delfld;
-	;{ struct field*uf;
-	   if((uf=findf(fldp,&uheader))&&!uf->fld_ref)
-	      uf->fld_ref=afldp;		   /* first uheader, keep it */
-	   else if(fp2=findf(fldp,&Uheader))
-	    { if(fp2->fld_ref)
-	       { if(afldp==&(*fp2->fld_ref)->fld_next)
-		    afldp=fp2->fld_ref;
-		 delfield(fp2->fld_ref);	       /* delete old Uheader */
-	       }
-	      fp2->fld_ref=afldp;			/* keep last Uheader */
-	    }
-	   else if(uf)			    /* delete all following uheaders */
-delfld:	    { fldp=delfield(afldp);
-	      continue;
-	    }
-	 }
-	if(fp2=findf(fldp,&Rheader))		  /* explicitly rename field */
-	   renfield(afldp,lnl,(char*)fp2->fld_text+lnl,fp2->tot_len-lnl);
-	else if((fp2=findf(fldp,&iheader))&&!(areply&&lnl==fp2->tot_len-1))
-	   renfield(afldp,(size_t)0,old_,STRLEN(old_)); /* implicitly rename */
-	fldp= *(afldp= &(*afldp)->fld_next);
       }					/* restore the saved contents of buf */
      tmemmove(buf,parkedbuf,buffilled=lenparkedbuf);free(parkedbuf);
    }
@@ -661,7 +720,8 @@ splitit:       { if(!lnl)   /* did the previous mail end with an empty line? */
 		  }
 		 if(!nowait&&*argv)	 /* wait till the child has finished */
 		  { int excode;
-		    if((excode=waitfor(child))!=EX_OK&&retval!=EX_OK)
+		    if((excode=waitfor(child))!=EXIT_SUCCESS&&
+		       retval!=EXIT_SUCCESS)
 		       retval=excode;
 		  }
 		 if(!nrtotal)
@@ -729,14 +789,16 @@ flbuf:	lputssn(buf,buffilled),buffilled=0;
   logfolder();
 onlyhead:
   closemine();
-  ;{ int excode;					/* wait for everyone */
+  if(split)						/* wait for everyone */
+   { int excode;
+     close(STDIN);	       /* close stdin now, we're not reading anymore */
      while((excode=waitfor((pid_t)0))!=NO_PROCESS)
-	if(retval==EX_OK&&excode!=EX_OK)
+	if(retval==EXIT_SUCCESS&&excode!=EXIT_SUCCESS)
 	   retval=excode;
    }
   if(retval<0)
      retval=EX_UNAVAILABLE;
-  return retval!=EX_OK?retval:split<0?EX_IOERR:EX_OK;
+  return retval!=EXIT_SUCCESS?retval:split<0?EX_IOERR:EXIT_SUCCESS;
 }
 
 eqFrom_(a)const char*const a;
