@@ -11,14 +11,14 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: procmail.c,v 2.9 1991/07/08 13:03:07 berg Rel $";
+static char rcsid[]="$Id: procmail.c,v 2.10 1991/07/17 14:58:38 berg Rel $";
 #endif
 #include "config.h"
 #define MAIN
 #include "procmail.h"
 #include "shell.h"
 
-#define VERSION "procmail v2.10 1991/07/08 written by Stephen R.van den Berg\n\
+#define VERSION "procmail v2.11 1991/07/17 written by Stephen R.van den Berg\n\
 \t\t\t\tberg@messua.informatik.rwth-aachen.de\n\
 \t\t\t\tberg@physik.tu-muenchen.de\n"
 
@@ -39,7 +39,7 @@ struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout}};
 long lastdump;
 int retval=EX_CANTCREAT,sh,pwait,lcking,locknext,verbose,linebuf=DEFlinebuf,
- rc= -1;
+ rc= -1,tofolder;
 volatile int flaggerd=2,nextexit;
 volatile time_t alrmtime;
 pid_t thepid;
@@ -73,7 +73,10 @@ main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];
  setdef(orgmail,DEForgmail);setdef(grep,DEFgrep);setdef(sendmail,DEFsendmail);
  setdef(lockext,DEFlockext);setdef(msgprefix,DEFmsgprefix);
  chdir(getenv(maildir));nextrcfile();thebody=themail=malloc(1);filled=0;
- signal(SIGTERM,sterminate);signal(SIGINT,sterminate);
+#ifdef SIGXCPU
+ signal(SIGXCPU,SIG_IGN);signal(SIGXFSZ,SIG_IGN);
+#endif
+ signal(SIGPIPE,SIG_IGN);signal(SIGTERM,sterminate);signal(SIGINT,sterminate);
  signal(SIGHUP,sterminate);signal(SIGQUIT,flagger);signal(SIGALRM,ftimeout);
 changedmail:
  themail=readdyn(themail,&filled);			 /* read in the mail */
@@ -158,7 +161,7 @@ do{					     /* main rcfile interpreter loop */
       else if(strchr(flags,'b'))
 	 tobesent-=(startchar=thebody)-themail;
       chp=strchr(strcpy(buf,tgetenv(sendmail)),'\0');sh=0;
-      pwait=!!strchr(flags,'w');
+      pwait=!!strchr(flags,'w');skipspace();
       if(testb('!')){					 /* forward the mail */
 	 readparse(chp+1,getb,0);
 	 if(i)
@@ -206,7 +209,8 @@ forward:    chp=buf;*buf2='\0';
 	    if(dump(deliver(buf2),startchar,tobesent))
 	       writeerr(buf);
 	    else if(!strchr(flags,'c'))
-	       goto mailed;}}}
+	       goto mailed;
+	    tofolder=0;}}}
    else if(testb('#'))					   /* no comment :-) */
       getbl(buf);
    else{				    /* then it must be an assignment */

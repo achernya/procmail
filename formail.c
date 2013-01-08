@@ -11,13 +11,13 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: formail.c,v 2.7 1991/07/03 18:49:25 berg Rel $";
+static char rcsid[]="$Id: formail.c,v 2.8 1991/07/17 14:35:09 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/07/03 18:49:25 $";
+static char rcsdate[]="$Date: 1991/07/17 14:35:09 $";
 #include "config.h"	    /* overkill, only need BinSh & MAILBOX_SEPARATOR */
 #include "includes.h"
 
-#define BSIZE	4096
+#define BSIZE		4096
 
 #define FROM		"From "
 #define UNKNOWN		"foo@bar"
@@ -48,7 +48,17 @@ static const struct {const char*hedr;int lnr;}cdigest[]={
  {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)},
  {article,STRLEN(article)},{Path,STRLEN(Path)},{Received,STRLEN(Received)}};
 #define mxl(a,b)	mx(STRLEN(a),STRLEN(b))
+#ifndef MAILBOX_SEPARATOR
 #define dig_HDR_LEN	mx(mxl(From,Fromm),mxl(Date,subject))
+#define mboxseparator		From
+#define flushseparator(i,p)
+#else
+static const char mboxseparator[]=MAILBOX_SEPARATOR;
+#define flushseparator(i,p)	\
+ do{i=p;p=0;do{int x;Nextchar(x);}while(--i);}while(0)
+#define dig_HDR_LEN	\
+ mx(mx(mxl(From,Fromm),mxl(Date,subject)),STRLEN(mboxseparator))
+#endif
 static errout,oldstdout;
 static pid_t child= -1;
 static FILE*mystdout;
@@ -114,23 +124,30 @@ usg:	       log("Usage: formail [+nnn] [-nnn] [-bfrtned] \
 	 case '\0':;}
       break;}}
 parsedoptions:
-#ifndef MAILBOX_SEPARATOR
-#define mboxseparator		From
-#define flushseparator()
-#else
-#define mboxseparator		MAILBOX_SEPARATOR
-#define flushseparator()	(p=0)
+#ifdef MAILBOX_SEPARATOR
  if(split){
    bogus=0;every=1;}
 #endif
- mystdout=stdout;
+ mystdout=stdout;signal(SIGPIPE,SIG_IGN);
  if(split){
    oldstdout=dup(STDOUT);fclose(stdout);startprog(argv);}
+ else if(every)
+   goto usg;
  while('\n'==(i=getchar()));
  buf=malloc(buflen=BSIZE);t=time((time_t*)0);
  for(;;){					 /* start parsing the header */
    if((buf[p++]=i)=='\n'){
-      chp=buf+lnl;i=maxindex(rex);
+      chp=buf+lnl;
+#ifdef MAILBOX_SEPARATOR
+      if(!strncmp(mboxseparator,chp,STRLEN(mboxseparator))){
+	 if(!lnl){
+	    if(split){
+	       p=0;goto redigest;}
+	    force=1;}	     /* separator up front, don't add a 'From ' line */
+	 else if(bogus)
+	    *chp=' ';}
+#endif
+      i=maxindex(rex);
       while(strnicmp(rex[i].headr,chp,rex[i].lenr)&&i--);
       if(i>=0)					  /* found anything already? */
 	 rex[i].offset=lnl+rex[i].lenr;
@@ -139,8 +156,11 @@ parsedoptions:
 	    if(!areply)
 	       goto endofheader;
 	    nowm=trust?1:3/*wreply*/;ll=lnl+STRLEN(From);goto foundfrom;}
+#ifndef MAILBOX_SEPARATOR
 	 if(bogus){
-	    tmemmove(chp+1,chp,p++-lnl);*chp='>';}}		   /* disarm */
+	    tmemmove(chp+1,chp,p++-lnl);*chp='>';}		   /* disarm */
+#endif
+	 }
       else{
 	 i=maxindex(sest);
 	 do
@@ -200,12 +220,16 @@ endofheader:
       Nextchar(i=buf[p]);
       if(++p==STRLEN(mboxseparator))
 	 if(!strncmp(mboxseparator,buf,STRLEN(mboxseparator))){
-	    if(bogus&&!lnl){
-	       putcs('>');break;}				   /* disarm */
-	    else if(every){
-	       flushseparator();goto splitit;}		 /* optionally flush */
+	    if(every){
+	       flushseparator(i,p);goto splitit;}	 /* optionally flush */
 	    else if(split&&lnl)
-	       lnl=2;}			   /* mark line as possible postmark */
+	       lnl=2;			   /* mark line as possible postmark */
+	    else if(bogus){					   /* disarm */
+#ifndef MAILBOX_SEPARATOR
+	       putcs('>');break;}}
+#else
+	       Nextchar(i);*buf=' ';putssn(buf,p);*buf=i;p=1;continue;}}
+#endif
       if(lnl==1&&digest){
 	 thelen=maxindex(cdigest);
 	 do				      /* check for new digest header */

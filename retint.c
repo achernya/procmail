@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: retint.c,v 2.6 1991/07/04 12:57:36 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.7 1991/07/11 11:22:56 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -268,7 +268,8 @@ alphanum(c)const int c;{
 				       /* open file or new file in directory */
 deliver(boxname)char*const boxname;{struct stat stbuf;
  strcpy(buf,boxname);			 /* boxname can be found back in buf */
- return stat(buf,&stbuf)||!S_ISDIR(stbuf.st_mode)?opena(buf):dirmail();}
+ return stat(buf,&stbuf)||!S_ISDIR(stbuf.st_mode)?
+   (tofolder=1,opena(buf)):dirmail();}
 
 #include "exopen.h"
 					/* an NFS secure exclusive file open */

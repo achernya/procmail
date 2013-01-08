@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 2.2 1991/07/08 14:29:31 berg Rel $*/
+/*$Id: procmail.h,v 2.3 1991/07/11 11:22:56 berg Rel $*/
 
 #include "includes.h"
 
@@ -9,8 +9,8 @@ typedef unsigned char uchar;
 #endif
 
 #ifdef MAILBOX_SEPARATOR
-#define mboxseparator(fd)	rwrite(fd,MAILBOX_SEPARATOR,\
- STRLEN(MAILBOX_SEPARATOR))
+#define mboxseparator(fd)	\
+ (tofolder?rwrite(fd,MAILBOX_SEPARATOR,STRLEN(MAILBOX_SEPARATOR)):0)
 #else
 #define mboxseparator(fd)
 #endif
@@ -43,7 +43,7 @@ extern const char grep[],shellflags[],shell[],lockext[],newline[],binsh[],
  devnull[],executing[],oquote[],cquote[],whilstwfor[];
 extern struct varval strenvvar[];
 extern long lastdump;
-extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc;
+extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder;
 extern volatile flaggerd,nextexit;
 extern volatile time_t alrmtime;
 extern pid_t thepid;

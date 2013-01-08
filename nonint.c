@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: nonint.c,v 2.3 1991/07/08 10:47:56 berg Rel $";
+static char rcsid[]="$Id: nonint.c,v 2.4 1991/07/11 11:22:56 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -106,7 +106,7 @@ void ftimeout(){
 
 long dump(s,source,len)const int s;const char*source;long len;{int i;
  if(s>=0){
-    lastdump=len;
+    lastdump=len;mboxseparator(s);	/* prepend optional custom separator */
     while(i=rwrite(s,source,BLKSIZ<len?BLKSIZ:(int)len)){
        if(i<0){
 	  i=0;goto writefin;}

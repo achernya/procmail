@@ -159,3 +159,9 @@
 	       A better example for splitting up digests
 	       Extended the 'advanced' examples by an elaborate ':A' option
 		  example
+1991/07/12: v2.11
+	    Enhanced MMDF support
+	    Ignoring SIGPIPE now, how could I ever have left it out?
+	       This should take care of any, previously inexplicable,
+		  mysterious failures of formail or procmail
+	    Blanks are really ignored now on action lines
