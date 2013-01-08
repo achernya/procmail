@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: nonint.c,v 2.0 1991/06/10 14:35:35 berg Rel $";
+static char rcsid[]="$Id: nonint.c,v 2.2 1991/06/19 17:41:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -73,7 +73,7 @@ extern pbackfd[2];
 void sterminate(){static const char*const msg[]={newline,0,
  "memory\n","fork\n","file descriptor\n"};
  signal(SIGTERM,SIG_IGN);signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);
- if(pidchild)		    /* don't kill what is not ours, we might be root */
+ if(pidchild>0)		    /* don't kill what is not ours, we might be root */
    kill(pidchild,SIGTERM);
  if(!nextexit){
    nextexit=1;log("Terminating prematurely");
@@ -84,8 +84,10 @@ void sterminate(){static const char*const msg[]={newline,0,
 
 void stermchild(){
  signal(SIGHUP,SIG_IGN);signal(SIGINT,SIG_IGN);signal(SIGQUIT,SIG_IGN);
- signal(SIGTERM,SIG_IGN);kill(pidfilt,SIGTERM);kill(thepid,SIGQUIT);
- log("Rescue of unfiltered data ");
+ signal(SIGTERM,SIG_IGN);
+ if(pidfilt>0)		    /* don't kill what is not ours, we might be root */
+   kill(pidfilt,SIGTERM);
+ kill(thepid,SIGQUIT);log("Rescue of unfiltered data ");
  if(dump(PWRB,backblock,backlen)) /* pump back the data through the backpipe */
     log("failed\n");
  else
@@ -174,7 +176,7 @@ char*findnl(start,end)register const char*start,*end;{
 char*tstrdup(a)const char*const a;{int i;
  i=strlen(a)+1;return tmemmove(malloc(i),a,i);}
 
-const char*tgetenv(a)const char*a;{const char*b;
+const char*tgetenv(a)const char*const a;{const char*b;
  return(b=getenv(a))?b:"";}
 
 char*cstr(a,b)const char*const a,*const b;{	/* dynamic buffer management */

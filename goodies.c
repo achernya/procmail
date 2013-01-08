@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: goodies.c,v 2.1 1991/06/11 12:59:16 berg Rel $";
+static char rcsid[]="$Id: goodies.c,v 2.3 1991/06/19 17:41:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -34,7 +34,7 @@ newchar:
 	 if(got>NORMAL_TEXT)
 early_eof:  log(unexpeof);
 ready:	 if(got!=SKIPPING_SPACE||sarg)	  /* not terminated yet or sarg==2 ? */
-ready0:	    *p++='\0';
+	    *p++='\0';
 	 *p=TMNATE;return;
       case '\\':
 	 if(got==SINGLE_QUOTED)
@@ -108,7 +108,7 @@ escaped:    *p++=i;}
 	       *startb++=i;
 	    *startb='\0';
 	    if(i!='}'){
-badsubst:      log("Bad substitution of");logqnl(buf2);continue;}
+	       log("Bad substitution of");logqnl(buf2);continue;}
 	    i='\0';}
 	 else if(alphanum(i)){					    /* $name */
 	    do *startb++=i;
@@ -117,7 +117,7 @@ badsubst:      log("Bad substitution of");logqnl(buf2);continue;}
 	       i='\0';
 	    *startb='\0';}
 	 else if(i=='$'){					   /* $$=pid */
-	    ultostr(0,(unsigned long)thepid,p);i='\0';goto eofstr;}
+	    ultstr(0,(unsigned long)thepid,p);i='\0';goto eofstr;}
 	 else{
 	    *p++='$';goto newchar;}		       /* not a substitution */
 	 startb=(char*)tgetenv(buf2);
@@ -151,7 +151,7 @@ nodelim:
    if(got<=SKIPPING_SPACE)		 /* should we bother to change mode? */
       got=NORMAL_TEXT;}}
 
-ultostr(minwidth,val,dest)unsigned long val;char*dest;{int i;unsigned long j;
+ultstr(minwidth,val,dest)unsigned long val;char*dest;{int i;unsigned long j;
  j=val;i=0;					   /* a beauty, isn't it :-) */
  do i++;					   /* determine needed width */
  while(j/=10);

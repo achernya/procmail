@@ -1,3 +1,3 @@
 #include <strings.h>
 
-char*strchr(),*strpbrk(),*strspn(),*strcspn();
+char*strchr(),*strpbrk();

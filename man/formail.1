@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: formail.1,v 2.0 1991/06/10 17:37:18 berg Rel $
+.Id $Id: formail.1,v 2.1 1991/06/18 11:30:15 berg Rel $
 .de Sh
 .br
 .ne 9
@@ -42,7 +42,8 @@ formail \- mail (re)formatter
 .B formail
 is a filter that can be used to force mail into mailbox format, perform real
 rigorous `From ' escaping, generate auto-replying headers or split up a
-mailbox/digest file.  The mail/mailbox contents will be expected on stdin.
+mailbox/digest/articles file.  The mail/mailbox/article contents will be
+expected on stdin.
 .LP
 If formail is supposed to determine the sender of the mail, but is unable
 to find any, it will substitute `foo@bar'.
@@ -85,7 +86,7 @@ Consider every line starting with `From ' to be the start of a new mail
 message (this is normally not the case).
 .Tp
 .B \-d
-Enables formail to split up digests into their original messages.
+Enables formail to split up digests/articles into their original parts.
 .Tp
 .I "\fB\+\fPskip"
 Skip the first

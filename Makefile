@@ -1,10 +1,11 @@
-#$Id: Makefile,v 2.0 1991/06/10 14:39:08 berg Rel $
+#$Id: Makefile,v 2.3 1991/06/20 09:54:14 berg Rel $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
 
 BINDIR	 = $(BASENAME)/bin
-MANDIR	 = $(BASENAME)/man/man1
+MANSUFFIX= 1
+MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 
 ########################################################################
 # Only edit below this line if you *think* you know what you are doing #
@@ -41,11 +42,13 @@ lockfile: lockfile.$(O) exopen.$(O)
 formail: formail.$(O) common.$(O)
 	$(CC) $(CFLAGS) -o formail formail.$(O) common.$(O) ${LDFLAGS}
 
-_autotst: _autotst.c
-	$(CC) $(CFLAGS) -o _autotst _autotst.c $(LDFLAGS)
+_autotst: _autotst.$(O)
+	$(CC) $(CFLAGS) -o _autotst _autotst.$(O) $(LDFLAGS)
 
 autoconf.h: autoconf Makefile
-	/bin/sh autoconf
+	/bin/sh autoconf $(O)
+
+Makefile:
 
 $(OBJ): $(DEP)
 
@@ -69,11 +72,15 @@ includes.h: autoconf.h
 	$(CC) $(CFLAGS) -c $*.c
 
 install: all
-	chmod 755 $(BINS)
+	chmod 0755 $(BINS)
 	cp $(BINS) $(BINDIR)
-	chmod 644 man/procmail.1 man/lockfile.1 man/formail.1
-	cp man/procmail.1 man/lockfile.1 man/formail.1 $(MANDIR)
+	chmod 0644 man/procmail.$(MANSUFFIX) man/lockfile.$(MANSUFFIX) \
+man/formail.$(MANSUFFIX)
+	cp man/procmail.$(MANSUFFIX) man/lockfile.$(MANSUFFIX) \
+man/formail.$(MANSUFFIX) $(MANDIR)
+
+again: all
 
 clean:
 	$(RM) $(OBJ) common.$(O) lockfile.$(O) exopen.$(O) retint.$(O) \
-formail.$(O) $(BINS) autoconf.h _autotst*
+formail.$(O) $(BINS) autoconf.h _autotst* grepfor

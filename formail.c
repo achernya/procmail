@@ -11,9 +11,9 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: formail.c,v 2.3 1991/06/12 10:50:21 berg Rel $";
+static char rcsid[]="$Id: formail.c,v 2.6 1991/06/19 17:47:00 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/06/12 10:50:21 $";
+static char rcsdate[]="$Date: 1991/06/19 17:47:00 $";
 #include "config.h"			/* I know, overkill, only need BinSh */
 #include "includes.h"
 
@@ -32,7 +32,8 @@ static char rcsdate[]="$Date: 1991/06/12 10:50:21 $";
 static const char From[]=FROM,replyto[]="Reply-To:",Fromm[]="From:",
  returnpath[]="Return-Path",sender[]="Sender:",outofmem[]="Out of memory\n",
  subject[]="Subject:",re[]=" Re:",couldntw[]="Couldn't write to stdout",
- references[]="References:",messageid[]="Message-ID:",Date[]="Date:";
+ references[]="References:",messageid[]="Message-ID:",Date[]="Date:",
+ article[]="Article ";
 const char binsh[]=BinSh;
 static struct {const char*const head;const int len,wrepl;}sest[]={
  {sender,STRLEN(sender),0},{replyto,STRLEN(replyto),4},
@@ -44,7 +45,8 @@ static struct {const char*const headr;const int lenr;size_t offset;}rex[]={
 #define refr	rex[1]
 #define msid	rex[2]
 static struct {const char*const hedr;const int lnr;}cdigest[]={
- {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)}};
+ {Fromm,STRLEN(Fromm)},{Date,STRLEN(Date)},{subject,STRLEN(subject)},
+ {article,STRLEN(article)}};
 #define mxl(a,b)	mx(STRLEN(a),STRLEN(b))
 #define dig_HDR_LEN	mx(mxl(From,Fromm),mxl(Date,subject))
 static errout,oldstdout;
@@ -73,8 +75,8 @@ void*trealloc(old,len)void*old;const size_t len;{
 
 #include "shell.h"
 
-main(argc,argv)const char*const argv[];{time_t t;
- int i,lastm,nowm,thelen=0,split=0,force=0,bogus=1,every=0,areply=0,
+main(lastm,argv)const char*const argv[];{time_t t;
+ int i,nowm,thelen=0,split=0,force=0,bogus=1,every=0,areply=0,
    trust=0,digest=0,nowait=0;
  size_t buflen,p=0,lnl=0,thename,ll;
  char*buf,*chp;

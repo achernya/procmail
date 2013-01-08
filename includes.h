@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 2.2 1991/06/11 13:06:52 berg Rel $*/
+/*$Id: includes.h,v 2.3 1991/06/18 11:39:23 berg Rel $*/
 
 #include "autoconf.h"
 	/* not all the "library identifiers" specified here need to be
@@ -15,7 +15,7 @@
 #include <stdlib.h>		/* getenv() malloc() realloc() free()
 				   strtol() */
 #include <time.h>		/* time() ctime() time_t */
-#include <fcntl.h>		/* O_RDONLY O_WRONLY O_APPEND */
+#include <fcntl.h>		/* O_RDONLY O_WRONLY O_APPEND O_CREAT O_EXCL */
 #include <pwd.h>		/* getpwuid() struct passwd */
 #include <sys/wait.h>		/* wait() */
 #include <sys/utsname.h>	/* uname() utsname */
@@ -26,7 +26,7 @@
 				   strspn() strcspn() strchr() strcmp()
 				   strncmp() strpbrk() strstr() memmove() */
 #include <errno.h>		/* EINTR EEXIST EMFILE ENFILE */
-#include <sysexits.h>		/* EX_OK EX_UNAVAILABLE EX_OSERR
+#include <sysexits.h>		/* EX_OK EX_UNAVAILABLE EX_OSERR EX_OSFILE
 				   EX_CANTCREAT EX_IOERR */
 #ifndef O_SYNC
 #define O_SYNC		0

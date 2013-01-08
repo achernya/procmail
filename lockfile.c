@@ -7,9 +7,9 @@
  *	This file can be freely copied for any use.			*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: lockfile.c,v 2.1 1991/06/11 14:00:41 berg Rel $";
+static char rcsid[]="$Id: lockfile.c,v 2.3 1991/06/19 17:41:41 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/06/11 14:00:41 $";
+static char rcsdate[]="$Date: 1991/06/19 17:41:41 $";
 #include "config.h"		       /* overkill, I know, only need DIRSEP */
 #include "includes.h"
 
@@ -21,7 +21,7 @@ void failure(){
  exitflag=1;}
 
 main(argc,argv)const int argc;const char*argv[];{const char**p,*cp;
- int sleepsec,retries,i,invert,force,suspend,retval=0;
+ int sleepsec,retries,invert,force,suspend,retval=0;
  static char usage[]=
    "Usage: lockfile -nnn | -rnnn | -! | -lnnn | -snnn | file ...\n";
  sleepsec=8;force=retries=invert=0;suspend=16;thepid=getpid();
@@ -39,7 +39,7 @@ again:
        case 's':suspend=strtol(cp+2,(char**)0,10);break;
        default:
 	  if(cp[1]-'0'>(unsigned)9){
-	     putse(usage);retval=EX_USAGE;goto failure;}
+	     putse(usage);retval=EX_USAGE;goto failurel;}
 	  if(sleepsec>=0)
 	     sleepsec=strtol(cp+1,(char**)0,10);}
     else
@@ -48,7 +48,7 @@ again:
       else{
 	 while(0>NFSxopen(cp)){struct stat buf;time_t t;
 	    if(exitflag||retries==1){
-failure:       sleepsec= -1;p[-1]=0;goto again;}
+failurel:      sleepsec= -1;p[-1]=0;goto again;}
 	    if(force&&(t=time((time_t*)0),!stat(cp,&buf))&&
 	       force<t-buf.st_mtime){
 	       unlink(cp);putse("Forcing lock on \"");putse(cp);putse("\"\n");
@@ -62,7 +62,7 @@ return retval?retval:invert^(sleepsec<0)?EX_CANTCREAT:EX_OK;}
 putse(a)char*a;{char*b;
  b=a-1;
  while(*++b);
- write(STDERR,a,b-a);}
+ write(STDERR,a,(size_t)(b-a));}
 
 #include "exopen.h"
 
@@ -79,8 +79,8 @@ NFSxopen(name)char*name;{char*p,*q;int j= -1,i;
 void*tmalloc(len)const size_t len;{				     /* stub */
  return malloc(len);}
 
-ropen(name,mode,mask)const char*const name;const mode_t mask;{	     /* stub */
- return open(name,mode,mask);}
+ropen(name,mode,mask)const char*const name;const int mode;const mode_t mask;{
+ return open(name,mode,mask);}					     /* stub */
 
 rclose(fd)const int fd;{					     /* stub */
  return close(fd);}

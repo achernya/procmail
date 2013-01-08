@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: common.c,v 2.0 1991/06/10 14:35:35 berg Rel $";
+static char rcsid[]="$Id: common.c,v 2.1 1991/06/19 17:41:41 berg Rel $";
 #endif
 #include "includes.h"
 
@@ -42,7 +42,7 @@ jidesc:;}
 
 #include "shell.h"
 
-shexec(argv)const char *const*argv;{int i;const char**newargv,**p;
+shexec(argv)const char*const*argv;{int i;const char**newargv,**p;
  execvp(*argv,argv);	 /* if this one fails, we retry it as a shell script */
  for(p=(const char**)argv,i=1;i++,*p++;);	      /* count the arguments */
  newargv=malloc(i*sizeof*p);

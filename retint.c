@@ -9,7 +9,7 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: retint.c,v 2.0 1991/06/10 14:35:35 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.4 1991/06/19 17:45:35 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -52,8 +52,9 @@ waitflagger(){				      /* wait for SIGQUIT from child */
  while(!flaggerd)
    suspend();}					       /* to prevent polling */
 
-grepin(expr,source,len,casesens)const char*const expr,*const source;long len;{
- pid_t pid;int poutfd[2];static const char*newargv[5]={0,"-e"};
+grepin(expr,source,len,casesens)const char*const expr,*const source;long len;
+ const int casesens;{pid_t pid;int poutfd[2];
+ static const char*newargv[5]={0,"-e"};
  newargv[3]=casesens?(char*)0:"-i";*newargv=tgetenv(grep);newargv[2]=expr;
  rpipe(poutfd);
  if(!(pid=sfork())){					       /* start grep */
@@ -153,7 +154,8 @@ rread(fd,a,len)const int fd,len;void*const a;{int i;   /* a sysV secure read */
  while(0>(i=read(fd,a,(size_t)len))&&errno==EINTR);
  return i;}
 
-ropen(name,mode,mask)const char*const name;const mode_t mask;{int i,r;
+ropen(name,mode,mask)const char*const name;const int mode;const mode_t mask;{
+ int i,r;
  for(r=noresretry;0>(i=open(name,mode,mask));)	       /* a sysV secure open */
    if(errno!=EINTR)
       if(!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
@@ -191,10 +193,10 @@ term: if(nextexit){
 	 else{
 	    log("Forcing lock on");logqnl(name);suspend();}}}
    else{		       /* maybe filename too long, shorten and retry */
-      if(0<(i=strlen(name)-1)&&!strchr(dirsep,(name[i-1]))){
+      if(0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1])){
 	 name[i]='\0';continue;}
       log("Lockfailure on");logqnl(name);return;}
-   sleep(DEFlocksleep,locksleep);
+   sleep((unsigned)locksleep);
    if(nextexit)
       goto term;}}
 

@@ -11,14 +11,14 @@
  *									*
  ************************************************************************/
 #ifdef	RCS
-static char rcsid[]="$Id: procmail.c,v 2.3 1991/06/12 10:23:06 berg Rel $";
+static char rcsid[]="$Id: procmail.c,v 2.6 1991/06/19 17:41:41 berg Rel $";
 #endif
 #include "config.h"
 #define MAIN
 #include "procmail.h"
 #include "shell.h"
 
-#define VERSION "procmail v2.02 1991/06/12 written by Stephen R.van den Berg\n\
+#define VERSION "procmail v2.03 1991/06/20 written by Stephen R.van den Berg\n\
 \t\t\t\tberg@messua.informatik.rwth-aachen.de\n\
 \t\t\t\tberg@physik.tu-muenchen.de\n"
 
@@ -58,7 +58,7 @@ main(argc,argv)const char*const argv[];{static char flags[NRRECFLAGS];int i;
  if(0>opena(devnull)||0>opena(console))
    return EX_OSFILE;
  setbuf(stdin,(char*)0);buf=malloc(linebuf);buf2=malloc(linebuf);chdir(tmp);
- ultostr(0,(unsigned long)(i=getuid()),buf);
+ ultstr(0,(unsigned long)(i=getuid()),buf);
  setpwent();
  {struct passwd*pass;
  if(pass=getpwuid(i)){			/* find user defaults in /etc/passwd */
@@ -279,7 +279,7 @@ foundsorf:
  log(buf);i-=i%TABWIDTH;		     /* tell where we last dumped it */
  do log(TABCHAR);
  while((i+=TABWIDTH)<LENoffset);
- ultostr(7,lastdump,buf);log(buf);log(newline);terminate();}
+ ultstr(7,lastdump,buf);log(buf);log(newline);terminate();}
 
 dirmail(){struct stat stbuf;		/* directory name is expected in buf */
  strcpy(buf2,strcat(buf,MCDIRSEP));

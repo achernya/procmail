@@ -115,3 +115,25 @@
 1991/06/12: v2.02
 	    Fixed typo in strstr replacement
 	    Fixed runaway line while logging long folder names
+1991/06/20: v2.03
+	    Added EX_OSFILE to include/sysexits.h (oversight)
+	    Slightly changed the terminate code in procmail (more reliable
+	       when forks did not succeed while filtering and signals arrived
+	       during a small window)
+	    Added a listing of all entries that can appear in autoconf.h
+	       to autoconf to simplify manual autoconf.h generation
+	    Changed formail to be able to split up collected articles (trivial)
+	    Edited include/string.h, strspn is of type int
+	    Changes to autoconf:
+	       Added strtol detection
+	       Enhanced const detection for braindamaged compilers
+	       Stopped using the function grepfor, changed it into a small
+		  script (Vltrix does not support functions in /bin/sh)
+	       Made the check for missing library parts more resistant against
+		  elaborate warnings from the C-compiler
+	    Fixed typo in retint.c (sleep with one redundant argument), hurray
+	       for prototypes
+	    Added MANSUFFIX macro to Makefile
+	    Avoided namespace conflict ("failurel") in lockfile.c for
+	       braindamaged compilers
+	    Renamed ultostr to avoided library conflict on some machines
