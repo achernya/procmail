@@ -1,6 +1,6 @@
 Please read the README file in this directory first.
 .ex
-.Id $Id: formail.man,v 1.31 1994/08/18 13:44:40 berg Exp $
+.Id $Id: formail.man,v 1.35 1994/10/18 14:29:47 berg Exp $
 .TH FORMAIL 1 \*(Dt BuGless
 .na
 .SH NAME
@@ -9,7 +9,7 @@ formail \- mail (re)formatter
 .B formail
 .RI [ "\fB\@FM_SKIP@\fPskip" ]
 .RI [ "\fB\@FM_TOTAL@\fPtotal" ]
-.RB [ \-@FM_BOGUS@@FM_CONCATENATE@@FM_FORCE@@FM_REPLY@@FM_KEEPB@@FM_TRUST@@FM_NOWAIT@@FM_EVERY@@FM_DIGEST@@FM_QUIET@@FM_BABYL@@FM_BERKELEY@ ]
+.RB [ \-@FM_BOGUS@@FM_CONCATENATE@@FM_ZAPWHITE@@FM_FORCE@@FM_REPLY@@FM_KEEPB@@FM_TRUST@@FM_NOWAIT@@FM_EVERY@@FM_DIGEST@@FM_QUIET@@FM_BABYL@@FM_BERKELEY@ ]
 .RB [ \-@FM_QPREFIX@
 .IR prefix ]
 .if n .ti +0.5i
@@ -78,6 +78,12 @@ fields.
 .B \-@FM_CONCATENATE@
 Concatenate continued fields in the header.  Might be convenient when
 postprocessing mail with standard (line oriented) text utilities.
+.TP
+.B \-@FM_ZAPWHITE@
+Ensure a space exists between field name and content.
+Zap fields which contain only a space.
+Zap leading and trailing whitespace on fields extracted with
+.BR \-@FM_EXTRACT@ .
 .TP
 .B \-@FM_FORCE@
 Force formail to simply pass along any non-mailbox format (i.e. don't
@@ -151,6 +157,13 @@ file of approximately
 .I maxlen
 size.  If not splitting, it will return success if a duplicate has been
 found.  If splitting, it will not output duplicate messages.
+If used in conjunction with
+.BR \-@FM_REPLY@ ,
+formail will look at the
+.I mail address
+of the sender
+.I instead
+at the Message-ID.
 .TP
 .I "\fB\-@FM_EXTRACT@\fP headerfield"
 Extract the contents of this
@@ -303,9 +316,9 @@ formail sent to it; this diagnostic can be suppressed by the
 .B \-@FM_QUIET@
 option.
 .TP
-Duplicate ID found: x
-The Message-ID x in this message was found in the idcache; this diagnostic can
-be suppressed by the
+Duplicate key found: x
+The Message-ID or sender x in this message was found in the idcache; this
+diagnostic can be suppressed by the
 .B \-@FM_QUIET@
 option.
 .TP

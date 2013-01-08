@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.48 1994/08/12 17:34:04 berg Exp $*/
+/*$Id: includes.h,v 1.50 1994/10/20 18:14:29 berg Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -27,16 +27,17 @@
 #ifndef UNISTD_H_MISSING
 #include <unistd.h>		/* open() read() write() close() dup() pipe()
 				/* fork() getuid() geteuid() getgid() getegid()
-				   getpid() execve() execvp() sleep() setuid()
+				   getpid() execv() execvp() sleep() setuid()
 				   setgid() setruid() setrgid() setegid()
-				   chown() nice() ftruncate() */
+				   chown() nice() ftruncate() truncate() */
 #else
 #undef UNISTD_H_MISSING
 #endif
 #include <stdio.h>		/* setbuf() fclose() stdin stdout stderr
 				/* fopen() fread() fwrite() fgetc() getc()
-				   fdopen() putc() fputs() printf() sprintf()
-				   fprintf() sscanf() FILE EOF fileno() */
+				   getchar() fdopen() putc() fputs() printf()
+				   sprintf() fprintf() sscanf() FILE EOF
+				   fileno() */
 #ifndef STDDEF_H_MISSING
 #include <stddef.h>		/* ptrdiff_t size_t */
 #else
@@ -82,6 +83,7 @@
 				   LOG_MAIL */
 #endif
 #include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN EXDEV */
+				/* EDQUOT ENOSPC */
 #ifndef SYSEXITS_H_MISSING
 #include <sysexits.h>		/* EX_USAGE EX_NOINPUT EX_NOUSER EX_UNAVAILABLE
 				   EX_OSERR EX_OSFILE EX_CANTCREAT EX_IOERR
@@ -409,6 +411,7 @@ extern void*memmove();
 #ifdef NOftruncate
 #undef NOftruncate
 #define ftruncate(fildes,length)	(-1)
+#define truncate(file,length)		(-1)
 #endif
 
 #ifdef NOwaitpid

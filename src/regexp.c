@@ -8,13 +8,14 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: regexp.c,v 1.43 1994/08/24 17:27:17 berg Exp $";
+ "$Id: regexp.c,v 1.53 1994/10/18 14:30:27 berg Exp $";
 #endif
-#include "includes.h"
+#include "procmail.h"
 #include "robust.h"
 #include "shell.h"
 #include "misc.h"
 #include "regexp.h"
+#include "goodies.h"
 
 #define R_BEG_GROUP	'('
 #define R_OR		'|'
@@ -34,6 +35,7 @@ static /*const*/char rcsid[]=
 #define R_BEG_WORD	'<'
 #define R_END_WORD	'>'
 #define NO_WORD_CLASS	"[^a-zA-Z0-9_]"
+#define R_SPLIT_EXPR	'/'
 
 #define BITS_P_CHAR		8
 #define OPB			(1<<BITS_P_CHAR)
@@ -51,7 +53,8 @@ static /*const*/char rcsid[]=
 #define OPC_JUMP		(OPB+6)
 #define OPC_CLASS		(OPB+7)
 #define OPC_FIN			(OPB+8)
-#define OPC_FILL		(OPB+9)	      /* filler opcode, not executed */
+#define OPC_BOM			(OPB+9)
+#define OPC_FILL		(OPB+10)      /* filler opcode, not executed */
 		  /* Don't change any opcode above without checking skplen[] */
 #define bit_type		unsigned
 #define bit_bits		(sizeof(bit_type)*8)
@@ -66,27 +69,29 @@ static /*const*/char rcsid[]=
 
 #define SZ(x)		(sizeof(struct x))
 #define Ceps		(struct eps*)
+#define geno(to,add)	((char*)(to)+(add))
 #define epso(to,add)	(Ceps((char*)(to)+(add)))
 #define ii		(aleps.topc)
-#define jj		(aleps.au.jju)
+#define jj		(aleps.au.sopc)
 #define spawn		sp.awn
 
 static struct eps*r,*opcfin;
-static struct{unsigned topc;union{struct eps*tnext;unsigned jju;}au;}aleps;
+static struct{unsigned topc;union seps au;}aleps;
 static uchar*p,*cachea,*cachep;
 static size_t cacher;
 static unsigned case_ignore,errorno;
 
-struct jump {unsigned opcj_;struct eps*nextj;};
-struct mchar {unsigned opcc_;struct eps*next1_,*p1_,*p2_;};
-struct chclass {unsigned opc_;struct eps*next_,*pos1,*pos2;
+struct jump {unsigned opcj_;union {struct eps*nextj;void*Irrelevoid;} nextj_;};
+struct mchar {unsigned opcc_;struct eps*next1_;
+ struct evoi {struct eps*st_;const void*wh_;} p1_,p2_;};
+struct chclass {unsigned opc_;struct eps*next_;struct evoi pos1,pos2;
  bit_field(c,OPB);};
 					  /* length array, used by skiplen() */
 static /*const*/char skplen[]=		   /* it SHOULD have been const, but */
- {SZ(eps),SZ(jump),SZ(chclass),0,0};   /* some !@#$%^&*() compilers disagree */
-						       /* epsilon transition */
+ {SZ(eps),SZ(jump),SZ(chclass),0,sizeof(union seps),0};
+				       /* some !@#$%^&*() compilers disagree */
 static void puteps(spot,to)struct eps*const spot;const struct eps*const to;
-{ spot->opc=OPC_EPS;spot->next=Ceps to;spot->spawn=0;
+{ spot->opc=OPC_EPS;spot->next=Ceps to;spot->spawn=0;  /* epsilon transition */
 }
 
 #define Cc(p,memb)	(((struct chclass*)(p))->memb)
@@ -121,7 +126,7 @@ static void psimp(e)const struct eps*const e;
      case R_BEG_CLASS:					   /* a simple class */
       { unsigned i,j=R_NOT_CLASS==*++p;
 	if(e)
-	 { r->opc=OPC_CLASS;r->next=Ceps e;Cc(r,pos1)=Cc(r,pos2)=0;
+	 { r->opc=OPC_CLASS;r->next=Ceps e;Cc(r,pos1.st_)=Cc(r,pos2.st_)=0;
 	   i=maxindex(rAc);
 	   do rAc[i]=j?~0:0;			     /* preset the bit field */
 	   while(i--);
@@ -183,7 +188,12 @@ static void psimp(e)const struct eps*const e;
 	goto fine2;
      case R_ESCAPE:					  /* quote something */
 	switch(*++p)
-	 { case R_BEG_WORD:case R_END_WORD:
+	 { case R_SPLIT_EXPR:
+	      if(e)
+		 r->opc=OPC_BOM;
+	      r=epso(r,sizeof(union seps));
+	      goto fine3;
+	   case R_BEG_WORD:case R_END_WORD:
 	    { uchar*pold=p;
 	      p=(uchar*)NO_WORD_CLASS;psimp(e);p=pold+1;
 	      if(e)
@@ -196,19 +206,34 @@ static void psimp(e)const struct eps*const e;
   if(e)						      /* a regular character */
    { r->opc=case_ignore&&(unsigned)*p-'A'<='Z'-'A'?*p+'a'-'A':*p;
 fine:
-     r->next=Ceps e;Cc(r,pos1)=Cc(r,pos2)=0;
+     r->next=Ceps e;Cc(r,pos1.st_)=Cc(r,pos2.st_)=0;
    }
 fine2:
-  p++;r=epso(r,SZ(mchar));
+  r=epso(r,SZ(mchar));
+fine3:
+  p++;
 }
 
 #define EOS(x)	(jj?Ceps e:(x))
+
+static int endgroup(p)register const char*const p;
+{ switch(*p)
+   { case R_OR:case R_END_GROUP:case '\0':
+	return 1;
+   }
+  return 0;
+}
 
 static void pnorm(e)const struct eps*const e;
 { void*pold;struct eps*rold;
   for(;;)
    { pold=p;rold=r;psimp(Ceps 0);ii= *p;		    /* skip it first */
-     jj=p[1]==R_OR||p[1]==R_END_GROUP||!p[1];
+     if(endgroup(p))
+      { if(e)
+	   p=pold,r=rold,psimp(e);
+	return;
+      }
+     jj=endgroup(p+1);
      if(e)
 	p=pold,pold=r;
      switch(ii)			   /* check for any of the postfix operators */
@@ -224,21 +249,15 @@ static void pnorm(e)const struct eps*const e;
 	      r=rold;psimp(Ceps pold);
 	    }
 	   r++;
-	   if(p[1]==R_OR||p[1]==R_END_GROUP||!p[1])
+	   if(endgroup(p+1))
 	      r=epso(r,SZ(jump));
 	   goto incagoon;
 	case R_0_OR_1:r++;
 	   if(e)			  /* first an epsilon, then the rest */
 	      puteps(rold,r=EOS(r)),pold=r,r=rold+1,psimp(Ceps pold);
-incagoon:  switch(*++p)			/* at the end of this group already? */
-	    { case R_OR:case R_END_GROUP:case '\0':
-		 return;
-	    }
+incagoon:  if(endgroup(++p))		/* at the end of this group already? */
+	      return;
 	   continue;				 /* regular end of the group */
-	case R_OR:case R_END_GROUP:case '\0':
-	   if(e)
-	      r=rold,psimp(e);
-	   return;
       }
      if(e)			/* no fancy postfix operators, plain vanilla */
 	r=rold,psimp(Ceps pold);
@@ -258,7 +277,8 @@ static int por(e)const struct eps*const e;
    { uchar*pold;struct eps*rold;
      for(pold=p,rold=r;;)
       { switch(*p)
-	 { default:pnorm(Ceps 0);r=rold;	      /* still in this group */
+	 { default:
+	      pnorm(Ceps 0);r=rold;		      /* still in this group */
 	      continue;
 	   case '\0':case R_END_GROUP:	       /* found the end of the group */
 	      if(p==pold)				 /* empty 'or' group */
@@ -338,12 +358,11 @@ ret0:
 }
 
 struct eps*bregcomp(a,ign_case)const char*const a;const unsigned ign_case;
-{ struct eps*st;size_t i;      /* first a trial run, determine memory needed */
+{ struct eps*st;size_t i;
   skplen[OPC_FILL-OPC_EPS]=SZ(eps)-ioffsetof(struct eps,sp);  /* a constant! */
-  errorno=0;p=(uchar*)a;case_ignore=ign_case;r=Ceps&aleps;cachea=0;por(Ceps 0);
-  st=r=
-   malloc((i=(char*)r-(char*)&aleps)+sizeof r->opc);
-  p=(uchar*)a;
+  errorno=0;p=(uchar*)a;case_ignore=ign_case;r=Ceps&aleps;cachea=0;
+  por(Ceps 0);st=r=malloc((i=(char*)r-(char*)&aleps)+sizeof r->opc);
+  p=(uchar*)a;		       /* first a trial run, determine memory needed */
   if(!por(opcfin=epso(st,i)))				   /* really compile */
      errorno=1;
   r->opc=OPC_FIN;			     /* by now r should be == opcfin */
@@ -367,7 +386,7 @@ struct eps*bregcomp(a,ign_case)const char*const a;const unsigned ign_case;
 			   }
 			}	       /* spare the used nodes in this group */
 		       case OPC_EPS|DONE_NODE:case OPC_JUMP|DONE_NODE:
-		       case OPC_FILL:
+		       case OPC_FILL:case OPC_BOM:
 			  continue;
 		       case OPC_FIN:;
 		     }
@@ -396,44 +415,53 @@ struct eps*bregcomp(a,ign_case)const char*const a;const unsigned ign_case;
 
 #define XOR1		\
  (ioffsetof(struct chclass,pos1)^ioffsetof(struct chclass,pos2))
-#define PC(this,t)	(*(struct eps**)((char*)(this)+(t)))
+#define PC(thiss,t)	(((struct evoi*)geno(thiss,t))->st_)
+#define PCp(thiss,t)	(((struct evoi*)geno(thiss,t))->wh_)
+#define PcP(reg)	(*(const void**)\
+ geno(reg,ioffsetof(struct evoi,wh_)-ioffsetof(struct evoi,st_)))
 
-static void cleantail(thiss,th1)register struct eps*thiss;const unsigned th1;
-{ register struct eps**reg;
-  while(thiss= *(reg= &PC(thiss,th1)))		   /* wipe out list till you */
-     *reg=0;						    /* reach tswitch */
+static struct mchar tswitch={OPC_TSWITCH,Ceps&tswitch};
+
+static struct eps*cleantail(start,thiss,th1)const char*const start;
+ register struct eps*thiss;const unsigned th1;
+{ register struct eps**reg,*save=Ceps&tswitch,*oldthis;
+  while(thiss= *(reg= &PC(oldthis=thiss,th1)))	   /* wipe out list till you */
+     if(start<(char*)PcP(reg))
+	*reg=0;						    /* reach tswitch */
+     else
+	*reg=save,save=oldthis;
+  return save;
 }
 
 char*bregexec(code,text,str,len,ign_case)struct eps*code;
  const uchar*const text;const uchar*str;size_t len;unsigned ign_case;
 { register struct eps*reg,*stack,*other,*thiss;unsigned i,th1,ot1;
-  struct eps*initstack,*initcode;
-  static struct mchar tswitch={OPC_TSWITCH,Ceps&tswitch};
+  struct eps*initcode;const char*eom,*pend;
   static struct eps sempty={OPC_SEMPTY,&sempty};
-  sempty.spawn=initstack= &sempty;ign_case=!!ign_case;		/* normalise */
-  if((initcode=code)->opc==OPC_EPS)
-     initcode=(initstack=code)+1,code->spawn= &sempty;
+  static const struct jump nop={OPC_FILL};
+  sempty.spawn= &sempty;			      /* static initialisers */
+  ign_case=!!ign_case;eom=0;stack= &sempty;initcode=code;
   th1=ioffsetof(struct chclass,pos1);ot1=ioffsetof(struct chclass,pos2);
-  if(str--==text||*str=='\n') /* make sure any beginning-of-line-hooks catch */
-   { thiss=Ceps&tswitch;len++;i='\n';
+  other=Ceps&tswitch;pend=(const char*)str+len+1;	     /* two past end */
+  if(str--==text||*str=='\n')
+     goto begofline;	      /* make sure any beginning-of-line-hooks catch */
+  if(!len)
+   { str++;
+begofline:
+     i='\n';len++;
      goto setups;
    }
-  other=Ceps&tswitch;
   do
    { i= *++str;				 /* get the next real-text character */
      if(ign_case&&i-'A'<='Z'-'A')
 	i+='a'-'A';			     /* transmogrify it to lowercase */
-lastrun:				     /* switch this & other pc-stack */
-     th1^=XOR1;ot1^=XOR1;thiss=other;
+     th1^=XOR1;ot1^=XOR1;		     /* switch this & other pc-stack */
 setups:
-     other=Ceps&tswitch;stack=initstack;reg=initcode;
-     goto nostack;
-     for(;;)				 /* pop next entry off this pc-stack */
-      { thiss=PC(reg=thiss,th1);PC(reg,th1)=0;reg=reg->next;
-	goto nostack;
-	for(;;)				/* pop next entry off the work-stack */
-	   for(reg=stack->next,stack=stack->spawn;;)
-nostack:    { switch(reg->opc-OPB)
+     thiss=other;other=Ceps&tswitch;reg=initcode;		 /* pop from */
+     for(;;thiss=PC(reg=thiss,th1),PC(reg,th1)=0,reg=reg->next)	 /* pc-stack */
+      { for(;;reg=stack->next,stack=stack->spawn)     /* pop from work-stack */
+	   for(;;)
+	    { switch(reg->opc-OPB)
 	       { default:
 		    if(i==reg->opc)		  /* regular character match */
 		       goto yep;
@@ -442,16 +470,16 @@ nostack:    { switch(reg->opc-OPB)
 		    continue;
 		 case OPC_JUMP-OPB:reg=reg->next;
 		    continue;
+		 case OPC_BOM-OPB:
+		    goto foundbom;
 		 case OPC_SEMPTY-OPB:
 		    goto empty_stack;
 		 case OPC_TSWITCH-OPB:
 		    goto pcstack_switch;
 		 case OPC_EOTEXT-OPB:
 		    if(ign_case==2)		     /* only at the very end */
-		 case OPC_FIN-OPB:		      /* reset the automaton */
-		     { cleantail(thiss,th1);cleantail(other,ot1);
-		       return (char*)str;	       /* one past the match */
-		     }
+		 case OPC_FIN-OPB:
+		       goto nobom;
 		 case OPC_BOTEXT-OPB:
 		    if(str<text)	       /* only at the very beginning */
 		       goto yep;
@@ -463,8 +491,8 @@ nostack:    { switch(reg->opc-OPB)
 		 case OPC_DOT-OPB:			     /* dot-wildcard */
 		    if(i!='\n')
 yep:		       if(!PC(reg,ot1))		     /* state not yet pushed */
-			  PC(reg,ot1)=other,other=reg; /* push location onto */
-	       }					   /* other pc-stack */
+			  PC(reg,ot1)=other,other=reg,PCp(reg,ot1)=pend;
+	       }
 	      break;
 	    }
 empty_stack:;					  /* the work-stack is empty */
@@ -472,10 +500,104 @@ empty_stack:;					  /* the work-stack is empty */
 pcstack_switch:;				   /* this pc-stack is empty */
    }
   while(--len);					     /* still text to search */
-  switch(ign_case)
-   { case 0:case 1:ign_case=1;i='\n';			   /* just finished? */
-     case 2:ign_case++;str++;len=1;
-	goto lastrun;				 /* check if we just matched */
+  goto wrapup;
+  ;{ const char*start,*bom;
+     do
+      { i= *++str;			 /* get the next real-text character */
+	if(ign_case&&i-'A'<='Z'-'A')
+	   i+='a'-'A';			     /* transmogrify it to lowercase */
+	th1^=XOR1;ot1^=XOR1;start=pend;thiss=other;other=Ceps&tswitch;
+	reg=initcode;
+	for(;;							 /* pc-stack */
+	 thiss=PC(reg=thiss,th1),PC(reg,th1)=0,start=PCp(reg,th1),
+	 reg=reg->next)
+	 { for(;;reg=stack->next,stack=stack->spawn)  /* pop from work-stack */
+	      for(;;)
+	       { switch(reg->opc-OPB)
+		  { default:
+		       if(i==reg->opc)		  /* regular character match */
+			  goto Yep;
+		       break;	    /* push spawned branch on the work-stack */
+		    case OPC_EPS-OPB:reg->spawn=stack;reg=(stack=reg)+1;
+		       continue;
+		    case OPC_JUMP-OPB:reg=reg->next;
+		       continue;
+		    case OPC_BOM-OPB:
+		       if(eom)			       /* extended behaviour */
+			  goto setmatch;
+foundbom:	       reg=epso(reg,sizeof(union seps));start=(const char*)str;
+		       continue;
+		    case OPC_FILL-OPB:		/* nop, nothing points at it */
+		       if(thiss==Ceps&tswitch)
+			  goto setmatch;     /* so the stack is always empty */
+		    case OPC_SEMPTY-OPB:
+		       goto Empty_stack;
+		    case OPC_TSWITCH-OPB:
+		       goto Pcstack_switch;
+		    case OPC_EOTEXT-OPB:
+		       if(ign_case==2)		     /* only at the very end */
+		    case OPC_FIN-OPB:
+			{ if(start<pend)		       /* any match? */
+			   { thiss=cleantail(bom=start,thiss,th1);
+			     other=cleantail(start,other,ot1);
+			     eom=(const char*)str;initcode=Ceps&nop;
+			     break;
+			   }			      /* reset the automaton */
+nobom:			  cleantail(--pend,thiss,th1);
+			  cleantail(pend,other,ot1);
+			  return (char*)str;	       /* one past the match */
+			}
+		    case OPC_BOTEXT-OPB:
+		       if(str<text)	       /* only at the very beginning */
+			  goto Yep;
+		       break;
+		    case OPC_CLASS-OPB:
+		       if(bit_test(((struct chclass*)reg)->c,i))
+			  goto Yep;		       /* character in class */
+		       break;
+		    case OPC_DOT-OPB:			     /* dot-wildcard */
+		       if(i!='\n')
+Yep:			  if(!PC(reg,ot1))	     /* state not yet pushed */
+			   { PC(reg,ot1)=other;other=reg;   /* push location */
+earlier:		     PCp(reg,ot1)=start;      /* onto other pc-stack */
+			   }
+			  else if(start<(char*)PCp(reg,ot1))
+			     goto earlier;
+		  }
+		 break;
+	       }
+Empty_stack:;					  /* the work-stack is empty */
+	 }
+Pcstack_switch:;				   /* this pc-stack is empty */
+      }
+     while(--len);				     /* still text to search */
+wrapup:
+     switch(ign_case)
+      { case 0:case 1:ign_case=1;i='\n';		   /* just finished? */
+	case 2:ign_case++;str++;len=1;th1^=XOR1;ot1^=XOR1;start=pend;
+	   thiss=other;other=Ceps&tswitch;
+	   goto Empty_stack;			 /* check if we just matched */
+      }
+     if(eom)
+      { static char match[]=MATCHVAR;size_t mlen;char*q;
+setmatch:
+	if(bom<(char*)text)
+	   bom=(const char*)text;
+	if(eom>--pend)
+	   eom=pend;
+	mlen=eom-bom;match[STRLEN(match)-1]='\0';
+	if(getenv(match)==(const char*)text)	     /* anal retentive match */
+	   tmemmove(q=(char*)text,bom,mlen),q[len]='\0',bom=q;
+	else
+	 { char*p;
+	   match[STRLEN(match)-1]='=';
+	   if(*bom=='\n')
+	      bom++;				/* strip one leading newline */
+	   primeStdout(match);p=realloc(Stdout,(Stdfilled+=mlen)+1);
+	   tmemmove(q=p+Stdfilled-(int)mlen,bom,mlen);retStdout(p);
+	 }
+	yell("Matched",q);
+      }
    }
-  return 0;							 /* no match */
+  return (char*)eom;						   /* match? */
 }

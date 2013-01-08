@@ -1,5 +1,6 @@
-#$Id: Makefile,v 1.62 1994/08/25 11:50:56 berg Exp $
+#$Id: Makefile,v 1.65 1994/10/07 15:23:44 berg Exp $
 
+# BASENAME should point to where the whole lot will be installed
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
 
@@ -17,7 +18,7 @@ MAN1DIR	  = $(MANDIR)/man$(MAN1SUFFIX)
 MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 
 # Uncomment to install compressed man pages (possibly add extra suffix
-# to the definitions of MAN?DIR by hand)
+# to the definitions of MAN?DIR and/or MAN?SUFFIX by hand)
 #MANCOMPRESS = compress
 
 ############################*#

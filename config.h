@@ -1,4 +1,4 @@
-/*$Id: config.h,v 1.58 1994/08/23 12:15:56 berg Exp $*/
+/*$Id: config.h,v 1.63 1994/10/26 19:36:57 berg Exp $*/
 
 /*#define sMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* sTART- and eNDing separ.  */
 /*#define eMAILBOX_SEPARATOR	"\1\1\1\1\n"	/* uncomment (one or both)
@@ -100,6 +100,7 @@
 #define OVERRIDE_MASK	(S_IXUSR|S_ISUID|S_ISGID|S_ISVTX)    /* if found set */
 		    /* the permissions on the mailbox will be left untouched */
 #define INIT_UMASK	(S_IRWXG|S_IRWXO)			   /* == 077 */
+#define GROUPW_UMASK	(INIT_UMASK&~S_IRWXG)			   /* == 007 */
 #define NORMperm	\
  (S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH|UPDATE_MASK)
 	     /* == 0667, normal mode bits used to create files, before umask */
@@ -127,13 +128,13 @@
 #define FROMDkey	"^FROM_DAEMON"		     /* matches most daemons */
 #define FROMDsubstitute "(^(Precedence:.*(junk|bulk|list)|\
 (((Resent-)?(From|Sender)|X-Envelope-From):|>?From )(.*[^(.%@a-z0-9])?(\
-Post(ma?(st(e?r)?|n)|office)|(send)?Mail(er)?|daemon|mmdf|root|n?uucp|\
+Post(ma?(st(e?r)?|n)|office)|(send)?Mail(er)?|daemon|mmdf|root|n?uucp|smtp|\
 response|LISTSERV|owner|request|bounce|serv(ices?|er)|Admin(istrator)?)\
 ([^).!:a-z0-9].*)?$[^>]))"
 #define FROMMkey	"^FROM_MAILER"	      /* matches most mailer-daemons */
 #define FROMMsubstitute "(^(((Resent-)?(From|Sender)|X-Envelope-From):|\
 >?From )(.*[^(.%@a-z0-9])?(Post(ma(st(er)?|n)|office)|(send)?Mail(er)?|daemon|\
-mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
+mmdf|root|n?uucp|smtp|response|serv(ices?|er)|Admin(istrator)?\
 )([^).!:a-z0-9].*)?$[^>])"
 #define DEFshellmetas	"&|<>~;?*["		    /* never put '$' in here */
 #define DEFdefault	"$ORGMAIL"
@@ -144,6 +145,7 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define DEFtimeout	(DEFlocktimeout-64)	   /* 64 seconds to clean up */
 #define DEFnoresretry	4      /* default nr of retries if no resources left */
 #define nfsTRY		(7+1) /* nr of times+1 to ignore spurious NFS errors */
+#define MATCHVAR	"MATCH="
 #define DEFlogabstract	-1    /* abstract by default, but don't mail it back */
 #define COMSAThost	"localhost"    /* where the biff/comsat daemon lives */
 #define COMSATservice	"biff"	    /* the service name of the comsat daemon */
@@ -180,7 +182,8 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define PM_USAGE	\
  "Usage: procmail [-vptoY] [-f fromwhom] [parameter=value | rcfile] ...\
 \n   Or: procmail [-toY] [-f fromwhom] [-a argument] -d recipient ...\
-\n   Or: procmail [-ptY] -m [parameter=value] ... rcfile mail_from rcpt_to ...\
+\n\
+   Or: procmail [-ptY] [-f fromwhom] -m [parameter=value] ... rcfile [arg] ...\
 \n"
 #define PM_HELP		\
  "\t-v\t\tdisplay the version number and exit\
@@ -202,8 +205,8 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 \n\te  on error execute this recipe, if the previous recipe failed\
 \n\th  deliver header (default)\tb  deliver body (default)\
 \n\tf  filter\t\t\ti  ignore write errors\
-\n\tc  continue with the next recipe in any case\
-\n\tw  wait for a filter or program\
+\n\tc  carbon copy or clone message\
+\n\tw  wait for a program\t\tr	raw mode, mail as is\
 \n\tW  same as 'w', but suppress 'Program failure' messages\n"
 
 #define MINlinebuf	128    /* minimal LINEBUF length (don't change this) */
@@ -218,7 +221,7 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define TABCHAR		"\t"
 #define TABWIDTH	8
 
-#define RECFLAGS	"HBDAahbfcwWiEe"
+#define RECFLAGS	"HBDAahbfcwWiEer"
 #define HEAD_GREP	 0
 #define BODY_GREP	  1
 #define DISTINGUISH_CASE   2
@@ -227,12 +230,13 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define PASS_HEAD	      5
 #define PASS_BODY	       6
 #define FILTER			7
-#define CONTINUE		 8
+#define CONTINUE		 8			      /* carbon copy */
 #define WAIT_EXIT		  9
 #define WAIT_EXIT_QUIET		   10
 #define IGNORE_WRITERR		    11
 #define ELSE_DO			     12
 #define ERROR_DO		      13
+#define RAW_NONL		       14
 
 #define UNIQ_PREFIX	'_'	  /* prepended to temporary unique filenames */
 #define ESCAP		">"
@@ -253,6 +257,7 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define FM_BERKELEY	BERKELEYOPT   /* Berkeley format, no Content-Length: */
 #define FM_QPREFIX	'p'			  /* define quotation prefix */
 #define FM_CONCATENATE	'c'	      /* concatenate continued header-fields */
+#define FM_ZAPWHITE	'z'		 /* zap whitespace and empty headers */
 #define FM_FORCE	'f'   /* force formail to accept an arbitrary format */
 #define FM_REPLY	'r'		    /* generate an auto-reply header */
 #define FM_KEEPB	'k'		   /* keep the header, when replying */
@@ -277,15 +282,16 @@ mmdf|root|n?uucp|response|serv(ices?|er)|Admin(istrator)?\
 #define FM_LAST_UNIQ	'U'		     /* preserve the last occurrence */
 #define FM_ReNAME	'R'				   /* rename a field */
 #define FM_USAGE	"\
-Usage: formail [-bcfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
+Usage: formail [-bczfrktqY] [-D nnn idcache] [-p prefix] [-l folder]\n\
 \t[-xXaAiIuU field] [-R ofield nfield]\n\
-   Or: formail [+nnn] [-nnn] [-bcfrktnedqBY] [-D nnn idcache] [-p prefix]\n\
+   Or: formail [+nnn] [-nnn] [-bczfrktnedqBY] [-D nnn idcache] [-p prefix]\n\
 \t[-m nnn] [-l folder] [-xXaAiIuU field] [-R ofield nfield]\n\
 \t-s [prg [arg ...]]\n"	    /* split up FM_HELP, token too long for some ccs */
 #define FM_HELP		\
  " -b\t\tdon't escape bogus mailbox headers\
 \n -Y\t\tBerkeley format mailbox, disregard Content-Length:\
 \n -c\t\tconcatenate continued header-fields\
+\n -z\t\tzap whitespace and empty header-fields\
 \n -f\t\tforce formail to pass along any non-mailbox format\
 \n -r\t\tgenerate an auto-reply header, preserve fields with -i\
 \n -k\t\ton auto-reply keep the body, prevent escaping with -b\

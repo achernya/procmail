@@ -6,7 +6,7 @@
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.55 1994/08/23 12:16:12 berg Exp $";
+ "$Id: mailfold.c,v 1.60 1994/10/20 18:14:31 berg Exp $";
 #endif
 #include "procmail.h"
 #include "acommon.h"
@@ -20,11 +20,8 @@ static /*const*/char rcsid[]=
 #include "goodies.h"
 #include "locking.h"
 #include "mailfold.h"
-#ifndef NO_COMSAT
-#include "network.h"
-#endif
 
-int logopened,tofile;
+int logopened,tofile,rawnonl;
 off_t lasttell;
 static long lastdump;
 static volatile mailread;	/* if the mail is completely read in already */
@@ -48,16 +45,19 @@ static long getchunk(s,fromw,len)const int s;const char*fromw;const long len;
 
 long dump(s,source,len)const int s;const char*source;long len;
 { int i;long part;
-  lasttell=i= -1;
+  lasttell=i= -1;SETerrno(EBADF);
   if(s>=0)
    { if(tofile&&(lseek(s,(off_t)0,SEEK_END),fdlock(s)))
 	nlog("Kernel-lock failed\n");
-     lastdump=len;part=tofile==to_FOLDER?getchunk(s,source,len):len;
-     lasttell=lseek(s,(off_t)0,SEEK_END);smboxseparator(s);	 /* optional */
-#ifndef NO_NFS_ATIME_HACK					/* separator */
-     if(part&&tofile)		       /* if it is a file, trick NFS into an */
-	len--,part--,rwrite(s,source++,1),ssleep(1);	    /* a_time<m_time */
+     lastdump=len;part=tofile==to_FOLDER&&!rawnonl?getchunk(s,source,len):len;
+     lasttell=lseek(s,(off_t)0,SEEK_END);
+     if(!rawnonl)
+      { smboxseparator(s);			       /* optional separator */
+#ifndef NO_NFS_ATIME_HACK
+	if(part&&tofile)	       /* if it is a file, trick NFS into an */
+	   len--,part--,rwrite(s,source++,1),ssleep(1);	    /* a_time<m_time */
 #endif
+      }
      goto jin;
      do
       { part=getchunk(s,source,len);
@@ -68,14 +68,18 @@ jin:	while(part&&(i=rwrite(s,source,BLKSIZ<part?BLKSIZ:(int)part)))
 	 }
       }
      while(len);
-     if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n')))
-	lastdump++,rwrite(s,newline,1);	       /* message always ends with a */
-     emboxseparator(s);		 /* newline and an optional custom separator */
+     if(!rawnonl)
+      { if(!len&&(lastdump<2||!(source[-1]=='\n'&&source[-2]=='\n')))
+	   lastdump++,rwrite(s,newline,1);     /* message always ends with a */
+	emboxseparator(s);	 /* newline and an optional custom separator */
+      }
 writefin:
-     if(tofile&&fdunlock())
-	nlog("Kernel-unlock failed\n");
-     if(tofile==to_FOLDER&&len&&lasttell>=0&&!ftruncate(s,lasttell))
-	nlog("Truncated file to former size\n");    /* undo appended garbage */
+     ;{ int serrno=errno;		       /* save any error information */
+	rawnonl=0;		       /* only allow rawnonl once per recipe */
+	if(tofile&&fdunlock())
+	   nlog("Kernel-unlock failed\n");
+	SETerrno(serrno);
+      }
      i=rclose(s);
    }			   /* return an error even if nothing was to be sent */
   tofile=0;
@@ -135,7 +139,7 @@ static int ismhdir(chp)char*const chp;
   return 0;
 }
 				       /* open file or new file in directory */
-int deliver(boxname,linkfolder)char*boxname,*linkfolder;
+static int deliver(boxname,linkfolder)char*boxname,*linkfolder;
 { struct stat stbuf;char*chp;int mhdir;mode_t numask;
   asgnlastf=1;
   if(*boxname=='|'&&(!linkfolder||linkfolder==Tmnate))
@@ -197,8 +201,30 @@ makefile:
    }
 }
 
+int writefolder(boxname,linkfolder,source,len,ignwerr)char*boxname,*linkfolder;
+ const char*source;const long len;const int ignwerr;
+{ if(dump(deliver(boxname,linkfolder),source,len)&&!ignwerr)
+   {
+     switch(errno)
+      {
+#ifdef EDQUOT
+	case EDQUOT:nlog("Quota exceeded while writing"),logqnl(buf);
+	   break;
+#endif
+	case ENOSPC:nlog("No space left to finish writing"),logqnl(buf);
+	   break;
+	default:writeerr(buf);
+      }
+     if(lasttell>=0&&!truncate(boxname,lasttell)&&(logopened||verbose))
+	nlog("Truncated file to former size\n");    /* undo appended garbage */
+     return 0;
+   }
+  return 1;
+}
+
+
 void logabstract(lstfolder)const char*const lstfolder;
-{ if(lgabstract>0||logopened&&lgabstract)  /* don't mail it back unrequested */
+{ if(lgabstract>0||(logopened||verbose)&&lgabstract)  /* don't mail it back? */
    { char*chp,*chp2;int i;static const char sfolder[]=FOLDER;
      if(mailread)			  /* is the mail completely read in? */
       { i= *thebody;*thebody='\0';     /* terminate the header, just in case */
@@ -226,57 +252,6 @@ void logabstract(lstfolder)const char*const lstfolder;
      while((i+=TABWIDTH)<LENoffset);
      ultstr(7,lastdump,buf);elog(buf);elog(newline);
    }
-#ifndef NO_COMSAT
-  ;{ int s;struct sockaddr_in addr;char*chp,*chad;	     /* @ seperator? */
-     if(chad=strchr(chp=(char*)scomsat,SERV_ADDRsep))
-	*chad++='\0';		      /* split it up in service and hostname */
-     else if(!renvint(-1L,chp))			/* or is it a false boolean? */
-	return;					       /* ok, no comsat then */
-     else
-	chp="";				  /* set to yes, so take the default */
-     if(!chad||!*chad)						  /* no host */
-#ifndef IP_localhost
-	chad=COMSAThost;				      /* use default */
-#else /* IP_localhost */
-      { static const unsigned char ip_localhost[]=IP_localhost;
-	addr.sin_family=AF_INET;
-	tmemmove(&addr.sin_addr,ip_localhost,sizeof ip_localhost);
-      }
-     else
-#endif /* IP_localhost */
-      { const struct hostent*host;	      /* what host?  paranoid checks */
-	if(!(host=gethostbyname(chad))||!host->h_0addr_list)
-	 { endhostent();		     /* host can't be found, too bad */
-	   return;
-	 }
-	addr.sin_family=host->h_addrtype;	     /* address number found */
-	tmemmove(&addr.sin_addr,host->h_0addr_list,host->h_length);
-	endhostent();
-      }
-     if(!*chp)						       /* no service */
-	chp=BIFF_serviceport;				      /* use default */
-     s=strtol(chp,&chad,10);
-     if(chp==chad)			       /* the service is not numeric */
-      { const struct servent*serv;
-	if(!(serv=getservbyname(chp,COMSATprotocol)))	   /* so get its no. */
-	 { endservent();
-	   return;
-	 }
-	addr.sin_port=serv->s_port;endservent();
-      }
-     else
-	addr.sin_port=htons((short)s);			    /* network order */
-     cat(tgetenv(lgname),"@");			 /* should always fit in buf */
-     if(lasttell>=0)					   /* was it a file? */
-	ultstr(0,(unsigned long)lasttell,buf2),catlim(buf2);	      /* yep */
-     catlim(COMSATxtrsep);				 /* custom seperator */
-     if(lasttell>=0&&!strchr(dirsep,*lstfolder))       /* relative filename? */
-	catlim(tgetenv(maildir)),catlim(MCDIRSEP_);   /* prepend current dir */
-     catlim(lstfolder);s=socket(AF_INET,SOCK_DGRAM,UDP_protocolno);
-     sendto(s,buf,strlen(buf),0,(const void*)&addr,sizeof(addr));rclose(s);
-     yell("Notified comsat:",buf);
-   }
-#endif /* NO_COMSAT */
 }
 
 static int concnd;				 /* last concatenation value */
