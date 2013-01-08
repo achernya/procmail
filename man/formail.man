@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: formail.man,v 2.17 1992/04/29 15:55:09 berg Rel $
+.Id $Id: formail.man,v 2.18 1992/06/03 14:40:24 berg Rel $
 .de Sh
 .br
 .ne 11
@@ -45,11 +45,13 @@ formail \- mail (re)formatter
 .RB [ \-+FM_ADD_IFNOT+
 .IR "header field" ]
 .if n .ti +0.5i
+.RB [ \-+FM_ADD_ALWAYS+
+.IR "header field" ]
 .RB [ \-+FM_REN_INSERT+
 .IR "header field" ]
+.if n .ti +0.5i
 .RB [ \-+FM_DEL_INSERT+
 .IR "header field" ]
-.if n .ti +0.5i
 .RB [ \-+FM_SPLIT+
 .I command
 .I arg
@@ -135,6 +137,11 @@ from the header, display it as a single line.
 Append a custom
 .I header field
 onto the header; but only if a similar field does not exist yet.
+.Tp
+.I "\fB\-+FM_ADD_ALWAYS+\fP header field"
+Append a custom
+.I header field
+onto the header in any case.
 .Tp
 .I "\fB\-+FM_REN_INSERT+\fP header field"
 Same as
@@ -225,6 +232,9 @@ his/her address, instead of the list's).  Now if the list is not intelligent
 enough (most aren't) this autoreply will be widely distributed.
 .Sh BUGS
 None.  It's perfect :-).
+.Sh
+Calling up formail with the \-+HELPOPT1+ or \-+HELPOPT2+ options will cause
+it to display a command-line help page.
 .Sh AUTHOR
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .Rs

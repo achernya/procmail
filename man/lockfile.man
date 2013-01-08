@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: lockfile.man,v 2.6 1992/04/29 15:55:09 berg Rel $
+.Id $Id: lockfile.man,v 2.7 1992/06/30 16:43:23 berg Rel $
 .de Sh
 .br
 .ne 11
@@ -128,9 +128,17 @@ Specified lockfile is going to be removed by force because of a timeout
 .BR LOCKTIMEOUT
 in
 .BR procmail (1)).
+.Tp
+Sorry, giving up
+The
+.I retries
+limit has been reached or a signal was received.
 .Sh BUGS
 lockfile is only a simple program and can't process concatenated options.
 .Sh NOTES
+Calling up lockfile with the \-+HELPOPT1+ or \-+HELPOPT2+ options will cause
+it to display a command-line help page.
+.PP
 Multiple
 .B \-!
 flags will toggle the return status.

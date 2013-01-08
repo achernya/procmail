@@ -105,3 +105,24 @@
 	    Procmail makes an additional security check on the rcfiles before
 	       accepting them (owner and permissions, see man page)
 	    Fixed the `spurious' 0660 permissions on system-mailboxes
+1992/07/01: v2.71
+	    Sharpened the autoconf "const" check, to catch buggy AIX compilers
+	    Made the MAILBOX_SEPARATORS more orthogonal (i.e. you can define
+	       one or both now)
+	    Added the -A option to formail, the only option that was missing
+	       (to be able to boldly add header fields)
+	    Fixed some typos and extended the procmailex man page by a popular
+	       example
+	    Enhanced the MH directory delivery mode, procmail uses the MH
+	       method of finding the next number now (this requires procmail
+	       to read the directory)
+	    Fixed a typo in the WIFEXITED substitute macro (for non-posix
+	       systems), should fix all erroneous "program failed" messages
+	    Fixed a problem on byte-aligned machines with the 'i' flag
+	    Now throwing away all environment variables starting with LD_
+	       (not just LD_LIBRARY_PATH), but only on those machines that
+	       have the security hole (i.e. SunOS)
+	    Created logfile summariser (in shell-script form), by popular
+	       demand (examples/mailstat)
+	    Gave procmail, formail, lockfile and mailstat a more verbose
+	       command line help (called up by -h or -?)

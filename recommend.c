@@ -2,7 +2,7 @@
  *	recommend.c	analyses the installation, and makes		*
  *			recommendations about suid/sgid modes		*
  ************************************************************************/
-/*$Id: recommend.c,v 2.3 1992/04/29 15:54:33 berg Rel $*/
+/*$Id: recommend.c,v 2.4 1992/06/30 16:42:26 berg Rel $*/
 #include "config.h"
 #include "includes.h"				       /* also for fprintf() */
 #include "strpbrk.h"
@@ -13,7 +13,7 @@
 
 #define PERMIS	(S_IRWXU|S_IRWXG&~S_IWGRP|S_IRWXO&~S_IWOTH)
 
-char system_mbox[]=SYSTEM_MBOX;
+char systm_mbox[]=SYSTEM_MBOX;
 const char dirsep[]=DIRSEP,
  *const checkf[]={"/bin/mail","/bin/lmail","/usr/lib/sendmail",
  "/usr/lib/smail",0};
@@ -33,7 +33,7 @@ main(argc,argv)const int argc;const char*const argv[];
    { fprintf(stderr,"Please run this program via 'make recommend'\n");
      return EX_USAGE;
    }
-  *lastdirsep(system_mbox)='\0';
+  *lastdirsep(systm_mbox)='\0';
   for(p=checkf;*p;++p)
      if(!stat(*p,&stbuf)&&stbuf.st_mode&(S_ISUID|S_ISGID))
       { if(stbuf.st_mode&S_ISUID&&stbuf.st_uid!=ROOT_uid)
@@ -42,7 +42,7 @@ main(argc,argv)const int argc;const char*const argv[];
 	   sgid=S_ISGID,gid=stbuf.st_gid;
 	break;
       }
-  if(!stat(system_mbox,&stbuf)&&!(stbuf.st_mode&S_IWOTH))
+  if(!stat(systm_mbox,&stbuf)&&!(stbuf.st_mode&S_IWOTH))
      if(stbuf.st_mode&S_IWGRP)
 	sgid=S_ISGID,gid=stbuf.st_gid;
      else

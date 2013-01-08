@@ -31,10 +31,10 @@ Feature summary for procmail:
 	  (what folder) and how long (in bytes) it was
 	+ Uses this log file to display a wide range of diagnostic and error
 	  messages (if something went wrong)
-	+ Processed mail can contain arbitrary 8-bit characters (including
-	  '\0'); i.e. binary mailings can be processed if the rest of the
-	  mailing system knew how to handle them too
-	+ It has a man page (boy, does *it* have a man page)
+	+ Does not impose *any* limits on line lenghts, mail length (as long
+	  as memory permits), or the use of any character (any 8-bit character,
+	  including '\0' is allowed) in the mail
+	+ It has man pages (boy, does *it* have man pages)
 	+ Procmail can be used as a local delivery agent (a completely
 	  integrated substitute for /bin/mail), in which case it can heal
 	  your system mailbox, if something messes up the permissions

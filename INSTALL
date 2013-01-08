@@ -21,7 +21,8 @@ Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support,
 	create a file named autoconf.h
       - compile the *.c files, create the three stripped binaries:
 	procmail, lockfile and formail
-      - copy these binaries to $(BINDIR)
+      - copy the shell script examples/mailstat to mailstat
+      - copy these binaries and mailstat to $(BINDIR)
       - copy the man pages to $(MAN1DIR) and $(MAN5DIR)
 
 'make deinstall' will:
@@ -32,12 +33,18 @@ Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support,
 Minimal requirements:
 
 procmail must be installed.
+
+Optional files (depending on your requirements):
+
 lockfile needs only to be installed if you plan to read several mailboxes
 	with one of the standard mailers that don't support lockfiles.
 formail needs only to be installed if mail sometimes arrives in nonstandard
 	mailbox format (or if you want to generate auto replies, split up
 	mailboxes/digests etc., see the man page of formail for more info).
 	Formail is not called by procmail unless *you* tell it to.
+mailstat is an "example" shell script that can be used as is to produce
+	summaries of the procmail generated logfiles; it is not needed by
+	procmail itself in any way.
 
 If things don't compile automagically, I suggest you take a look at:
 autoconf, autoconf.h, config.h, includes.h

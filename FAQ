@@ -91,7 +91,18 @@
 	it will make the .forward files unique, and will ensure that the mailer
 	does optimise away some addresses.
 
-10. None of the above topics cover my problem.	Should I panic?
+10. How do I view the man pages?
+
+	If the man(1) program on your system understands the MANPATH
+	environment variable, make sure that the installation directory listed
+	in the Makefile for the manpages is included in your MANPATH.  If your
+	man program does not support MANPATH, make sure that the man pages
+	are installed in one of the standard man directories, like under
+	/usr/man.  If you do not want to install the man pages before viewing
+	them, you can view an individual man file by typing something like:
+	nroff -man procmail.1 | more
+
+11. None of the above topics cover my problem.	Should I panic?
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?

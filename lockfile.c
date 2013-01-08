@@ -12,9 +12,9 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: lockfile.c,v 2.13 1992/04/21 15:27:50 berg Rel $";
+static char rcsid[]="$Id: lockfile.c,v 2.15 1992/06/30 16:42:26 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1992/04/21 15:27:50 $";
+static char rcsdate[]="$Date: 1992/06/30 16:42:26 $";
 #include "config.h"
 #include "includes.h"
 #include "exopen.h"
@@ -26,8 +26,8 @@ static char rcsdate[]="$Date: 1992/04/21 15:27:50 $";
 
 volatile int exitflag;
 pid_t thepid;
-char system_mbox[]=SYSTEM_MBOX;
-const char dirsep[]=DIRSEP,lockext[]=DEFlockext;
+char systm_mbox[]=SYSTEM_MBOX;
+const char dirsep[]=DIRSEP,lockext[]=DEFlockext,nameprefix[]="lockfile: ";
 
 void failure()
 { exitflag=1;
@@ -36,10 +36,10 @@ void failure()
 main(argc,argv)const char*const argv[];
 { const char*const*p,*cp;uid_t uid;
   int sleepsec,retries,invert,force,suspend,retval=0,virgin=0;
-  static char usage[]=
+  static const char usage[]=
   "Usage: lockfile -nnn | -rnnn | -! | -lnnn | -snnn | -ml | -mu | file ...\n";
   sleepsec=8;force=retries=invert=0;suspend=16;thepid=getpid();uid=getuid();
-  *lastdirsep(system_mbox)='\0';
+  *lastdirsep(systm_mbox)='\0';
   if(--argc<=0)
    { putse(usage);return EX_USAGE;
    }
@@ -56,10 +56,10 @@ again:
 	   case 'm':
 	    { struct passwd*pass;char*ma;
 	      if(virgin||!(pass=getpwuid(uid))||
-	       !(ma=malloc(strlen(system_mbox)+strlen(pass->pw_name)+
+	       !(ma=malloc(strlen(systm_mbox)+strlen(pass->pw_name)+
 	       STRLEN(lockext)+1)))
 		 goto eusg;
-	      strcpy(ma,system_mbox);strcat(ma,pass->pw_name);
+	      strcpy(ma,systm_mbox);strcat(ma,pass->pw_name);
 	      strcat(ma,lockext);
 	      if(cp[2]=='u')
 	       { unlink(ma);break;
@@ -69,9 +69,19 @@ again:
 	       }
 	      goto eusg;
 	    }
+	   case HELPOPT1:case HELPOPT2:putse(usage);
+	      putse(
+ "\t-nnn\twait nnn seconds (default 8) between locking attempts\
+\n\t-rnnn\tmake nnn retries before giving up on a lock\
+\n\t-!\tinvert the exit code of lockfile\
+\n\t-lnnn\tset locktimeout to nnn seconds\
+\n\t-snnn\tsuspend nnn seconds (default 16) after a locktimeout occurred\
+\n\t-ml\tlock your system mail-spool file\
+\n\t-mu\tunlock your system mail-spool file\n");goto xusg;
 	   default:
 	      if(cp[1]-'0'>(unsigned)9)
-eusg:	       { putse(usage);retval=EX_USAGE;goto lfailure;
+eusg:	       { putse(usage);
+xusg:		 retval=EX_USAGE;goto lfailure;
 	       }
 	      if(sleepsec>=0)
 		 sleepsec=strtol(cp+1,(char**)0,10);
@@ -85,11 +95,12 @@ stilv:	virgin=1;
 	while(0>NFSxopen(cp,&t))
 	 { struct stat buf;
 	   if(exitflag||retries==1)
-lfailure:   { sleepsec= -1;argc=p-argv-1;goto again;
+	    { putse(nameprefix);putse("Sorry, giving up\n");
+lfailure:     sleepsec= -1;argc=p-argv-1;goto again;
 	    }
 	   if(force&&!stat(cp,&buf)&&force<t-buf.st_mtime)
-	    { unlink(cp);putse("lockfile: Forcing lock on \"");putse(cp);
-	      putse("\"\n");sleep(suspend);
+	    { unlink(cp);putse(nameprefix);putse("Forcing lock on \"");
+	      putse(cp);putse("\"\n");sleep(suspend);
 	    }
 	   else
 	      sleep(sleepsec);

@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 2.18 1992/04/23 16:26:26 berg Rel $*/
+/*$Id: includes.h,v 2.20 1992/06/30 16:42:26 berg Rel $*/
 
 #include "autoconf.h"
 	/* not all the "library identifiers" specified here need to be
@@ -25,6 +25,10 @@
 #include <fcntl.h>		/* O_RDONLY O_WRONLY O_APPEND O_CREAT O_EXCL */
 #include <pwd.h>		/* getpwuid() getpwnam() struct passwd */
 #include <grp.h>		/* getgrgid() struct group */
+#ifndef DIRENT_H_MISSING
+#include <dirent.h>		/* opendir() readdir() closedir() DIR
+				   struct dirent */
+#endif
 #ifndef SYS_WAIT_H_MISSING
 #include <sys/wait.h>		/* wait() WIFEXITED() WIFSTOPPED()
 				   WEXITSTATUS() */
@@ -50,6 +54,23 @@
 void*malloc(),*realloc();
 const char*getenv();
 #endif
+#ifdef DIRENT_H_MISSING
+#ifndef SYS_DIRENT_H_MISSING
+#include <sys/dirent.h>
+#else
+#ifndef NDIR_H_MISSING
+#include <ndir.h>
+#define dirent	direct
+#else
+#ifndef SYS_DIR_H_MISSING
+#include <sys/dir.h>
+#define dirent	direct
+#else
+/* I give up, I can only hope that your system defines DIR and struct dirent */
+#endif
+#endif
+#endif
+#endif /* DIRENT_H_MISSING */
 #ifdef STRING_H_MISSING
 #include <strings.h>
 #ifndef strchr
@@ -155,7 +176,7 @@ char*strpbrk();
 #endif /* WMACROS_NON_POSIX */
 
 #ifndef WIFEXITED
-#define WIFEXITED(waitval)	(!!((waitval)&255))
+#define WIFEXITED(waitval)	(!((waitval)&255))
 #endif
 #ifndef WIFSTOPPED
 #define WIFSTOPPED(waitval)	(((waitval)&255)==127)

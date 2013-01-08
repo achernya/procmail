@@ -28,9 +28,9 @@ recommend.c	A program showing the best configuration for you.
 
 shell.h		Defines a few 'shell' macros for malloc and the like.
 man/*		Yes, the man pages (made in a labour camp) and two additional
-		files which makes these man pages auto-adapting.
-include/*	A few files that are supposed to fool your compiler into
-		thinking that it has ANSI and POSIX conforming include files.
+		files which make these man pages auto-adapting.
+examples/mailstat
+		A summary generator for procmail generated logfiles.
 examples/?procmailrc
 		Sample .procmailrc files.
 examples/?rmail

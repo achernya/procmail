@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: procmail.man,v 2.26 1992/04/29 15:55:09 berg Rel $
+.Id $Id: procmail.man,v 2.27 1992/06/03 14:40:24 berg Rel $
 .de Sh
 .br
 .ne 11
@@ -105,7 +105,7 @@ Preserve any old environment.  Normally procmail clears the environment
 upon startup+KEEPENV+.  However, in any case: any default values will override
 any preexisting environment variables, i.e. procmail will not pay any attention
 to any predefined environment variables, it will happily overwrite them
-with his own defaults.
+with its own defaults.
 .Tp
 .B \-+TEMPFAILOPT+
 Make procmail fail softly, i.e. if procmail cannot deliver the mail to
@@ -234,17 +234,21 @@ You specified the \-+DELIVEROPT+ option or called procmail under a different
 name, it expects one or more recipients as arguments
 .Tp
 Out of memory
-The system is out of swap space (and NORESRETY has been exhausted).
+The system is out of swap space (and NORESRETRY has been exhausted).
 .Tp
 Processing continued
 The unrecognised options on the command line are ignored, proceeding as
 usual.
 .Tp
 Program failure of "x"
-Program that was started by procmail didn't return EX_OK (=0).
+Program that was started by procmail didn't return EX_OK (=+EX_OK+).
 .Tp
 Skipped: "x"
 Couldn't do anything with "x" in the rcfile (syntax error), ignoring it.
+.Tp
+Suspicious rcfile
+The owner of the rcfile was not the recipient, or the directory that contained
+it was world writeable (the rcfile was not used)
 .Tp
 Terminating prematurely whilst waiting for .\|.\|.
 Procmail received a signal while it was waiting for .\|.\|.
@@ -282,6 +286,9 @@ Condition didn't match, recipe skipped
 .Tp
 Opening "x"
 Opening file "x" for appending
+.Tp
+Opening directory "x"
+Opening a directory for finding the highest file number
 .Tp
 Rcfile: "x"
 Rcfile changed to "x"
@@ -336,7 +343,7 @@ line if none is present.  If one is already present+TRUSTED_IDS+ procmail will
 leave it intact.
 .PP
 For security reasons procmail will only use an rcfile if it is owned by the
-recipient or if the recipient's home directory is not world writeable.
+recipient or if the directory it is contained in, is not world writeable.
 .PP
 If +SYSTEM_MBOX+ is a bogus mailbox (i.e. does not belong to the recipient,
 is unwritable, is a symbolic link or is a hard link), procmail will upon
@@ -354,7 +361,7 @@ programs from messing up.
 .PP
 Delivering to MH folders is slightly more time consuming than delivering
 to normal directories or mailboxes, because procmail has to search for
-the first available number (instead of having the filename immediately
+the next available number (instead of having the filename immediately
 available).
 .PP
 On general failure procmail will return EX_CANTCREAT, unless option
@@ -373,18 +380,24 @@ Procmail performs the locking in an NFS-secure way.
 .br
 .ne 11
 .Sh NOTES
+Calling up procmail with the \-+HELPOPT1+ or \-+HELPOPT2+ options will cause
+it to display a command-line help and flags quick-reference page.
+.PP
 If procmail is
 .I not
 installed globally as the default mail delivery agent (ask your system
 administrator), you have to make sure it is invoked when your mail arrives.
 In this case your $HOME/+DOT_FORWARD+ (beware, it
 .B has
-to be world readable) file should contain (include the single and double
-quotes,
+to be world readable) file should contain the line below.  Be sure to include
+the single and double quotes, and it
 .I must
 be an
 .I absolute
-path):
+path.  The `#YOUR_LOGIN_NAME' is not actually a parameter that is required by
+procmail, actually, it will be discarded by /bin/sh before procmail ever
+sees it; it is however a necessary bug fix against overoptimising sendmail
+programs:
 .PP
 .na
 .nf

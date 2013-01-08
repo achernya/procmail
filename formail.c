@@ -9,9 +9,9 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: formail.c,v 2.25 1992/04/23 16:26:26 berg Rel $";
+static char rcsid[]="$Id: formail.c,v 2.26 1992/06/03 13:17:41 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1992/04/23 16:26:26 $";
+static char rcsdate[]="$Date: 1992/06/03 13:17:41 $";
 #include "config.h"					  /* slight overkill */
 #include "includes.h"
 #include "strpbrk.h"
@@ -32,7 +32,7 @@ char*pstrspn();
 #define FLD_HEADSIZ	((size_t)offsetof(struct field,fld_text[0]))
 
 static const char couldntw[]="Couldn't write to stdout",unknown[]=UNKNOWN,
- outofmem[]="Out of memory\n",re[]=" Re:",OldP[]=OLD_PREFIX,
+ outofmem[]="Out of memory\n",re[]=" Re:",OldP[]=OLD_PREFIX,fmusage[]=FM_USAGE,
  From_[]=		FROM,				/* VNIX 'From ' line */
  path[]=		"Path:",				   /* USENET */
  article[]=		"Article ",				   /* USENET */
@@ -61,7 +61,9 @@ static const char couldntw[]="Couldn't write to stdout",unknown[]=UNKNOWN,
  scomments[]=		"Comments:",
  encrypted[]=		"Encrypted:",
  errorsto[]=		"Errors-To:",		       /* sendmail extension */
- retreceiptto[]=	"Return-Receipt-To:",	       /* sendmail extension */
+ retreceiptto[]=	"Return-Receipt-To:",			/* ditto ... */
+ precedence[]=		"Precedence:",
+ priority[]=		"Priority:",			    /* ELM extension */
  summary[]=		"Summary:",			 /* USENET extension */
  organisation[]=	"Organisation:",			/* ditto ... */
  aorganization[]=	"Organization:",
@@ -92,8 +94,9 @@ static const struct {const char*hedr;int lnr;}cdigest[]=
   bsl(res_date),bsl(to),bsl(res_to),bsl(cc),bsl(res_cc),bsl(bcc),bsl(res_bcc),
   bsl(messageid),bsl(res_messageid),bsl(inreplyto),bsl(references),
   bsl(keywords),bsl(subject),bsl(scomments),bsl(encrypted),bsl(errorsto),
-  bsl(retreceiptto),bsl(summary),bsl(organisation),bsl(aorganization),
-  bsl(newsgroups),bsl(status),bsl(lines),bsl(originator),bsl(nntppostinghost)
+  bsl(precedence),bsl(retreceiptto),bsl(summary),bsl(organisation),
+  bsl(aorganization),bsl(newsgroups),bsl(status),bsl(lines),bsl(originator),
+  bsl(nntppostinghost),bsl(priority)
 };
 
 static struct saved{const char*const headr;const int lenr;int rexl;char*rexp;}
@@ -104,8 +107,18 @@ static struct saved{const char*const headr;const int lenr;int rexl;char*rexp;}
 #define hdate	(rex+3)
 
 #ifdef sMAILBOX_SEPARATOR
-static const char smboxsep[]=sMAILBOX_SEPARATOR,emboxsep[]=eMAILBOX_SEPARATOR;
+#define emboxsep	smboxsep
+#define MAILBOX_SEPARATOR
+static const char smboxsep[]=sMAILBOX_SEPARATOR;
+#endif /* sMAILBOX_SEPARATOR */
+#ifdef eMAILBOX_SEPARATOR
+#ifdef emboxsep
+#undef emboxsep
+#else
+#define MAILBOX_SEPARATOR
 #endif
+static const char emboxsep[]=eMAILBOX_SEPARATOR;
+#endif /* eMAILBOX_SEPARATOR */
 
 static errout,oldstdout,quiet,buflast;
 static pid_t child= -1;
@@ -113,7 +126,8 @@ static FILE*mystdout;
 static size_t nrskip,nrtotal= -1,buflen,buffilled;
 static char*buf;
 static struct field{size_t id_len;size_t tot_len;struct field*fld_next;
- char fld_text[255];}*rdheader,*iheader,*Iheader,*aheader,*xheader,*nheader;
+ char fld_text[255];}*rdheader,*iheader,*Iheader,*aheader,*Aheader,*xheader,
+    *nheader;
 
 struct field*findf(p,hdr)const struct field*const p,*hdr;
 { size_t i;char*chp;		/* find a field in the linked list of fileds */
@@ -199,12 +213,14 @@ main(lastm,argv)const char*const argv[];
 	      if(!*chp&&*++argv)
 		 goto parsedoptions;
 	      goto usg;
+	   case HELPOPT1:case HELPOPT2:log(fmusage);log(FM_HELP);goto xusg;
 	   case FM_MINFIELDS:
 	     if(!*chp&&!(chp=(char*)*++argv))	/* concatenated or seperate? */
 		goto usg;
 number:	   default:
 	      if(*chp-'0'>(unsigned)9)
-usg:	       { log(FM_USAGE);return EX_USAGE;
+usg:	       { log(fmusage);
+xusg:		 return EX_USAGE;
 	       }
 	      i=strtol(chp,(char**)0,10);
 	      switch(lastm)			/* where does the number go? */
@@ -214,8 +230,8 @@ usg:	       { log(FM_USAGE);return EX_USAGE;
 	       }
 	      break;
 	   case FM_BOGUS:bogus=0;continue;
-	   case FM_ADD_IFNOT:case FM_REN_INSERT:case FM_DEL_INSERT:
-	   case FM_EXTRACT:
+	   case FM_ADD_IFNOT:case FM_ADD_ALWAYS:case FM_REN_INSERT:
+	   case FM_DEL_INSERT:case FM_EXTRACT:
 	      if(!*chp&&!(chp=(char*)*++argv))	/* concatenated or seperate? */
 		 goto usg;
 	      if(!breakfield(chp,i=strlen(chp)))
@@ -223,7 +239,8 @@ usg:	       { log(FM_USAGE);return EX_USAGE;
 	       }
 	      chp[i++]='\n';			       /* terminate the line */
 	      addfield(lastm==FM_REN_INSERT?&iheader:lastm==FM_DEL_INSERT?
-	       &Iheader:lastm==FM_ADD_IFNOT?&aheader:&xheader,chp,i);
+	       &Iheader:lastm==FM_ADD_IFNOT?&aheader:lastm==FM_ADD_ALWAYS?
+	       &Aheader:&xheader,chp,i);
 	   case '\0':;
 	 }
 	break;
@@ -365,9 +382,9 @@ foundfrom:
   if(xheader)				     /* we're just extracting fields */
      clearfield(&rdheader),clearfield(&nheader);	    /* throw it away */
   else			     /* otherwise, display the new & improved header */
-   { flushfield(&rdheader);flushfield(&nheader);dispfield(iheader);
-     dispfield(Iheader);putcs('\n');	      /* make sure it is followed by */
-   }							    /* an empty line */
+   { flushfield(&rdheader);flushfield(&nheader);dispfield(Aheader);
+     dispfield(iheader);dispfield(Iheader);putcs('\n');	  /* make sure it is */
+   }						/* followed by an empty line */
   if(areply&&!keepb||xheader)	      /* decision time, do we keep the rest? */
    { if(split)
 	closemine();
@@ -403,10 +420,13 @@ splitit:    { if(!lnl)	    /* did the previous mail end with an empty line? */
 	      startprog(argv);goto startover;	    /* and there we go again */
 	    }
 	 }
-#ifdef sMAILBOX_SEPARATOR
+#ifdef MAILBOX_SEPARATOR
      if(!strncmp(emboxsep,buf,STRLEN(emboxsep)))	     /* end of mail? */
       { if(split)		       /* gobble up the next start separator */
-	 { buffilled=0;getline();buffilled=0;
+	 { buffilled=0;
+#ifdef sMAILBOX_SEPARATOR
+	   getline();buffilled=0;		 /* but only if it's defined */
+#endif
 	   if(buflast!=EOF)					   /* if any */
 	      goto splitit;
 	   break;
@@ -416,7 +436,7 @@ splitit:    { if(!lnl)	    /* did the previous mail end with an empty line? */
       }
      else if(!strncmp(smboxsep,buf,STRLEN(smboxsep)&&bogus))
 putsp:	putcs(' ');
-#endif
+#endif /* MAILBOX_SEPARATOR */
      lnl=buffilled==1;		      /* check if we just read an empty line */
      if(areply&&bogus)					  /* escape the body */
 	if(fldp=rdheader)	      /* we already read some "valid" fields */

@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 2.19 1992/04/23 16:46:41 berg Rel $*/
+/*$Id: procmail.h,v 2.20 1992/06/03 12:55:50 berg Rel $*/
 
 #include "includes.h"
 #include "exopen.h"
@@ -27,12 +27,19 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #ifdef sMAILBOX_SEPARATOR
 #define smboxseparator(fd)	\
  (tofolder?rwrite(fd,sMAILBOX_SEPARATOR,STRLEN(sMAILBOX_SEPARATOR)):0)
-#define emboxseparator(fd)	\
- (tofolder?rwrite(fd,eMAILBOX_SEPARATOR,STRLEN(eMAILBOX_SEPARATOR)):0)
+#define MAILBOX_SEPARATOR
 #else
 #define smboxseparator(fd)
-#define emboxseparator(fd)
+#endif /* sMAILBOX_SEPARATOR */
+#ifdef eMAILBOX_SEPARATOR
+#define emboxseparator(fd)	\
+ (tofolder?rwrite(fd,eMAILBOX_SEPARATOR,STRLEN(eMAILBOX_SEPARATOR)):0)
+#ifndef MAILBOX_SEPARATOR
+#define MAILBOX_SEPARATOR
 #endif
+#else
+#define emboxseparator(fd)
+#endif /* eMAILBOX_SEPARATOR */
 
 #ifndef KERNEL_LOCKS
 #define fdlock(fd)	0

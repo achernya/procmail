@@ -2,6 +2,10 @@ PATH=/bin:/usr/bin:/usr/local/bin	# add more if appropriate
 SHELL=/bin/sh
 
 # list		should contain the submitting address of the list
+#		since this adress is used to create the X-Loop: field, and
+#		is also grepped for, make sure that it does not contain
+#		any egrep-magic characters (or change the definition and
+#		detection of the X-Loop: field).
 # listreq	should contain the request address of the list
 # subscribers	should name the file which contains the list of subscribers
 #		separated by whitespace
@@ -9,9 +13,9 @@ SHELL=/bin/sh
 :3wfh
 !^Subject:.*((add|remove).*list|subscribe)
 !^From +(postmaster|Mailer)
-!^X-Loop: loop
+$!^X-Loop: $list
 | formail -b -IReturn-Receipt-To: -I"Errors-To: $listreq" \
-  -I "Sender: $listreq" -I"Precedence: bulk" -IReceived: -I"X-Loop: loop"\
+  -I "Sender: $listreq" -I"Precedence: bulk" -IReceived: -I"X-Loop: $list"\
 # -i "Reply-To: $list"			# uncomment if you want, many people
 					# consider this a bad idea.
 

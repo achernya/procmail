@@ -1,5 +1,5 @@
 
-#$Id: autoconf,v 2.20 1992/04/29 16:38:45 berg Exp $
+#$Id: autoconf,v 2.22 1992/06/30 16:42:26 berg Rel $
 
 SHELL=$4 || exec $4 autoconf $* # we're in a csh, feed myself to sh
 
@@ -8,6 +8,10 @@ SHELL=$4 || exec $4 autoconf $* # we're in a csh, feed myself to sh
 #	#define UNISTD_H_MISSING
 #	#define STDDEF_H_MISSING
 #	#define STDLIB_H_MISSING
+#	#define DIRENT_H_MISSING
+#	#define SYS_DIRENT_H_MISSING
+#	#define NDIR_H_MISSING
+#	#define SYS_DIR_H_MISSING
 #	#define SYS_WAIT_H_MISSING
 #	#define SYS_UTSNAME_H_MISSING
 #	#define STRING_H_MISSING
@@ -26,20 +30,23 @@ SHELL=$4 || exec $4 autoconf $* # we're in a csh, feed myself to sh
 #	#define NObcopy
 #	#define NOstrcspn
 #	#define NOstrpbrk
+#	#define NOopendir
 #	#define NOrename
+#	#define NOuname
 #	#define strchr(s,c) index(s,c)
 #	#define endpwent()
 #	#define endgrent()
 #	#define strtol(str,ptr,base) ((long)atoi(str))
 #	#define WMACROS_NON_POSIX
 #	#define oBRAIN_DAMAGE
+#	#define LD_ENV_FIX
 #	#define SMALLHEAP
 #	#define SYSTEM_MAILBOX "/usr/spool/mail/$USER"
 #	#define SENDMAIL "/usr/lib/sendmail"
 
-# A conforming ANSI compiler and POSIX library should only produce six
+# A conforming ANSI compiler and POSIX library should only produce seven
 # entries in autoconf.h: SYS_FILE_H_MISSING, endpwent(), endgrent(), rename(),
-# SYSTEM_MAILBOX, SENDMAIL (and perhaps SMALLHEAP)
+# SYSTEM_MAILBOX, LD_ENV_FIX, SENDMAIL (and perhaps SMALLHEAP)
 # Anything else indicates failure of your installation to comply with either
 # the ANSI or POSIX standards (but procmail should be installable anyway).
 
@@ -78,21 +85,38 @@ cat >$ACONF <<HERE
 
 HERE
 
+if test ! -f $USRINC/stdio.h
+then echo 2>&1 "Panic!	   I can't find your system include-files."
+  echo 2>&1 "I already looked in \"$USRINC\".  Please edit the Makefile"
+  echo 2>&1 "and make sure that the definition of USRINCLUDE is correct,"
+  echo 2>&1 "before retrying another make."
+  exit 1
+fi
 test -f $USRINC/unistd.h || echo "#define UNISTD_H_MISSING" >>$ACONF
 test -f $USRINC/stddef.h || echo "#define STDDEF_H_MISSING" >>$ACONF
 test -f $USRINC/stdlib.h || echo "#define STDLIB_H_MISSING" >>$ACONF
+if test ! -f $USRINC/dirent.h
+then echo "#define DIRENT_H_MISSING" >>$ACONF
+   if test ! -f $USRINC/sys/dirent.h
+      then echo "#define SYS_DIRENT_H_MISSING" >>$ACONF
+	 if test ! -f $USRINC/ndir.h
+	    then echo "#define NDIR_H_MISSING" >>$ACONF
+	       test -f $USRINC/sys/dir.h ||
+		echo "#define SYS_DIR_H_MISSING" >>$ACONF
+	    fi
+      fi
+fi
+test -f $USRINC/dirent.h || echo "#define DIRENT_H_MISSING" >>$ACONF
 test -f $USRINC/sys/wait.h || echo "#define SYS_WAIT_H_MISSING" >>$ACONF
 test -f $USRINC/sys/utsname.h || echo "#define SYS_UTSNAME_H_MISSING" >>$ACONF
 test -f $USRINC/string.h || echo "#define STRING_H_MISSING" >>$ACONF
 test -f $USRINC/sysexits.h || echo "#define SYSEXITS_H_MISSING" >>$ACONF
 test -f $USRINC/sys/file.h || echo "#define SYS_FILE_H_MISSING" >>$ACONF
 
-# WARNING: in ./include/stdlib.h the const keyword is already used!
-#	   hence the const test has to precede all others.
-
 cat >_autotst.c <<HERE
 main()
-{ char*const*p;char*q;
+{ char*const*p;char*q;static struct{const int a;int b;}c[2];
+  --(c+1)->b;				 /* AIX 3.1.5 machines can't do this */
   p= &q;return 0;
 }
 HERE
@@ -169,18 +193,42 @@ cat >_autotst.c <<HERE
 main(){char a[2];
  endpwent();endgrent();memmove(a,"0",1);bcopy("0",a,1);strcspn(a,"0");
  strtol("0",(char**)0,10);strchr("0",'0');strpbrk(a,"0");rename(a,"0");
+ opendir("0");
+#ifndef NOuname
+ {struct utsname b;uname(&b);}
+#endif
  return 0;}
 HERE
 
-echo 'Testing for memmove, strchr, strpbrk, strcspn & strtol'
-${MAKE} _autotst.$1 >$DEVNULL 2>&1
+echo 'Testing for memmove, strchr, strpbrk, strcspn, strtol & opendir'
+if ${MAKE} _autotst.$1 >_autotst.rrr 2>&1
+then
+:
+else
+  echo 2>&1 "Whoeaaa!  There's something fishy going on here."
+  echo 2>&1 "You have a look and see if you detect anything uncanny:"
+  echo 2>&1 "-------------------------------------------------------"
+  cat 2>&1 _autotst.rrr
+  echo 2>&1 "-------------------------------------------------------"
+  echo 2>&1 "I suggest you take a look at the definition of CFLAGS and CC"
+  echo 2>&1 "in the Makefile before you try make again."
+  exit 1
+fi
 ${MAKE} _autotst >_autotst.rrr 2>&1
 ${RM} _autotst _autotst.$1
 
 grepfor strcspn '#define NOstrcspn'
 grepfor strpbrk '#define NOstrpbrk'
+grepfor opendir "
+#define NOopendir	/* the readdir library does not seem to be available */
+			/* this will slightly affect the way a filenumber is */
+			/* selected in MH-folders by procmail */
+"
 grepfor rename '#define NOrename'
 grepfor strchr '#define strchr(s,c) index(s,c)'
+grepfor uname "\
+#define NOuname		 \
+/* the include files define it, the libraries don't */"
 grepfor setpwent '#define setpwent()'
 grepfor endpwent '#define endpwent()'
 grepfor endgrent '#define endgrent()'
@@ -229,6 +277,8 @@ HERE
  fi
  ${RM} _autotst
 fi
+
+fgrep -e LD_ /bin/ld >/dev/null 2>&1 && echo "#define LD_ENV_FIX" >>$ACONF
 
 cat >_autotst.c <<HERE
 #include "includes.h"

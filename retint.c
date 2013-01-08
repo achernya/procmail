@@ -7,7 +7,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: retint.c,v 2.26 1992/04/09 16:16:41 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.27 1992/06/30 16:42:26 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -245,11 +245,14 @@ lockit(name,lockp)char*name;const char**const lockp;
 	   else
 	      triedforce=0;		 /* legitimate iteration, clear flag */
 	   break;
-	default:	       /* maybe filename too long, shorten and retry */
+#ifdef ENAMETOOLONG
+	case ENAMETOOLONG:     /* maybe filename too long, shorten and retry */
 	   if(0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1]))
 	    { log("Truncating");logqnl(name);log(" and retrying lock\n");
 	      name[i]='\0';continue;
 	    }
+#endif
+	default:
 faillock:  log("Lock failure on");logqnl(name);goto term;
 	case ENOENT:case ENOTDIR:case EIO:case EACCES:
 	   if(!--permanent)

@@ -13,7 +13,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: procmail.c,v 2.33 1992/04/29 15:54:33 berg Rel $";
+static char rcsid[]="$Id: procmail.c,v 2.37 1992/07/01 12:47:38 berg Rel $";
 #endif
 #include "config.h"
 #define MAIN
@@ -33,14 +33,15 @@ static const char slinebuf[]="LINEBUF",tokey[]=TOkey,eumask[]="UMASK",
  maildir[]="MAILDIR",couldnread[]="Couldn't read",logfile[]="LOGFILE",
  orgmail[]="ORGMAIL",user[]="USER",tmp[]=Tmp,home[]="HOME",sfolder[]=FOLDER,
  sendmail[]="SENDMAIL",host[]="HOST",Log[]="LOG",From[]=FROM,
- exflags[]=RECFLAGS,system_mbox[]=SYSTEM_MBOX,cldchd[]="Couldn't chdir to";
+ exflags[]=RECFLAGS,systm_mbox[]=SYSTEM_MBOX,cldchd[]="Couldn't chdir to",
+ pmusage[]=PM_USAGE;
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
  {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout}};
 long lastdump;			 /* the no. of bytes dumped (saved) recently */
 int retval=EX_CANTCREAT,retvl2=EX_OK,sh,pwait,lcking,locknext,verbose,rc= -2,
  tofolder,tofile,ignwerr,fakedelivery,
- linebuf=mx(DEFlinebuf,STRLEN(system_mbox)<<1);
+ linebuf=mx(DEFlinebuf,STRLEN(systm_mbox)<<1);
 volatile int nextexit;			       /* if termination is imminent */
 volatile time_t alrmtime;
 pid_t thepid,pidchild;
@@ -49,7 +50,7 @@ static long filled;				   /* the length of the mail */
 static char*themail,*thebody;		    /* the head and body of the mail */
 
 main(argc,argv)const char*const argv[];
-{ static char flags[maxindex(exflags)-1];
+{ static char flags[maxindex(exflags)];
   static const char*const keepenv[]=KEEPENV,*const prestenv[]=PRESTENV,
    *const trusted_ids[]=TRUSTED_IDS;
   char*chp,*startchar,*chp2,*fromwhom=0;long tobesent;
@@ -62,6 +63,8 @@ main(argc,argv)const char*const argv[];
      for(;;)					       /* processing options */
       { switch(*++chp)
 	 { case VERSIONOPT:log(VERSION);return EX_OK;
+	   case HELPOPT1:case HELPOPT2:log(pmusage);log(PM_HELP);
+	      log(PM_QREFERENCE);return EX_USAGE;
 	   case PRESERVOPT:Presenviron=1;continue;
 	   case TEMPFAILOPT:retval=EX_TEMPFAIL;continue;
 	   case FROMWHOPT:case ALTFROMWHOPT:
@@ -74,7 +77,7 @@ main(argc,argv)const char*const argv[];
 	      break;
 	   case DELIVEROPT:Deliverymode=1;++chp;goto last_option;
 	   default:log("Unrecognised options:");logqnl(chp);
-	      log(PROCMAIL_USAGE);log("Processing continued\n");
+	      log(pmusage);log("Processing continued\n");
 	   case '\0':;
 	 }
 	break;
@@ -89,6 +92,14 @@ last_option:
 	    }
      *emax=0;						    /* drop the rest */
    }
+#ifdef LD_ENV_FIX
+ {const char**emax=(const char**)environ,**ep;static const char ld_[]="LD_";
+  for(ep=emax;*emax;++emax);		  /* find the end of the environment */
+  while(*ep)
+     if(!strncmp(ld_,*ep++,STRLEN(ld_)))	       /* it starts with LD_ */
+	*--ep= *--emax,*emax=0;				/* copy from the end */
+ }
+#endif /* LD_ENV_FIX */
   if(Deliverymode&&(!chp||(!*chp&&!(chp=(char*)argv[++argc]))))
      Deliverymode=0,log("Missing recipient\n");
  {struct passwd*pass,*passinvk;
@@ -191,7 +202,7 @@ Frominserted:
    }
   endpwent();
  }
-  setdef(orgmail,system_mbox);setdef(shellmetas,DEFshellmetas);
+  setdef(orgmail,systm_mbox);setdef(shellmetas,DEFshellmetas);
   setdef(shellflags,DEFshellflags);setdef(maildir,DEFmaildir);
   setdef(defaultf,DEFdefault);setdef(sendmail,DEFsendmail);
   setdef(lockext,DEFlockext);setdef(msgprefix,DEFmsgprefix);
@@ -288,12 +299,13 @@ fake_rc: { log(couldnread);logqnl(buf);
        /*
 	*	OK, so now we have opened an rcfile, but for security reasons
 	*	we only accept it if it is owned by the recipient or if the
-	*	$HOME directory is not world writeable
+	*	the directory it is in, is not world writeable
 	*/
+	i= *(chp=lastdirsep(buf));
 	if(lstat(buf,&stbuf)||
-	 (stbuf.st_uid!=uid&&(stat(tgetenv(home),&stbuf)||
+	 (stbuf.st_uid!=uid&&(*chp='\0',stat(buf,&stbuf)||
 	 (stbuf.st_mode&(S_IWOTH|S_IXOTH))==(S_IWOTH|S_IXOTH))))
-	 { rclose(rc);goto fake_rc;
+	 { rclose(rc);log("Suspicious rcfile\n");*chp=i;goto fake_rc;
 	 }
        /*
 	*	set uid back to recipient in any case, since we might just
@@ -456,9 +468,9 @@ forward:      if(!tolock)	   /* an explicit lockfile specified already */
 	 }
 eofvarname:
 	if(i!='=')				   /* removal or assignment? */
-	 { sputenv(buf);continue;
-	 }
-	*chp='=';readparse(++chp,getb,1);
+	   *++chp='\0';
+	else
+	   *chp='=',readparse(++chp,getb,1);
 argenv: sputenv(buf);chp[-1]='\0';
 	if(!strcmp(buf,slinebuf))
 	 { if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
@@ -602,9 +614,21 @@ dirmail()				/* buf should contain directory name */
      chp=0,strcpy(buf2,strcat(buf,MCDIRSEP));
   if(unique(buf2,strchr(buf2,'\0'),NORMperm))
    { if(chp)
-      { unsigned long i=0;
+      { long i=0;		     /* first let us try to prime i with the */
+#ifndef NOopendir		     /* highest MH folder number we can find */
+	long j;DIR*dirp;struct dirent*dp;char*chp2;
+	*chp='\0';yell("Opening directory",buf);
+	if(dirp=opendir(buf))
+	 { while(dp=readdir(dirp))	/* there still are directory entries */
+	      if((j=strtol(dp->d_name,&chp2,10))>i&&!*chp2)
+		 i=j;			    /* yep, we found a higher number */
+	   closedir(dirp);			     /* aren't we neat today */
+	 }
+	else
+	   log(couldnread),logqnl(buf);
+#endif /* NOopendir */
 	do ultstr(0,++i,chp);		       /* find first empty MH folder */
-	while(link(buf2,buf));
+	while(link(buf2,buf)&&errno==EEXIST);
 	unlink(buf2);goto opn;
       }
      stat(buf2,&stbuf);

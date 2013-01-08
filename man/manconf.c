@@ -1,6 +1,6 @@
 /* A sed script generator (for transmogrifying the man pages automagically) */
 
-/*$Id: manconf.c,v 2.16 1992/04/29 15:55:09 berg Rel $*/
+/*$Id: manconf.c,v 2.17 1992/06/03 14:40:24 berg Rel $*/
 
 #include "../config.h"
 #include "../procmail.h"
@@ -21,6 +21,17 @@ main()
   ps("FW_content",
    "* - | ? \"IFS=' ';exec /usr/local/bin/procmail #YOUR_LOGIN_NAME\"");
 #endif
+  plist("PRESTENV","\1.PP\1Other preset environment variables are "
+   ,prestenv,".\1",""," and ");
+  plist("KEEPENV",", except for the values of ",keepenv,"",""," and ");
+  plist("TRUSTED_IDS",", and procmail is invoked with one of the following\
+ user or group ids: ",trusted_ids,",",""," or ");
+#ifdef LD_ENV_FIX
+  ps("LD_ENV_FIX","\1.PP\1For security reasons, procmail will wipe out all\
+ environment variables starting with LD_ upon startup.");
+#else
+  ps("LD_ENV_FIX","");
+#endif
 #ifdef NO_USER_TO_LOWERCASE_HACK
   ps("UPPERCASE_USERNAMES","\1.PP\1If the standard\1.BR getpwnam() (3)\1\
 is case sensitive, and some users have login names with uppercase letters in\
@@ -29,11 +40,6 @@ is case sensitive, and some users have login names with uppercase letters in\
 #else
   ps("UPPERCASE_USERNAMES","");
 #endif
-  plist("PRESTENV","\1.PP\1Other preset environment variables are "
-   ,prestenv,".\1",""," and ");
-  plist("KEEPENV",", except for the values of ",keepenv,"",""," and ");
-  plist("TRUSTED_IDS",", and procmail is invoked with one of the following\
- user or group ids: ",trusted_ids,",",""," or ");
   ps("SYSTEM_MBOX",SYSTEM_MBOX);
 #ifdef console
   ps("console",console);
@@ -61,6 +67,8 @@ is case sensitive, and some users have login names with uppercase letters in\
   pn("DEFtimeout",DEFtimeout);
   ps("Tmp",Tmp);
   pc("DEBUGPREFIX",DEBUGPREFIX);
+  pc("HELPOPT1",HELPOPT1);
+  pc("HELPOPT2",HELPOPT2);
   pc("VERSIONOPT",VERSIONOPT);
   pc("PRESERVOPT",PRESERVOPT);
   pc("TEMPFAILOPT",TEMPFAILOPT);
@@ -102,8 +110,10 @@ is case sensitive, and some users have login names with uppercase letters in\
   pc("FM_QUIET",FM_QUIET);
   pc("FM_EXTRACT",FM_EXTRACT);
   pc("FM_ADD_IFNOT",FM_ADD_IFNOT);
+  pc("FM_ADD_ALWAYS",FM_ADD_ALWAYS);
   pc("FM_REN_INSERT",FM_REN_INSERT);
   pc("FM_DEL_INSERT",FM_DEL_INSERT);
+  pn("EX_OK",EX_OK);
   return EX_OK;
 }
 

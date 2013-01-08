@@ -2,7 +2,7 @@
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.Id $Id: procmailrc.man,v 2.5 1992/04/29 15:55:09 berg Rel $
+.Id $Id: procmailrc.man,v 2.6 1992/06/03 12:58:50 berg Rel $
 .de Sh
 .br
 .ne 11
@@ -48,10 +48,16 @@ simple appearance, the recipes are simply one line regular expressions
 that are searched for in the header of the arriving mail, the first recipe
 that matches is used to determine where the mail has to go (usually a file).
 .PP
+If a matching recipe does not specify any special flags (like `+FILTER+' or
+`+CONTINUE+') and the recipe is successful (i.e. no write failures or other
+calamities), then processing of the rcfile will cease at this point, and
+procmail will consider the mail to have been delivered.
+.PP
 This enables you to presort your mail extremely straightforward into several
 mailfolders.  Bear in mind though that the mail can arrive concurrently in
-these mailfolders, to make sure this does not result in a mess, proper use
-of lockfiles is highly recommended.
+these mailfolders (if several procmail programs happen to run at the same time,
+not unlikely if a lot of mail arrives), to make sure this does not result in a
+mess, proper use of lockfiles is highly recommended.
 .PP
 The environment variable
 .B assignments
@@ -163,8 +169,8 @@ not have been filtered.  This flag is also recommended if you specified any
 on this recipe.
 .Tp
 .B +WAIT_EXIT_QUIET+
-Has the same meaning as the `+ALSO_NEXT_RECIPE+' flag, but will suppress any
-`Program faillure' messages.
+Has the same meaning as the `+WAIT_EXIT+' flag, but will suppress any
+`Program failure' message.
 .Tp
 .B +IGNORE_WRITERR+
 Ignore any write errors on this recipe (i.e. usually due to an early closed
@@ -194,7 +200,7 @@ If it is a filename (or nonexistent), the mail will be appended to it.
 If it is a directory, the mail will be delivered to a newly created, guaranteed
 to be unique file named $MSGPREFIX* in the specified directory.  If the
 directory name ends in "/.", then this directory is presumed to be an MH
-folder; i.e. procmail will use the lowest number it finds available.
+folder; i.e. procmail will use the next number it finds available.
 .Ss "Environment variable defaults"
 .Tp 2.2i
 .B "USER, HOME and SHELL"
@@ -227,7 +233,7 @@ Your (the recipient's) defaults
 .B LOCKFILE
 \&+DEFdefaultlock+
 .br
-(after procmail closed the last rcfile)+PRESTENV+
+(after procmail closed the last rcfile)+PRESTENV++LD_ENV_FIX+
 .Ss Environment
 .PP
 Before you get lost in the multitude of environment variables, keep in mind
@@ -404,6 +410,10 @@ these lines are fed to the internal egrep
 .I leading
 whitespace, `!' or `\\', it will be stripped.
 Precede it by a `\\' if you want it to be taken literally too.)
+.PP
+On a related note, watch out for trailing whitespace on condition lines, you
+don't see it, but procmail will try to match it; enabling extended diagnostics
+(see LOGFILE) will reveal this.
 .PP
 Watch out for deadlocks when doing unhealthy things like forwarding mail
 to your own account.  Deadlocks can be broken by proper use of

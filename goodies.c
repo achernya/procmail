@@ -7,7 +7,7 @@
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: goodies.c,v 2.16 1992/04/09 16:16:41 berg Rel $";
+static char rcsid[]="$Id: goodies.c,v 2.17 1992/06/03 13:17:41 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -19,11 +19,13 @@ static char rcsid[]="$Id: goodies.c,v 2.16 1992/04/09 16:16:41 berg Rel $";
 #define DOUBLE_QUOTED	2	/* quotes, backslashes and $subtitutions    */
 #define SINGLE_QUOTED	3
 
+#define fgetc() (*fpgetc)()	   /* some compilers previously choked on it */
+
 /* sarg==0 : normal parsing, split up arguments like in /bin/sh
  * sarg==1 : environment assignment parsing, parse up till first whitespace
  * sarg==2 : normal parsing, split up arguments by single spaces
  */
-readparse(p,fgetc,sarg)register char*p;int(*const fgetc)();const int sarg;
+readparse(p,fpgetc,sarg)register char*p;int(*const fpgetc)();const int sarg;
 { static i;int got;char*startb;
   for(got=NOTHING_YET;;)		    /* buf2 is used as scratch space */
 loop:

@@ -1,4 +1,4 @@
-#$Id: Makefile,v 2.21 1992/04/23 16:46:41 berg Rel $
+#$Id: Makefile,v 2.23 1992/07/01 18:04:38 berg Rel $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
@@ -50,7 +50,7 @@ RM	= /bin/rm -f
 INSTALL = cp
 DEVNULL = /dev/null
 
-BINS=procmail lockfile formail
+BINS=procmail lockfile formail mailstat
 
 MANS=man/procmail.1 man/procmailrc.5 man/procmailex.5 man/formail.1 \
 	man/lockfile.1
@@ -77,6 +77,9 @@ lockfile: lockfile.$(O) exopen.$(O) strpbrk.$(O)
 formail: formail.$(O) common.$(O) strpbrk.$(O)
 	$(CC) $(CFLAGS) -o formail formail.$(O) common.$(O) strpbrk.$(O) \
 	 ${LDFLAGS}
+
+mailstat: examples/mailstat
+	cp examples/mailstat mailstat
 
 _autotst: _autotst.$(O)
 	$(CC) $(CFLAGS) -o _autotst _autotst.$(O) $(LDFLAGS)
@@ -193,9 +196,12 @@ install: everything install.man install.bin
 	@$(MAKE) recommend
 
 deinstall:
-	cd $(BINDIR); $(RM) $(BINS); ls -l $(BINS)
-	cd $(MAN1DIR); $(RM) $(MANS1); ls -l $(MANS1)
-	cd $(MAN5DIR); $(RM) $(MANS5); ls -l $(MANS5)
+	@echo ----------------------------- Deinstalling the procmail package.
+	@echo ----------------------------- Checking if everything was removed:
+	@-cd $(BINDIR); $(RM) $(BINS); ls -l $(BINS)
+	@-cd $(MAN1DIR); $(RM) $(MANS1); ls -l $(MANS1)
+	@-cd $(MAN5DIR); $(RM) $(MANS5); ls -l $(MANS5)
+	@echo ----------------------------- Ready.
 
 clean:
 	$(RM) $(OBJ) common.$(O) lockfile.$(O) exopen.$(O) retint.$(O) \
