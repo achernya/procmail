@@ -1,0 +1,22 @@
+1990-12-07: v1.00
+            First release (after 2 weeks of coding and testing)
+1990-12-12: v1.01
+            Added fsync to procmail.c
+            Removed longjmp in lockfile.c out of the signal handler
+                (not portable, so I'm told)
+1991-02-04: v1.02
+            Changes to procmail.c:
+               Added physical-write-error check
+               Altered egrep invocation (left out the -s flag, not supported
+                  on all machines; this didn't change functionality though)
+               Avoided the 'dirty' allocation of one more byte than needed by
+                  rewriting the bogus_header_replace routine
+               Made the finding bogus headers more robust
+            Added sysV lines in Makefile
+1991-02-13: v1.10
+            Changes to procmail.c:
+               Fixed slight error in parsing the recipe when 'h' and 'b' where
+                  specified
+               Started using the official exit codes
+               Made sure that the procmail is not influenced by falsely
+                  set environment variables like LOCKSLEEP

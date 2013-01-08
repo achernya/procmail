@@ -1,0 +1,71 @@
+Some legal stuff:
+
+Use this software package at your own risk.  The programmer can not
+be held liable for any incurred damages due to the use of this software.
+
+You are encouraged to distribute this package freely.  This package is
+however not to be not sold (minor transfer costs excepted) or included in
+any commercially sold software package (if you want to do this anyway,
+contact me (address below), and we'll work something out).
+
+If you distribute it, please leave the package in tact.  If you have some
+important changes that might be usefull to the rest of the world, contact
+me instead.
+
+----------------------
+
+The Procmail mail processing package. (v1.10 1991-02-13)
+
+Can be used to create mail-servers, mailing lists, sort your incoming mail
+(real convenient when subscribing to one or more mailing lists),
+preprocess your mail, or selectively forward certain incoming mail
+automatically to someone.
+
+To install it, edit the Makefile accordingly (if it doesn't compile at first,
+check if some extra header files should be included (or left out) in order
+to make any used types/defines/declarations for the library compatible).
+
+BTW, the warnings you get about 'loop not entered at top': they're normal :-).
+Some older compilers could complain about ambiguous assignments, if they
+assume normal assigns, you're safe.
+
+If you run procmail by hand and pipe in some sample mail, then make
+sure that if you kill procmail, you use "kill pid" and NOT "kill -9 pid".
+Should procmail seem to hang, check if the $LOCKFILE is still present.
+If you kill procmail with "kill pid" it will clean up the $LOCKFILE
+itself.
+
+If you really want to, you can change some of the defines at the start
+of procmail.c to suit your needs.  They should be sufficient for most
+people though.
+
+Every user that wants to use procmail should have a .forward and a
+.procmailrc file in his HOME directory.  For starters, you can look
+at the supplied example "forward" and "procmailrc" files.
+(BTW, be sure to make .forward *world* readable).
+
+For more info about the program, see the man page.
+
+----------------------
+
+Although I can't guarantee that the procmail (or lockfile) program
+will perform as required, I must say that I made the utmost effort
+to make procmail as robust as any program can be.
+
+Procmail was designed to deliver the mail under the worst conditions
+(file system full, process table full, missing support files,
+unavailable executables; it all doesn't matter).
+Should (in the unlikely event) procmail be unable to deliver your mail
+somewhere, the mail will bounce back to the sender.
+
+However, as with any program, bugs can not be completely ruled out.
+I tested the program extensively, and believe it should be relatively
+bug free (no known bug at the time).  Should, however, anyone
+find any bugs (highly unlikely :-), I would be pleased (well, sort of :-)
+to hear about it.  Please send me the patches or bug report.
+I'll look at them and will try to fix it in a future release.
+
+Cheers,
+       Stephen R. van den Berg  at RWTH-Aachen, Germany.
+
+Internet E-mail: berg@marvin.e17.physik.tu-muenchen.de

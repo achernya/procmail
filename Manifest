@@ -1,0 +1,15 @@
+Makefile        We all know what that is.
+README          Important, read it.
+HISTORY         Recent and ancient changes (or bugs) documented.
+lockfile.1      Man page for lockfile.
+lockfile.c      You guessed it.
+Manifest        Right again.
+procmail.1      Yes, the man page for procmail.
+procmail.c      Yes, exactly.
+sysexits.h      Substitute for the machines that don't have it (is it ever
+                needed?)
+procmailrc      A sample .procmailrc file
+rmail           A sample shell script that demonstrates how to use
+                lockfiles while reading the mail (to ensure mail integrity
+                as soon as you exit the mail program)
+forward         A sample .forward file

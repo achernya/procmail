@@ -1,0 +1,18 @@
+PATH=$HOME/bin:/usr/bin:/global/bin:/usr/ucb:/bin
+MAILDIR=$HOME/mail      # You'd better make sure it exists
+DEFAULT=$MAILDIR/mbox
+LOGFILE=$MAILDIR/from
+LOCKFILE=$HOME/.lockmail
+
+::
+^From.*thf
+todd
+
+:2fh
+^From root
+^Subject: Output from "at" job
+|echo "From at job";echo;egrep "^Date:"
+:b
+^From at job
+atjunk
+

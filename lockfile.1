@@ -1,0 +1,98 @@
+.\" @(#)lockfile.1 1.29 90/12/07 SMI;
+.de Sh
+.br
+.ne 6
+.SH \\$1
+..
+.de Ss
+.br
+.ne 6
+.SS \\$1
+..
+.TH LOCKFILE 1 "07 December 1990"
+.SH NAME
+lockfile \- conditional semaphore-file creator
+.SH SYNOPSIS
+.B lockfile
+[
+.BI \- sleeptime
+] [
+.BI \-r retries
+] [
+.B \-!
+]
+.I filename
+\&.\|.\|.
+.Sh "DESCRIPTION"
+.B lockfile
+can be used to create one or more
+.I semaphore
+.IR files .
+If
+.B lockfile
+can't create all the specified files (in the specified order), it waits
+.I sleeptime
+(defaults to 8) seconds and retries the last file that didn't succeed.
+You can specify the number of
+.I retries
+to do until failure is returned.
+If the number of
+.I retries
+is 0 (default)
+.B lockfile
+will retry forever.
+.LP
+If the number of
+.I retries
+expires before all files have been created,
+.B lockfile
+returns failure and removes all the files it created up till that point.
+.LP
+The return value of
+.B lockfile
+can be easily inverted by specifying
+.B \-!
+as an argument (handy in shell scripts).
+.LP
+All flags can be specified anywhere on the command line, they will be
+processed when encountered.  The command line is simply parsed from
+left to right.
+.LP
+All files created by
+.B lockfile
+will have access permission 0, and therefore will have to be removed
+with
+.B rm
+.BR \-f .
+.Sh "SEE ALSO"
+.LP
+.BR rm (1),
+.BR mail (1),
+.BR binmail (1),
+.BR sendmail (8),
+.BR procmail (1)
+.Sh "BUGS & SPECIAL FEATURES"
+.LP
+.B lockfile
+is only a simple program and can't process concatenated options.
+.LP
+Multiple
+.B \-!
+flags will not toggle the return status.
+.Sh "NOTES"
+.LP
+Since flags can occur anywhere on the command line, any filename starting
+with an '-' has to be preceded by another '-'.
+.LP
+The number of
+.I retries
+is global.  That is, it is not reset when a new file is being created.
+It can, however, be reset by specifying
+.RI \-r newretries
+after every file on the command line.
+.Sh "AUTHOR"
+.LP
+Stephen R. van den Berg at RWTH-Aachen, Germany
+.RS
+berg@marvin.e17.physik.tu-muenchen.de
+.RE

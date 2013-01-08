@@ -1,0 +1,542 @@
+.\" @(#)procmail.1 1.29 91/02/13 SMI;
+.de Sh
+.br
+.ne 6
+.SH \\$1
+..
+.de Ss
+.br
+.ne 6
+.SS \\$1
+..
+.de Tp
+.br
+.ne 6
+.TP \\$1
+..
+.TH PROCMAIL 1 "13 February 1991"
+.SH NAME
+procmail \- autonomous mail processor
+.SH SYNOPSIS
+.B procmail
+[
+.IB environmentvariable = value
+|
+.I rcfilename
+] 
+\&.\|.\|.
+.Sh "DESCRIPTION"
+.LP
+For a quick start, see
+.B NOTES
+at the end.
+.LP
+.B procmail
+first sets some environment variables to default values, then, if no
+arguments are specified, it reads the mail message from stdin until an
+EOF, separates
+the body from the header and starts to look for a file named
+.B .procmailrc
+in your home directory.
+.LP
+.Ss "Defaults"
+.Tp 22
+.B USER, HOME and SHELL
+Your (the recipient's) defaults
+.Tp
+.B SHELLMETA
+"'`&#{}()[]*?|<>~;!\\
+.Tp
+.B SHELLFLAGS
+-c
+.Tp
+.B MAILDIR
+$HOME
+.Tp
+.BR DEFAULT
+$MAILDIR/.mailbox
+.Tp
+.B ORGMAIL
+/var/spool/mail/$USER
+.Tp
+.B GREP
+/usr/bin/egrep
+.Tp
+.B SENDMAIL
+/usr/lib/sendmail
+.Tp
+.B LOCKEXT
+\&.lock
+.Tp
+.B LOCKSLEEP
+8
+.Ss "Environment"
+.Tp 12
+.B MAILDIR
+Default directory while
+.B procmail
+is executing (that means that all paths are relative to $MAILDIR).
+.Tp
+.B DEFAULT
+Default mailbox file (if not told otherwise,
+.B procmail
+will dump mail in this file)
+.Tp
+.B LOGFILE
+All incoming messages will be logged here with their 'From' and 'Subject'
+lines in the header.  This file will also contain any error or diagnostic
+messages from
+.BR procmail .
+(Normally none :-).  If this file is not specified it defaults to
+.BR /dev/null.
+.Tp
+.B ORGMAIL
+Usually the system mailbox (ORiGinal MAILbox).  If, for some obscure
+reason (like "filesystem full") the mail could not be delivered, then this
+file will be the last resort.  If
+.B procmail
+fails to save the mail in here (deep, deep trouble :-), then the mail
+will bounce back to the sender.
+.Tp
+.B LOCKFILE
+Global semaphore file.  If this file already exists,
+.B procmail
+will wait until it has gone before proceeding, and will create it itself
+(cleaning it up when ready, of course).  If more than one lockfile are
+specified, then the previous one will be removed before trying to create
+the new one.
+.Tp
+.B LOCKEXT
+Default extension that is appended to a destination file to determine
+what local lockfile to use (only if turned on, on a per-recipe basis).
+.Tp
+.B LOCKSLEEP
+Number of seconds
+.B procmail
+will sleep before retrying on a lockfile (if it already existed).
+.Tp
+.B HOST
+If this is not the hostname of the machine, processing of the current
+rcfile will immediately cease.  If other rcfiles were specified on the
+command line, processing will continue with the next one.  If all rcfiles
+are exhausted, the program will terminate, but will not generate an error
+(i.e. to the mailer it will seem that the mail has been delivered).
+.Tp
+.B UMASK
+The name says it all (if it doesn't, then forget about this one :-).  It
+is taken as an octal number.  If not specified, it defaults to 077.
+.Tp
+.B GREP
+The program that gets called for parsing regular expressions.
+.br
+It is called as: $GREP -e "$*" [-i];
+.Tp
+.B SHELLMETA
+If any of the characters in
+.B SHELLMETA
+appears in the line specifying a filter or program, the line will be feeded
+to
+.B $SHELL
+instead of being executed directly.
+.Tp
+.B SHELLFLAGS
+Any invocation of
+.B $SHELL
+will be like:
+.br
+$SHELL $SHELLFLAGS "$*";
+.Tp
+.B SENDMAIL
+If you're not using the
+.I forwarding facility
+don't worry about this one.  It specifies the program being called to
+forward any mail.
+.br
+It gets invoked as: $SENDMAIL $*;
+.Sh "ARGUMENTS"
+.LP
+Any arguments containing an '=' are considered to be environment variable
+assignments, they will
+.B all
+be evaluated after the default values have been
+assigned and before the
+.B first
+rcfile is parsed.
+.LP
+Any other arguments are presumed to be rcfiles; 
+.B procmail
+will start with the first one it finds on the command line.  The following
+ones will only be parsed if the preceding ones have a not matching
+.B HOST
+directive entry.
+.LP
+If no rcfiles are specified, it looks for $HOME/.sortmailrc.  If not even
+that can be found processing will continue according to the default
+settings of the environment variables and the ones specified on the command
+line.
+.Sh "RCFILE FORMAT"
+.LP
+Environment variable assignments and recipes can be freely intermixed
+in the rcfile.  If any environment variable has a special meaning to
+.BR procmail ,
+it will used appropiately the moment it is parsed. (i.e. you can
+change the default directory whenever you want by specifying a new
+.BR MAILDIR ,
+switch lockfiles by specifying a new
+.B LOCKFILE
+(normal persons won't need this particular application though), change
+the umask at any time, etc., the possibilities are endless :-).
+.LP
+Values being assigned to environment variables (in the rcfile) can not
+contain any space, tab, newline or '#' characters.  Anything on a line
+from the first '#' till EOL is considered comment.
+.Ss "Recipes"
+.LP
+A line starting with ':' marks the beginning of a recipe.  It has the
+following format:
+.LP
+: [
+.I number
+] [
+.I options
+] [ : [
+.I locallockfile
+] ]
+.LP
+The
+.I number
+is optional
+(defaults to 1) and specifies the number of conditionals following this
+line.  Conditionals are complete lines that are passed onto
+.B $GREP
+.BR literally ,
+conditionals are anded; if
+.I number
+is zero, then the condition is always true and no conditionals are expected
+next.
+.LP
+.I Options
+can be any of the following (don't insert spaces in between, from the first
+character that is not a valid option till EOL will be skipped without notice):
+.Tp 5
+.B H
+Feed the header to $GREP (default)
+.Tp
+.B B
+Feed the body to $GREP
+.Tp
+.B I
+Tell $GREP to ignore case
+.Tp
+.B h
+Feed the header to the pipe (default)
+.Tp
+.B b
+Feed the body to the pipe (default)
+.Tp
+.B f
+Consider the pipe as a filter (ignored if a file)
+.Tp
+.B c
+Continue processing rcfile even if this recipe matches (not needed if 'f'
+specified)
+.Tp
+.B w
+Wait for the process to finish (and check if it was successfull, normally
+ignored).  If you specify 'f' and it matches, and the original mailer
+will be told that the mail has already been delivered.  If you want
+.B procmail
+to stall telling the mailer that the mail has been delivered, until
+it really has been, you'll have to specify 'w' together with every 'f'.
+If you don't, the mailer will be told that the mail has been delivered
+succesfully as soon as the first 'f' without a 'w' has been processed.
+This option is also advisable if you specified any
+.I locallockfile
+on this recipe.
+.Tp
+.B s
+Make
+.B procmail
+secure.  If any fork fails in the current recipe, retry until it succeeds
+(usefull when running on machines that occasionally have a full process tables,
+to ensure normal delivery in any case).  If a fork fails and 's' is
+not specified, it simply is logged in $LOGFILE and parsing of the rcfile
+continues (eventually delivering to $DEFAULT if no more recipes match).
+.Ss "Local lockfile"
+.LP
+If you put a second ':' on the first recipe line, then
+.B procmail
+will use a
+.I locallockfile
+(for this recipe only).  You optionally can specify
+the
+.I locallockfile
+to use; if you don't however,
+.B procmail
+will use the filename specified as the destination (or the filename
+following the first '>>') and will append $LOCKEXT to it.
+.Ss "Recipe destination"
+.LP
+The next line can start with the following characters:
+.Tp
+.B !
+Forwards to all the specified mail addresses (comments are 
+.B not
+ignored on
+this line).
+.Tp
+.B |
+Starts the specified program, possibly in $SHELL if any
+of the $METASHELL characters are found (that means comments are normally
+processed by the shell on
+.B this
+line).
+.LP
+Anything else will be taken as a filename (relative to $MAILDIR).  After the
+filename everything will be ignored till EOL.
+.Sh "EXAMPLES"
+.LP
+Some example recipes are listed below:
+.LP
+Sort out all mail to mailling list scuba-dive.
+.RS
+.LP
+:
+.PD 0
+.LP
+^TOscuba
+.LP
+scubafile
+.PD
+.LP
+.RE
+Forward all mail from peter about compilers to william (and keep a copy
+of it here in petcompil).
+.RS
+.LP
+:2 bc
+.PD 0
+.LP
+^From.*peter
+.LP
+^Subject:.*compilers
+.LP
+! william@somewhere.edu
+.LP
+:2
+.LP
+^From.*peter
+.LP
+^Subject:.*compilers
+.LP
+petcompil
+.PD
+.RE
+.LP
+Add the headers of all messages to your private header collection (for
+statistics or mail debugging); and use the lockfile "headc.lock".  In order
+to make sure the lockfile is not removed until the pipe has finished,
+you have to specify option 'w'; otherwise the lockfile would be removed as
+soon as the pipe had accepted the mail.
+.RS
+.LP
+:0hwc:
+.PD 0
+.LP
+| uncompress headc.Z; cat >>headc; compress headc
+.RE
+.PD
+.LP
+Prepend a linecount at the beginning of all multi part messages
+(and don't allow
+.B procmail
+to terminate early if the filter succeeds).  Use "templock" as lockfile.
+.RS
+.LP
+:wbf:templock
+.PD 0
+.LP
+^Subject:.*\\(.*(/|of).*\\)
+.LP
+|echo "wc output:";tee tempf|wc;cat tempf;rm tempf
+.PD
+.RE
+.LP
+Dump all mail from at jobs into one file, filter out the interesting
+parts of the header first.
+.LP
+.RS
+:2fh
+.PD 0
+.LP
+^From root
+.LP
+^Subject: Output from "at" job
+.LP
+|echo "From at job";echo;egrep "^Date:"
+.LP
+:b
+.LP
+^From at job
+.LP
+atjunk
+.RE
+.PD
+.Sh "FILES"
+.PD 0
+.Tp 22
+.B /etc/passwd
+to get the recipients USER, HOME and SHELL variable defaults
+.Tp
+.B /var/spool/mail/$USER
+default last resort to put mail
+.Tp 
+.B $HOME/.procmailrc
+default rc file
+.Tp
+.B $HOME/.mailbox
+default mailbox
+.Tp
+.B /var/spool/mail/$USER.lock
+lockfile for standard system mail directory (not used by
+.B procmail
+unless you explicitly tell it to)
+.Tp
+.B /lib/sendmail
+default mail forwarder
+.Tp
+.B /usr/bin/egrep
+default regular expression parser
+.PD
+.Sh "SEE ALSO"
+.LP
+.BR sh (1),
+.BR csh (1),
+.BR mail (1),
+.BR binmail (1),
+.BR uucp (1C),
+.BR aliases (5),
+.BR sendmail (8),
+.BR egrep (1V),
+.BR lockfile (1)
+.Sh "DIAGNOSTICS"
+.Tp 23
+Error while writing to "x"
+nonexistent subdirectory, no write permission, or disk full
+.Tp
+Failed forking "x"
+not possible if 's' flag specified on the recipe
+.Tp
+Program failure of "x"
+some pipe or program that was started by
+.B procmail
+returned a non-null value
+.Tp
+Failed to execute "x"
+program not in path, or not executable
+.Tp
+Couldn't unlink "x"
+lockfile was already gone, or write permission to the directory were the
+lockfile is has been denied
+.Tp
+Out of memory
+probably a runaway filter that dumps junk into
+.BR procmail,
+or the system could be out of swapspace
+.Tp
+Lockfailure
+can only occur if you specify some real weird (and illegal) lockfilenames
+.PD
+.Sh "BUGS & SPECIAL FEATURES"
+.LP
+If you don't explicitly tell
+.B procmail
+to wait (option 'w') for the pipe or program to finish, it won't wait
+and will terminate early (not knowing if the pipe or program returns
+success).
+.LP
+The only substitutions of environment variables that can be handled by
+.B procmail
+itself are of the type $name.
+.LP
+A line buffer of 2048 bytes is used when processing the
+.BR rcfile ,
+any environment variable expansions
+.B have
+to fit within this limit.
+.LP
+Race conditions sometimes result in a failure to remove a lock file
+(e.g. forwarding mail to yourself (on the same account) could (not
+necessarily) be a problem).
+.LP
+In the unlikely event that you absolutely need to kill
+.B procmail
+before it has finished, then first try and use
+the regular kill command (SIGTERM), otherwise some
+.I lockfiles
+might not get removed.
+.LP
+You should create a shell script that uses
+.BR lockfile (1)
+before invoking
+the mail program on any mailbox file other than the system mailbox.
+.Sh "NOTES"
+.LP
+Any program executed from within
+.B procmail
+will be searched for in the PATH variable (you have to specify it though).
+It is advisable however, to specify an absolute path for $GREP, because
+it get's executed fairly often.
+.LP
+If the regular expression starts with "^TO" it will be substituted by
+"^(To|Cc|Apparently-To):.*", which should catch all destination
+specifications.
+.LP
+Any lines in the body of the message that look like postmarks are prepended
+with '>' (disarms bogus mailheaders).  The regular expression that is used
+to search for these postmarks is:
+.RS
+\\n\\nFrom +[^\\t\\n ]+ +[^\\n\\t]
+.RE
+.LP
+Should the uid
+.B procmail
+is running under have no corresponding /etc/passwd entry, then HOME will
+default to /tmp, USER will default to #uid.
+.LP
+Your .forward (beware, it
+.B has
+to be world readable) file should contain (include the quotes):
+.LP
+"|exec /global/bin/procmail"
+.Ss "A sample small .procmailrc:"
+.PD 0
+.LP
+PATH=/bin:/usr/bin:/global/bin:/usr/local/bin
+.LP
+MAILDIR=$HOME/mail      #you'd better make sure it exists
+.LP
+DEFAULT=$MAILDIR/mbox
+.LP
+LOGFILE=$MAILDIR/from
+.LP
+LOCKFILE=$HOME/.lockmail
+.LP
+:
+.LP
+^From.*berg
+.LP
+from_me
+.LP
+:
+.LP
+^Subject:.*Flame
+.LP
+/dev/null
+.PD
+.Sh "AUTHOR"
+.LP
+Stephen R. van den Berg at RWTH-Aachen, Germany
+.RS
+berg@marvin.e17.physik.tu-muenchen.de
+.RE
