@@ -1,25 +1,25 @@
-$Id: mailinglist,v 2.3 1991/10/18 15:39:20 berg Rel $
+$Id: mailinglist,v 2.4 1992/01/31 12:03:04 berg Rel $
 
-                        How to set up mailing lists
-                        ---------------------------
+			How to set up mailing lists
+			---------------------------
 
-                Written by Stephen R. van den Berg.
-                                        berg@messua.informatik.rwth-aachen.de
-                                        berg@physik.tu-muenchen.de
+		Written by Stephen R. van den Berg.
+					berg@messua.informatik.rwth-aachen.de
+					berg@physik.tu-muenchen.de
 
 This document mainly describes a sendmail environment, much of it applies
 to non-sendmail mail agents as well.
 
 
 Contents:
----------       1. Intro
-                2. Bouncing mail
-                3. The disadvantages
-                4. How to circumvent these disadvantages
-                5. Why use procmail to filter the mailinglist mail?
-                6. How do I use procmail to filter the mailinglist mail?
-                7. Now, what does the above all do?
-                8. The result of this exercise
+---------	1. Intro
+		2. Bouncing mail
+		3. The disadvantages
+		4. How to circumvent these disadvantages
+		5. Why use procmail to filter the mailinglist mail?
+		6. How do I use procmail to filter the mailinglist mail?
+		7. Now, what does the above all do?
+		8. The result of this exercise
 
 1. Intro
    -----
@@ -63,12 +63,12 @@ This way local mail will bounce back to mylist-request@your.domain.
 If you are using the above methods, some obvious disadvantages come to mind
 however:
 
-a. The subscriber list can not exceed 1000 bytes (on most sendmails).
-b. The subscriber list can not be changed on-the-fly (/usr/lib/aliases needs
+a. The subscriber list cannot exceed 1000 bytes (on most sendmails).
+b. The subscriber list cannot be changed on-the-fly (/usr/lib/aliases needs
    to be edited, and newaliases has to be run).
-c. People can not be prevented from submitting messages like "Please remove
+c. People cannot be prevented from submitting messages like "Please remove
    me from this mailinglist" to mylist (and thereby annoying all subscribers).
-d. People can not be guarded from themselves in case they insert
+d. People cannot be guarded from themselves in case they insert
    "Return-Receipt-To:" fields in their headers (if they are particularly
    unlucky, they will receive an acknowledge mail from *every* subscriber's
    sendmail).
@@ -77,7 +77,7 @@ e. People including "Errors-To:" or "Sender:" fields can cause the bounce
 f. There is no way of limiting the number of submitters, i.e. every person
    who knows the name of the mailing list and who can send mail to your.domain
    is able to submit messages to the list.  This means, for example, that you
-   can not limit a mailing list to local users (i.e. only local users can
+   cannot limit a mailing list to local users (i.e. only local users can
    submit).
 g. You are unable to insert a "Reply-To: mylist@your.domain" in case you
    would want to (this makes replying to the list easier).
@@ -87,16 +87,16 @@ g. You are unable to insert a "Reply-To: mylist@your.domain" in case you
   -------------------------------------
 
 a. Can be circumvented by using nested aliases like:
-        mylist: mylist1, mylist2
-        mylist1: fred,john
-        mylist2: wilma,barney@bedrock,pebbles
+	mylist: mylist1, mylist2
+	mylist1: fred,john
+	mylist2: wilma,barney@bedrock,pebbles
    This can however, become extremely messy to maintain.
 
 b. This can partly be avoided if you use aliases like:
-        mylist: :input:/path/to/the/memberfile
+	mylist: :input:/path/to/the/memberfile
    The memberfile should contain:
-        fred,john,wilma,barney@bedrock,pebbles
-   You can not avoid using newaliases however, and *will* get extremely messy
+	fred,john,wilma,barney@bedrock,pebbles
+   You cannot avoid using newaliases however, and *will* get extremely messy
    if you have to start using nested aliases.
 
 c. Can only be taken care of by using a mailfilter like procmail.
@@ -116,7 +116,7 @@ h. Can only be taken care of by using a mailfilter like procmail.
 Instead of using a mailfilter you could also take care of most of the problems
 three till seven by editing the sendmail.cf file.  I strongly would recommend
 against this approach however, since this will be too much of a customizing
-operation and surely will not be a trivial task (in all cases).  As a general
+operation and surely will not be a trivial task (in all cases).	 As a general
 rule: don't mess with a sendmail.cf file once it is working :-).
 
 Now, you could, instead of procmail, simply use immediate VNIX commands
@@ -139,13 +139,13 @@ C. Another hairy problem will be determining the end of the header, of course
    awk script to ensure that any substitutions/changes will not occur in
    the body of the message.
 
-procmail does not *directly* allow you to change any headers, but that
+Procmail does not *directly* allow you to change any headers, but that
 feature is not really necessary since you can tell procmail to send ONLY the
 header through some filter of your choice.
 
 To comment on the previously mentioned three disadvantages:
 
-A. procmail takes care of that.  Should the filter have problems anyway,
+A. procmail takes care of that.	 Should the filter have problems anyway,
    procmail will graciously notice that the filter was in some kind of
    trouble, and will try something else with the original unmunged mail
    (you can specify what it should do of course, obvious choices: try
@@ -162,7 +162,7 @@ C. procmail can be told to send the header, the body or both through the
 Procmail has some additional advantages too:
 
  -- It will probably all go a bit faster, since only the header of the mail
-    is being piped through the filter.  Also, procmail reads in the mail in
+    is being piped through the filter.	Also, procmail reads in the mail in
     16KB chunks, not line by line as sed does.
 
  -- You could use procmail to filter out any messages to the normal mailing
@@ -179,6 +179,14 @@ particular syntax procmail would have had to do the same.
 
 As it happens, the accompanying formail program is able to cater to most
 (if not all) of your needs regarding mail munging.
+
+If, on the other hand, you want to do more complex things like moderated
+mailing lists with several moderators, etc., if would suggest you take
+a look at the more complex/specialised mail-server packages like:
+listserv available on cs.bu.edu, author: tasos@cs.bu.edu
+Of course, most of what these packages can do, can be done with procmail as
+well; it is just that you might be forced to write some additional shell
+scripts/programs to accomplish the same.
 
 
 6. How do I use procmail to filter the mailinglist mail?
@@ -207,14 +215,14 @@ it will cater for all the mailinglists you like to create.
 If mail arrives at mylist, first of all procmail will be started using
 /some/path/listrc as the rcfile.  Then it will grep the header to check if
 it could be a bounced message after all (from postmaster or mailer-daemon),
-or if it probably is a request message.  If neither applies, procmail will
+or if it probably is a request message.	 If neither applies, procmail will
 filter just the header of the message through formail.
 
 formail will remove any "Return-Receipt-To:" fields, and will provide plain
 substitutes for "Errors-To:" and "Sender:".  Then it will look for
 any "Reply-To:" fields which are already in the header and rewrite them
 as "Old-Reply-To:";  after having done this it will add your "Reply-To:"
-field.  BTW, the "Return-Receipt-To:" and "Errors-To:" fields are not
+field.	BTW, the "Return-Receipt-To:" and "Errors-To:" fields are not
 recommended by the RFC-822, they are however commonly supported by most
 sendmails;  if they are not supported however, they won't hurt, they will
 simply be ignored.
@@ -226,12 +234,12 @@ occurs if the sender of the mail is *not* a local user; if the sender
 is a local user, then sendmail (and procmail) runs as the local user.
 
 *********************************** WARNING **********************************
-*                                                                            *
+*									     *
 * For this reason it might be wise to allow writing of the memberlist file   *
 * only (to a list maintainer), keep the listrc file under *root supervision* *
 * (i.e. owned by a very reliable person (e.g. root), world readable, but NOT *
-* world writeable).                                                          *
-*                                                                            *
+* world writeable).							     *
+*									     *
 ******************************************************************************
 
 

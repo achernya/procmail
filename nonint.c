@@ -1,13 +1,13 @@
 /************************************************************************
  *	Collection of routines that don't return int			*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: nonint.c,v 2.8 1991/10/18 15:33:23 berg Rel $";
+static char rcsid[]="$Id: nonint.c,v 2.16 1992/01/31 12:35:17 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -53,7 +53,7 @@ log(new)const char*const new;
      lseek(STDERR,0L,SEEK_END);		  /* locking should be done actually */
 #endif
      if(nextexit)
-	goto direct;			      /* carefull, in terminate code */
+	goto direct;			       /* careful, in terminate code */
      i=lold+lnew;
      if(p=lold?realloc(old,i):malloc(i))		 /* unshelled malloc */
       { memmove((old=p)+lold,new,(size_t)lnew);			   /* append */
@@ -84,26 +84,22 @@ pid_t sfork()				/* this fork can survive a temporary */
   lcking=0;return i;
 }
 
+void srequeue()
+{ retval=EX_TEMPFAIL;sterminate();
+}
+
+void slose()
+{ fakedelivery=2;sterminate();
+}
+
+void sbounce()
+{ retval=EX_CANTCREAT;sterminate();
+}
+
 extern char*lastexec,*backblock;		/* see retint.c for comment */
 extern long backlen;
 extern pid_t pidfilt,pidchild;
 extern pbackfd[2];
-
-void sterminate()
-{ static const char*const msg[]={newline,0,"memory\n","fork\n",
-   "file descriptor\n","hard lock\n"};
-  ignoreterm();
-  if(pidchild>0)	    /* don't kill what is not ours, we might be root */
-     kill(pidchild,SIGTERM);
-  if(!nextexit)
-   { nextexit=1;log("Terminating prematurely");
-     if(1!=lcking)
-      { if(1<lcking)
-	   log(whilstwfor);
-	log(msg[lcking]);terminate();
-      }
-   }
-}
 
 void stermchild()
 { if(pidfilt>0)		    /* don't kill what is not ours, we might be root */
@@ -118,7 +114,7 @@ void stermchild()
 
 void ftimeout()
 { alarm(0);alrmtime=0;
-  if(pidchild>0&&!kill(pidchild,SIGTERM))	  /* carefull, killing again */
+  if(pidchild>0&&!kill(pidchild,SIGTERM))	   /* careful, killing again */
       { log("Timeout, terminating");logqnl(lastexec);
       }
   signal(SIGALRM,ftimeout);
@@ -127,10 +123,13 @@ void ftimeout()
 long dump(s,source,len)const int s;const char*source;long len;
 { int i;
   if(s>=0)
-   { lockfd(s);lastdump=len;mboxseparator(s);  /* prepend optional separator */
+   { fdlock(s);lastdump=len;mboxseparator(s);  /* prepend optional separator */
 #ifndef O_CREAT
      lseek(s,0L,SEEK_END);
 #endif
+     if(len&&tofile)		       /* if it is a file, trick NFS into an */
+      { --len;rwrite(s,source++,1);sleep(1);		    /* a_time<m_time */
+      }
      while(i=rwrite(s,source,BLKSIZ<len?BLKSIZ:(int)len))
       { if(i<0)
 	 { i=0;goto writefin;
@@ -141,7 +140,7 @@ long dump(s,source,len)const int s;const char*source;long len;
 	lastdump++,rwrite(s,newline,1);	       /* message always ends with a */
      mboxseparator(s);		 /* newline and an optional custom separator */
 writefin:
-     unlockfd();rclose(s);return ignwerr?(ignwerr=0):len-i;
+     fdunlock();rclose(s);return ignwerr?(ignwerr=0):len-i;
    }
   return len?len:-1;	   /* return an error even if nothing was to be sent */
 }
@@ -172,6 +171,10 @@ char*readdyn(bf,filled)char*bf;long*const filled;
   do
    { *filled+=i;				/* change listed buffer size */
 jumpin:
+#ifdef SMALLHEAP
+     if((size_t)*filled>=(size_t)(*filled+BLKSIZ))
+	lcking=2,nomemerr();
+#endif
      bf=realloc(bf,*filled+BLKSIZ);    /* dynamically adjust the buffer size */
 jumpback:;
    }
@@ -199,7 +202,7 @@ char*fromprog(name,dest)char*const name;char*dest;
   rclose(PWRI);nls=0;
   if(!forkerr(pidchild,name))
    { while(0<rread(PRDI,dest,1))			    /* read its lips */
-	if(*dest=='\n')				   /* carefull with newlines */
+	if(*dest=='\n')				    /* careful with newlines */
 	   nls++;		    /* trailing newlines should be discarded */
 	else
 	 { if(nls)
@@ -238,6 +241,14 @@ long renvint(i,env)const long i;const char*const env;
 
 char*egrepin(expr,source,len,casesens)const char*expr,*source;
  const long len;
-{ source=regexec(expr=regcomp(expr,!casesens),source,len,!casesens);free(expr);
-  return(char*)source;
+{ source=bregexec(expr=bregcomp(expr,!casesens),
+   source,len>0?(size_t)len:(size_t)0,!casesens);
+  free(expr);return(char*)source;
+}
+
+char*lastdirsep(filename)const char*filename;	 /* finds the next character */
+{ const char*p;					/* following the last DIRSEP */
+  while(p=strpbrk(filename,dirsep))
+     filename=p+1;
+  return(char*)filename;
 }

@@ -24,7 +24,8 @@ autoconf	The shell script that seizes your compiler and machine,
 		kludges that are going to be applied for your installation.
 
 shell.h		Defines a few 'shell' macros for malloc and the like.
-man/*		Yes, the man pages (made in a labour camp).
+man/*		Yes, the man pages (made in a labour camp) and two additional
+		files which makes these man pages auto-adapting.
 include/*	A few files that are supposed to fool your compiler into
 		thinking that it has ANSI and POSIX conforming include files.
 examples/?procmailrc
@@ -34,7 +35,8 @@ examples/?rmail
 		lockfiles while reading the mail (to ensure mail integrity
 		as soon as you exit the mail program).
 examples/forward
-		A sample .forward file.
+		A sample .forward file (MMDF users should disregard this file
+		and look in the man page).
 examples/advanced
 		Some extra info for network mounted mailboxes, examples of
 		advanced .procmailrc expressions and using procmail as

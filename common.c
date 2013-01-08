@@ -1,13 +1,13 @@
 /************************************************************************
  *	A some common routines for procmail and formail			*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: common.c,v 2.5 1991/10/18 15:33:23 berg Rel $";
+static char rcsid[]="$Id: common.c,v 2.9 1992/01/09 17:23:14 berg Rel $";
 #endif
 #include "includes.h"
 
@@ -15,7 +15,7 @@ void*tmalloc();
 extern const char binsh[];
 
 #ifdef NOmemmove
-void*memmove(To,From,count)void*To,*From;register size_t count;
+void*smemmove(To,From,count)void*To,*From;register size_t count;
 #ifdef NObcopy
 { register char*to=To,*from=From;/*void*old;*/	  /* silly compromise, throw */
   /*old=to;*/count++;--to;--from;  /* away space to be syntactically correct */

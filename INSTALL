@@ -1,7 +1,8 @@
 Discusses:
 		1. Getting the lot to compile
-		2. Setting up the environment
-		3. Extra options if you are a system administrator
+		2. DEBUGGING AID
+		3. Setting up the environment
+		4. Extra options if you are a system administrator
 
 				---
 
@@ -11,7 +12,7 @@ Discusses:
 To install procmail, lockfile and formail: edit Makefile & config.h accordingly
 and type 'make install'.
 Intended configurable options in Makefile are: the install-destinations
-Intended configurable options in config.h are: HARDLOCKS and MMDF support.
+Intended configurable options in config.h are: KERNEL_LOCKS and MMDF support.
 
 'make install' will:
       - execute autoconf (a shell script that repeatedly calls the C compiler
@@ -35,7 +36,7 @@ lockfile needs only to be installed if you plan to read several mailboxes
 formail needs only to be installed if mail sometimes arrives in nonstandard
 	mailbox format (or if you want to generate auto replies, split up
 	mailboxes/digests etc., see the man page of formail for more info).
-
+	Formail is not called by procmail unless *you* tell it to.
 
 If things don't compile automagically, I suggest you take a look at:
 autoconf, autoconf.h, config.h, includes.h
@@ -44,7 +45,30 @@ For autoconf to work as intended, your compiler should either be fully ANSI
 compliant, or you should NOT turn off all warnings; enabling all warnings
 shouldn't hurt.	 In most cases the default options in the Makefile will do.
 
-The sources are supposed to be fully ANSI and K&R compliant.
+The sources are supposed to be fully ANSI, K&R and POSIX compliant.
+
+				---
+
+2. DEBUGGING AID
+   -------------
+
+Since procmail is intended to run completely independent of any terminals, it
+doesn't use the stderr output to display error messages.  It is recommended,
+especially during debugging, to specify a LOGFILE (see man page) in the
+rcfile or on the command line.	Procmail will log all serious problems it
+encounters.  Of course, instead of a regular file, one could also specify a
+terminal as the default logfile.
+
+Also, procmail can be persuaded to be a lot more verbose by preceding the
+logfile name by a colon.
+Therefore a suggested command line for your first trial run would be:
+procmail LOGFILE=:/dev/tty
+(now type in a pseudo mail-message)
+
+If all else fails, you can try uncommenting the "#define console" entry
+in the config.h file.  This will provide you with the most verbose procmail
+you can make.  It is of course a good idea to comment out this line again
+after your troubles have been solved.
 
 If you run procmail by hand and pipe in some sample mail, then make
 sure that if you kill procmail, you use "kill pid" and NOT "kill -9 pid".
@@ -52,30 +76,30 @@ Should procmail seem to hang, check if the $LOCKFILE is still present.
 If you kill procmail with "kill pid" it will clean up the $LOCKFILE
 itself.
 
-Suggested command line for a test run: "procmail -d LOGFILE=:/dev/tty"
-(now type in a mail message).
-
 				---
 
-2. Setting up the environment
+3. Setting up the environment
    --------------------------
 
 Every user that wants to use procmail should have a .forward and a
 .procmailrc file in his HOME directory.	 For starters, you can look
 at the supplied example files in "examples".
 (BTW, be sure to make .forward *world* readable).
+MMDF users should note that they need a .maildelivery file *instead* of the
+.forward file (see the man page for more information).
 
 				---
 
-3. Extra options if you are a system administrator
+4. Extra options if you are a system administrator
    -----------------------------------------------
 
 If you are a system administrator you can decide to install procmail
-globally (i.e. as an equivalent substitute for /bin/mail), this has the
-advantage that users do not need to have a .forward file anymore that
-calls up procmail.  Simply having a .procmailrc file in the $HOME directory
-will suffice.  Operation is transparant in this case (i.e. if no .procmailrc
-file is present in the $HOME directory, mail will be delivered as usual).
+globally (i.e. as an equivalent substitute for the local-mail*delivery*-
+capabilities of /bin/mail), this has the advantage that users do not need to
+have a .forward file anymore that calls up procmail.  Simply having a
+.procmailrc file in the $HOME directory will suffice.  Operation is transparent
+in this case (i.e. if no .procmailrc file is present in the $HOME directory,
+mail will be delivered as usual).
 
 For direct examples on how to do this, look at the examples/advanced file.
 

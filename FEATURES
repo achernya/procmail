@@ -39,7 +39,7 @@ Feature summary for procmail:
 	  integrated substitute for /bin/mail)
 	+ It runs on virtually all (old and future) operating systems which
 	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
-	  code)
+	  code; POSIX,ANSI C and K&R conforming)
 	+ Works with (among others?) sendmail, smail and MMDF
 
 Feature summary for formail:
@@ -49,7 +49,7 @@ Feature summary for formail:
 	+ Can split up mailboxes into the individual messages
 	+ Can split up digests into the individual messages
 	+ Can split up saved articles into the individual articles
-	+ Can do simple header munging
+	+ Can do simple header munging/extraction
 
 Feature summary for lockfile:
 	+ Provides NFS-secure lockfiles to shell script programmers

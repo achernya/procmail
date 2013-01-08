@@ -1,13 +1,13 @@
 /************************************************************************
  *	Collection of library-worthy routines				*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: goodies.c,v 2.8 1991/10/22 15:31:26 berg Rel $";
+static char rcsid[]="$Id: goodies.c,v 2.13 1992/01/31 11:32:45 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -75,19 +75,22 @@ noesc:	      *p++='\\';		/* nothing to escape, just echo both */
 		 case '"':
 		    if(got!=DOUBLE_QUOTED)	/* missing closing backquote? */
 		       break;
-forcebquote:	 case EOF:case '`':*p='\0';
+forcebquote:	 case EOF:case '`':
+		  { int osh=sh;
+		    *p='\0';
 		    if(!(sh=!!strpbrk(startb,tgetenv(shellmetas))))
 		     { const char*save=sgetcp;
 		       sgetcp=p=tstrdup(startb);readparse(startb,sgetc,0);
 		       free(p);sgetcp=save;		       /* chopped up */
-		     }				       /* drop source buffer */
-		    startb=fromprog(p=startb,startb);	/* read from program */
+		     }		    /* drop source buffer, read from program */
+		    startb=fromprog(p=startb,startb);sh=osh;   /* restore sh */
 		    if(!sarg&&got!=DOUBLE_QUOTED)
 		     { i=0;startb=p;goto simplsplit;	      /* split it up */
 		     }
 		    if(i=='"'||got<=SKIPPING_SPACE)   /* missing closing ` ? */
 		       got=NORMAL_TEXT;			     /* or sarg!=0 ? */
 		    p=startb;goto loop;
+		  }
 		 case '\n':i=';';	       /* newlines separate commands */
 	       }
 escaped:      *p++=i;
@@ -129,13 +132,15 @@ escaped:      *p++=i;
 	      while(EOF!=(i=fgetc())&&alphanum(i));
 	      if(i==EOF)
 		 i='\0';
-	      *startb='\0';}
+	      *startb='\0';
+	    }
 	   else if(i=='$')					  /* $$ =pid */
 	    { ultstr(0,(unsigned long)thepid,p);goto ieofstr;
 	    }
 	   else if(i=='-')				   /* $- =lastfolder */
 	    { strcpy(p,lastfolder);
-ieofstr:      i='\0';goto eofstr;}
+ieofstr:      i='\0';goto eofstr;
+	    }
 	   else
 	    { *p++='$';goto newchar;		       /* not a substitution */
 	    }
@@ -147,13 +152,16 @@ simplsplit:   for(;;startb++)		  /* simply split it up in arguments */
 		       if(got<=SKIPPING_SPACE)
 			  continue;
 		       *p++='\0';got=SKIPPING_SPACE;continue;
-		    case '\0':goto eeofstr;}
-		 *p++= *startb;got=NORMAL_TEXT;}
+		    case '\0':goto eeofstr;
+		  }
+		 *p++= *startb;got=NORMAL_TEXT;
+	       }
 	   else
-	    { if(got<=SKIPPING_SPACE)		/* can only occur if sarg!=0 */
+	    { strcpy(p,startb);				   /* simply copy it */
+eofstr:	      if(got<=SKIPPING_SPACE)		/* can only occur if sarg!=0 */
 		 got=NORMAL_TEXT;
-	      strcpy(p,startb);				   /* simply copy it */
-eofstr:	      p=strchr(p,'\0');}
+	      p=strchr(p,'\0');
+	    }
 eeofstr:   if(i)			     /* already read next character? */
 	      goto newchar;
 	   continue;
@@ -218,7 +226,7 @@ wipenv: while(*preenv=preenv[1])   /* wipe this entry out of the environment */
    }
   if(!remove)		  /* if not remove, then add it to both environments */
    { for(preenv=environ;*preenv;preenv++);
-     curr=malloc(offsetof(struct lienv,name)+strlen(a)+1);
+     curr=malloc(ioffsetof(struct lienv,name)+strlen(a)+1);
      strcpy(*preenv=curr->name,a);free(a);preenv[1]=0;curr->next=myenv;
      myenv=curr;
    }

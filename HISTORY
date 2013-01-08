@@ -13,88 +13,68 @@
 1991/06/12: v2.02
 1991/06/20: v2.03
 1991/07/04: v2.10
-	    Fixed bugs (regression bugs introduced in v1.99):
-	       Misleading error message when a ':c' recipe was used on a
-		  simple mailbox
-	       Inability to change numeric variables from their defaults
-	    Fixed slight descrepancy between /bin/sh parsing and procmail while
-	       assigning something in backquotes
-	    Added two more recognised headers to formail for splitting digests
-	    Added MMDF mailbox format support to procmail and formail
-	    Added MH mailbox format support to procmail
-	    Extended the FAQ section in INSTALL
-	    Improved the 'void' test in autoconf
-	    Added three new features to procmail: 'A'-recipe option, "LOG"
-	       keyword, "TIMEOUT" keyword
-	    Changes to the man pages:
-	       Made them more portable!	 (yes, I was surprised myself :-)
-	       Documented the new features
-	       Reformulated some things more clearly
-	    Changes to the example files:
-	       A better example for splitting up digests
-	       Extended the 'advanced' examples by an elaborate ':A' option
-		  example
 1991/07/12: v2.11
-	    Enhanced MMDF support
-	    Ignoring SIGPIPE now, how could I ever have left it out?
-	       This should take care of any, previously inexplicable,
-		  mysterious failures of formail or procmail
-	    Blanks are really ignored now on action lines
 1991/10/02: v2.20 (never released)
-	    Included an extensive guide on how to set up mailinglists
-	    Split off the FAQ into a separate file and extended it
-	    Replaced some 'forgotten' fork()s with sfork()
-	    Changes to formail.c:
-	       Added simple header-munging support to formail
-	       Extended the number of recognised headers when searching for
-		  the originating address by two
-	       Made it concatenate continued header lines (in order to ensure
-		  reliable header-munging)
-	    Changes to procmail:
-	       Added the DELIVERED keyword
-	       Added some command line options, options are now not exclusive
-		  anymore
-	       Gave new meaning to the -d option, old meaning is transferred
-		  to the LOGFILE assignment
-	       It can now return EX_TEMPFAIL if needed
-	       It can be used as a direct replacement for /bin/mail when
-		  delivering mail
-	       It can be run suid root (for enhanced functionality, this
-		  is *not* intended to open up security holes, and as far as
-		  I can see it doesn't)
-	       Added a Usage message
-	       Reorganised flags parsing, blanks can now be inserted anywhere
-	       Added the 'i' flag
-	       Dropped support for the 's' and 'I' flags
-	       Enhanced the locallockfile determination code
-	       Reordered some assignments in the signal-detect code, should
-		  improve reliability
-	       Dropped the SIGQUIT child-parent communication, has become
-		  obsolete
-	       Threw out sscanf, provided a strtol substitute
-	       Made HARDLOCKS optional
-	    Changes to exopen.c:
-	       Yet improved the lockfile acquiring, more elegant and even more
-		  fault tolerant than ever before :-)
-	    lockfile and formail state their names on error messages now
-	    Alphabetised the DIAGNOSTICS section of man/procmail.1
-	    Added a 'deinstall' entry in Makefile
-	    Improved Makefile installation feedback
-	    Added a patchlevel.h file
 1991/10/18: v2.30
 	    Implemented a custom regular expression library (fully egrep
 	       compatible), should eliminate the annoyances with incompatible
 	       egreps
 	    Changed the formatting (indenting) style in all the source files
 	       (which blows up all diffs beyond proportion of course)
-	    Accomplished the doubtfull milestone of having a source file
+	    Accomplished the doubtful milestone of having a source file
 	       (regexp.c) which provokes a compiler error on an old compiler
 	       (if using the optimiser)
 	    Threw out the GREP environment variable
-	    Ignoring leading spaces on condition lines now
+	    Ignoring leading spaces on condition lines now (means that
+	       everything can be indented in the rcfile)
 	    Rewrote some parts to use the regexp lib, making the code smaller
 1991/10/22: v2.31
-	    Updated the example rcfiles
 	    Added answers to FAQ list
 	    Fixed portability problem with missing strpbrk and strchr
 	    Cleaned up the lockfile creation when in explicit delivery mode
+1991/12/05: v2.40
+	    Cleaned the example rcfiles
+	    Updated the FAQ list
+	    Updated the man pages to fully correspond to the program again
+	       (beautified them in the process)
+	    Made a clear debugging-aid entry in the INSTALL file
+	    Added the -a option to formail
+	    Added an IFS environment variable override in procmail
+	    Fixed regression bug in formail, it did not terminate if the mail
+	       which was piped in did not contain an end of header mark
+	    Made the -aiI options of formail work while splitting as well
+	    Fixed bug in the new regexp lib (caused core dumps if the mail had
+	       a null body)
+	    Made procmail capable of healing the recipient's mail spool file
+	    Corrected all the docs (fixed a spelling error)
+	    Tricked NFS into supplying an access_time<modification_time for the
+	       folders written
+	    Added the 'a' flag to procmail
+1991/12/13: v2.50
+	    Fixed portability problems onto ISC in the autoconf script
+	    Fixed bug in procmail evaluating $- and $$
+	    Added -x option to formail
+	    Made formail operate as orthogonal as possible with combinated
+	       options
+1992/01/22: v2.60
+	    Complete overhaul of the regexp lib (reduced size, and fixed some
+	       portability problems to buggy compilers)
+	    Fixed lockfile not to modify argv[]
+	    Removed superfluous escapes in the example files
+	    Extended the portability of the autoconf script
+	    Enhanced the response to signals (SIGTERM and SIGQUIT now have
+	       different meanings)
+	    Improved autoconfiguration for 16-bit machines
+	    Updated the man pages/FAQ-list/INSTALL-file for MMDF support
+1991/01/31: v2.61
+	    Updated the directions for .forward file contents
+	    Fixed the EDQUOT define (some machines didn't define it)
+	    Eliminated a rare (no report of it occuring yet) inconvenience,
+	       a temporary file could be left lying around if procmail would
+	       be killed in a very small window after an open()
+	    Kludge the username into lowercase after the -d option
+	    Added specific directions for sites running smail (see
+	       examples/advanced)
+	    Added a search for sendmail in autoconf
+	    Fixed a problem in the implicit-lockfile-searching code
+	    Added the ARCHITECTURE variable to the makefile (for convenience)

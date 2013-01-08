@@ -2,12 +2,9 @@
 ---------------------- Frequently Asked Questions ----------------------------
 ------------------------------------------------------------------------------
 
-1. Why does the logfile have lines containing "file -i not found"?
+1. How do I go about setting up a mailinglist?
 
-	Your egrep doesn't understand the -i option (ignore case).  Either
-	use a different grep (e.g. set GREP to /bin/grep), get a different
-	egrep (e.g. GNU-egrep), or be sure to specify the 'D' option on every
-	recipe.	 Or better yet: use the internal egrep.
+	Look in the examples/mailinglist file, it describes it in detail.
 
 2. I installed procmail (i.e. typed 'make install'), but how am I supposed to
    use it?  When I type procmail on the command line it simply does nothing.
@@ -15,6 +12,8 @@
 	You're not supposed to start procmail from the command line.
 	Be sure to have a .forward and a .procmailrc file in your home
 	directory (see the examples subdirectory or the man page).
+	MMDF users should note that they need a .maildelivery file *instead*
+	of a .forward file (see the man page for more detailed information).
 
 3. When I compile everything the compiler complains about invalid or illegal
    pointer combinations, but it produces the executables anyway.
@@ -65,7 +64,7 @@
 9. Where do I look for examples about:
 	Crossmounted mailboxes?
 	Procmail as an integrated local mail delivery agent?
-	Security consideratiions (when installing procmail suid root)
+	Security considerations (when installing procmail suid root)
 	How to generate autoreplies?
 	Exorbitant rcfile formats?
 	The 'A' flag?
@@ -73,19 +72,17 @@
 	Well, this probably is your lucky day :-), all these topics are covered
 	in the examples/advanced file.
 
-10. How do I go about setting up a mailinglist?
+10. Why do I have to insert my login name after the '#' in the .forward or
+    .maildelivery file?
 
-	Look in the examples/mailinglist file, it describes it in detail.
+	Some mailers 'optimise' maildelivery and take out duplicates from
+	Cc:, Bcc: and alias lists before delivery.  If two or more persons on
+	such a list would have identical .forward files, then the mailer will
+	eliminate all but one.	Adding a '#' with your login name following
+	it will make the .forward files unique, and will ensure that the mailer
+	does optimise away some addresses.
 
-11. Why do the example rcfiles set IFS in the first line?
-
-	If procmail would be called with the -p option, and IFS would be preset
-	(this might not be under *your* control since anyone can call up
-	procmail to deliver to you, if it is suid root) to some insane values
-	(sane value of IFS='\n\t ') any Bourne-shell script (/bin/sh) started
-	from within procmail could start to behave very strange.
-
-12. None of the above topics cover my problem.	Should I panic?
+11. None of the above topics cover my problem.	Should I panic?
 
 	Let me ask you a question :-), have you examined the CAVEATS, WARNINGS,
 	BUGS and NOTES sections of the manual pages *closely* ?

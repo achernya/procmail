@@ -1,9 +1,10 @@
-#$Id: Makefile,v 2.7 1991/10/18 15:36:39 berg Rel $
+#$Id: Makefile,v 2.13 1992/01/31 11:32:45 berg Rel $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
 
-BINDIR	 = $(BASENAME)/bin
+# You can predefine ARCHITECTURE to a bin directory suffix
+BINDIR	 = $(BASENAME)/bin$(ARCHITECTURE)
 MANSUFFIX= 1
 MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 
@@ -18,7 +19,7 @@ MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 #			and man pages to $(BINDIR) and $(MANDIR) respectively
 # clean			Restores the package to pre-make state
 # deinstall		Removes the previously installed binaries and man
-#			pages by carefull surgery
+#			pages by careful surgery
 
 ########################################################################
 # Only edit below this line if you *think* you know what you are doing #
@@ -27,13 +28,13 @@ MANDIR	 = $(BASENAME)/man/man$(MANSUFFIX)
 # Directory for the standard include files
 USRINCLUDE = /usr/include
 
-OCFLAGS = -O
+OCFLAGS = -O #-ansi -pedantic -Wid-clash-6
 OLDFLAGS= -s
 
-CFLAGS	= $(OCFLAGS) -I$(USRINCLUDE) -I./include
+CFLAGS	= $(OCFLAGS) -I$(USRINCLUDE) -I./include #-D_POSIX_SOURCE
 LDFLAGS = $(OLDFLAGS)
 
-CC	= cc
+CC	= cc # gcc
 MAKE	= make
 SHELL	= /bin/sh
 O	= o
@@ -90,19 +91,18 @@ includes.h: autoconf.h
 	touch includes.h
 
 .c.$(O):
-	$(CC) $(CFLAGS) -c $*.c
+	$(CC) -c $(CFLAGS) $*.c
 
 man/man.sed: man/manconf.c config.h procmail.h
 	$(CC) $(CFLAGS) -o man/manconf man/manconf.c ${LDFLAGS}
 	man/manconf >man/man.sed
 	rm -f man/manconf
-	chmod 755 man/mansed
 
 man/procmail.1: man/man.sed man/procmail.man man/mansed
-	man/mansed man/procmail.man man/procmail.1
+	/bin/sh man/mansed man/procmail.man man/procmail.1
 
 man/formail.1: man/man.sed man/formail.man man/mansed
-	man/mansed man/formail.man man/formail.1
+	/bin/sh man/mansed man/formail.man man/formail.1
 
 install.man: $(MANS)
 	chmod 0644 man/*.1
@@ -112,7 +112,8 @@ install.man: $(MANS)
 
 install: all install.man
 	@chmod 0755 $(BINS)
-	@cp $(BINS) $(BINDIR)
+	@cp $(BINS) $(BINDIR) || {( cd $(BINDIR); rm -f $(BINS); );\
+cp $(BINS) $(BINDIR); }
 	@echo
 	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINS)
 	@cd $(MANDIR); echo Installed in $(MANDIR); ls -l $(MANSO)
@@ -122,7 +123,7 @@ install: all install.man
 installing procmail
 	@echo suid-root and/or integrating procmail into the mail-delivery \
 system -- for
-	@echo advanced functionality --.  For more information about this \
+	@echo advanced functionality --. " " For more information about this \
 topic you should
 	@echo look in the examples/advanced file.
 	@echo ----------------------------------------------------------------\
@@ -134,5 +135,5 @@ deinstall:
 
 clean:
 	$(RM) $(OBJ) common.$(O) lockfile.$(O) exopen.$(O) retint.$(O) \
-formail.$(O) procmail.$(O) $(BINS) autoconf.h _autotst* grepfor $(MANS) \
-man/man.sed
+formail.$(O) procmail.$(O) $(BINS) autoconf.h _autotst* lookfor grepfor \
+$(MANS) man/man.sed

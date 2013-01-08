@@ -1,5 +1,5 @@
 
-#$Id: autoconf,v 2.9 1991/10/22 15:31:26 berg Rel $
+#$Id: autoconf,v 2.15 92/01/31 13:01:34 berg Rel $
 
 SHELL=/bin/sh || exec /bin/sh autoconf $* # we're in a csh, feed myself to sh
 
@@ -19,21 +19,26 @@ SHELL=/bin/sh || exec /bin/sh autoconf $* # we're in a csh, feed myself to sh
 #	#define NOstrstr
 #	#define NOstrcspn
 #	#define NOstrpbrk
+#	#define NOrename
 #	#define strchr(s,c) index(s,c)
-#	#define setpwent()
 #	#define endpwent()
 #	#define strtol(str,ptr,base) ((long)atoi(str))
+#	#define oBRAIN_DAMAGE
+#	#define SMALLHEAP
 #	#define SYSTEM_MAILBOX "/usr/spool/mail/$USER"
+#	#define SENDMAIL "/usr/lib/sendmail"
 
-# A conforming ANSI compiler and POSIX library should only produce three
-# entries in autoconf.h: setpwent(), endpwent() and SYSTEM_MAILBOX
+# A conforming ANSI compiler and POSIX library should only produce four
+# entries in autoconf.h: endpwent(), rename(), SYSTEM_MAILBOX, SENDMAIL (and
+# perhaps SMALLHEAP)
 # Anything else indicates failure of your installation to comply with either
 # the ANSI or POSIX standards (but procmail should be installable anyway).
 
 PATH=:$PATH
-export SHELL
 ACONF=$3
 MAKE=$2
+DEVNULL=/dev/null
+export SHELL
 if test -f $ACONF
 then
  trap "exit 1" 1 2 3 15
@@ -42,7 +47,7 @@ else
 fi
 
 cat >grepfor <<HERE
-if fgrep "\$1" _autotst.rrr >/dev/null
+if fgrep "\$1" _autotst.rrr >$DEVNULL
 then
  echo "\$2" >>$ACONF
  exit 0
@@ -60,12 +65,14 @@ HERE
 #	   hence the const test has to precede all others.
 
 cat >_autotst.c <<HERE
-main(){const char*p;const char*q;
- p="t";q=p;return 0;}
+main()
+{ char*const*p;char*q;
+  p= &q;return 0;
+}
 HERE
 
 echo 'Testing for const'
-if ${MAKE} _autotst.$1 >_autotst.rrr 2>&1
+if ${MAKE} _autotst.$1 >_autotst.rrr 2>&1 && test -f _autotst.$1
 then
  grepfor const '#define const'
 else
@@ -74,11 +81,11 @@ fi
 rm -f _autotst.$1
 
 cat >_autotst.c <<HERE
-main(){volatile int i;return 0;}
+main(){volatile int i;return(i=0);}
 HERE
 
 echo 'Testing for volatile'
-if ${MAKE} _autotst.$1 >/dev/null 2>&1
+if ${MAKE} _autotst.$1 >$DEVNULL 2>&1 && test -f _autotst.$1
 then
 :
 else
@@ -87,29 +94,16 @@ fi
 rm -f _autotst.$1
 
 cat >_autotst.c <<HERE
-main(){int i;i= -1;return i=-i;}
-HERE
-
-echo 'Testing for compiler age'
-${MAKE} _autotst >_autotst.rrr 2>&1
-
-if _autotst
-then
- echo 'Aha, this one is genuine antique!'
- echo '#define void char' >>$ACONF
-fi
-rm -f _autotst _autotst.$1
-
-cat >_autotst.c <<HERE
 #include "includes.h"
+void*vvoid;
 main(){int i;char*p="t";
- void*vvoid;vvoid=p;
- i=(size_t)1;
- i+=(pid_t)1;
- i+=(time_t)1;
- i+=(mode_t)1;
- i+=(uid_t)1;
- i+=(gid_t)1;
+ {size_t vsize_t;i=vsize_t=1;}
+ {pid_t vpid_t;i=vpid_t=1;}
+ {time_t vtime_t;i=vtime_t=1;}
+ {mode_t vmode_t;i=vmode_t=1;}
+ {uid_t vuid_t;i=vuid_t=1;}
+ {gid_t vgid_t;i=vgid_t=1;}
+ vvoid=p;
  return !vvoid;}
 HERE
 
@@ -128,27 +122,45 @@ grepfor gid_t 'typedef int gid_t;'
 cat >_autotst.c <<HERE
 #include "includes.h"
 main(){char a[2];
- setpwent();endpwent();memmove(a,"0",1);bcopy("0",a,1);strstr(a,"0");
- strcspn(a,"0");strtol("0",(char**)0,10);strchr("0",'0');strpbrk(a,"0");
+ endpwent();memmove(a,"0",1);bcopy("0",a,1);strstr(a,"0");strcspn(a,"0");
+ strtol("0",(char**)0,10);strchr("0",'0');strpbrk(a,"0");rename(a,"0");
  return 0;}
 HERE
 
 echo 'Testing for memmove, strstr, strchr, strcspn & strtol'
-${MAKE} _autotst.$1 >/dev/null 2>&1
+${MAKE} _autotst.$1 >$DEVNULL 2>&1
 ${MAKE} _autotst >_autotst.rrr 2>&1
-rm -f _autotst _autotst.$1 _autotst.c
+rm -f _autotst _autotst.$1
 
 grepfor strstr '#define NOstrstr'
 grepfor strcspn '#define NOstrcspn'
 grepfor strpbrk '#define NOstrpbrk'
+grepfor rename '#define NOrename'
 grepfor strchr '#define strchr(s,c) index(s,c)'
 grepfor setpwent '#define setpwent()'
 grepfor endpwent '#define endpwent()'
 grepfor strtol '#define strtol(str,ptr,base) ((long)atoi(str))'
 grepfor memmove '#define NOmemmove' &&
-if fgrep bcopy _autotst.rrr >/dev/null
+if fgrep bcopy _autotst.rrr >$DEVNULL
 then
  echo '#define NObcopy' >>$ACONF
+
+ echo 'Testing for brain damage'
+ cat >_autotst.c <<HERE
+#include "includes.h"
+struct tests{int a,b;};
+main(){
+ return offsetof(struct tests,b);}
+HERE
+ if ${MAKE} _autotst.$1 >$DEVNULL 2>&1
+ then
+    :
+ else
+    echo 'Yep, it is'			# ISC chokes on its own offsetof()
+    echo '#define oBRAIN_DAMAGE' >>$ACONF
+ fi
+ rm -f _autotst.$1
+
 else
 
  cat >_autotst.c <<HERE
@@ -163,15 +175,30 @@ main(){int j=0,i=M256-1;static char a[M256];
 HERE
 
  echo 'Testing for bcopy handling overlaps'
- ${MAKE} _autotst >/dev/null 2>&1
+ ${MAKE} _autotst >$DEVNULL 2>&1
 
  if _autotst
  then
    echo 'Sorry, incompetent bcopy'
    echo '#define NObcopy' >>$ACONF
  fi
- rm -f _autotst _autotst.c
+ rm -f _autotst
 fi
+
+cat >_autotst.c <<HERE
+#include "includes.h"
+main(){unsigned long s=(size_t)~0;int i;
+ for(i=1;s>>=1;++i);
+ if(i<=16)
+    puts("#define SMALLHEAP");
+ return 0;}
+HERE
+
+echo 'Determining the most applicable block size'
+
+${MAKE} _autotst >$DEVNULL 2>&1
+_autotst >>$ACONF
+rm -f _autotst
 
 if test -d /usr/spool/mail
 then
@@ -180,12 +207,38 @@ elif test -d /usr/mail
 then
  echo '#define SYSTEM_MAILBOX "/usr/mail/$USER"' >>$ACONF
 else
- echo '#define SYSTEM_MAILBOX "$HOME/.mbox"' >>$ACONF
+ echo '#define SYSTEM_MAILBOX "$HOME/.mail"' >>$ACONF
  echo Could not find the system-mailbox directory, supplied substitute
 fi
 
-rm -f _autotst* grepfor
+cat >lookfor <<HERE
+for a in /usr/lib /lib /usr/etc /etc /usr/bin /bin /usr/local/bin /usr/lbin \
+/usr/local/lib /usr/local
+do
+ if test -f "\$a/\$1"
+ then
+    echo "#define SENDMAIL \"\$a/\$1\"" >>$ACONF
+    exit 0
+ fi
+done
+exit 1
+HERE
+chmod 0755 lookfor
+
+if lookfor sendmail || lookfor smail
+then
+:
+else
+ echo 'Could not find any mailer.  It should be a mailer accepting at least'
+ echo "one plain destination address as it's only argument (any sendmail"
+ echo 'compatible mailer will do), and the mail-to-be-sent on stdin.'
+ echo 'What is your mailer called?  (You can override this in config.h)'
+ read a
+ echo "#define SENDMAIL \"$a\"" >>$ACONF
+fi
+
+rm -f _autotst* lookfor grepfor
 
 echo -----------------------------autoconf.h-----------------------------------
-cat $ACONF
+cat $ACONF >&2
 echo --------------------------------------------------------------------------

@@ -1,13 +1,13 @@
 /************************************************************************
  *	Collection of NFS secure exclusive open routines		*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: exopen.c,v 2.4 1991/10/22 15:31:26 berg Rel $";
+static char rcsid[]="$Id: exopen.c,v 2.7 1992/01/21 17:27:04 berg Rel $";
 #endif
 #include "config.h"
 #include "includes.h"
@@ -42,7 +42,7 @@ unique(full,p,mode)const char*const full;char*const p;const mode_t mode;
 { unsigned long retry=3;int i;			  /* create unique file name */
   do
    { ultoan(SERIALmask&(retry<<16)+(unsigned long)thepid,p+1);
-     *p='_';strcat(p,hostname());
+     *p=UNIQ_PREFIX;strcat(p,hostname());
    }
 #ifndef O_CREAT
 #define ropen(path,type,mode)	creat(path,mode)

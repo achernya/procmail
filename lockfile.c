@@ -3,13 +3,13 @@
  *									*
  *	Seems to be perfect.						*
  *									*
- *	Created by S.R.van den Berg, The Netherlands			*
+ *	Created by S.R. van den Berg, The Netherlands			*
  *	This file can be freely copied for any use.			*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: lockfile.c,v 2.8 1991/10/22 15:31:26 berg Rel $";
+static char rcsid[]="$Id: lockfile.c,v 2.10 1992/01/09 17:53:18 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/10/22 15:31:26 $";
+static char rcsdate[]="$Date: 1992/01/09 17:53:18 $";
 #include "config.h"		       /* overkill, I know, only need DIRSEP */
 #include "includes.h"
 #include "exopen.h"
@@ -22,19 +22,19 @@ void failure()
 { exitflag=1;
 }
 
-main(argc,argv)const int argc;const char*argv[];
-{ const char**p,*cp;int sleepsec,retries,invert,force,suspend,retval=0;
+main(argc,argv)const char*const argv[];
+{ const char*const*p,*cp;int sleepsec,retries,invert,force,suspend,retval=0;
   static char usage[]=
    "Usage: lockfile -nnn | -rnnn | -! | -lnnn | -snnn | file ...\n";
   sleepsec=8;force=retries=invert=0;suspend=16;thepid=getpid();
-  if(argc<2)
+  if(--argc<=0)
    { putse(usage);return EX_USAGE;
    }
 again:
-  p=argv+1;signal(SIGHUP,failure);signal(SIGINT,failure);
+  p=argv;signal(SIGHUP,failure);signal(SIGINT,failure);
   signal(SIGQUIT,failure);signal(SIGTERM,failure);
-  while(*p)
-     if(*(cp= *p++)=='-')
+  while(argc--)
+     if(*(cp= *++p)=='-')
 	switch(cp[1])
 	 { case '!':invert=1;break;
 	   case 'r':retries=strtol(cp+2,(char**)0,10);break;
@@ -42,7 +42,7 @@ again:
 	   case 's':suspend=strtol(cp+2,(char**)0,10);break;
 	   default:
 	      if(cp[1]-'0'>(unsigned)9)
-	       { putse(usage);retval=EX_USAGE;goto failurel;
+	       { putse(usage);retval=EX_USAGE;goto lfailure;
 	       }
 	      if(sleepsec>=0)
 		 sleepsec=strtol(cp+1,(char**)0,10);
@@ -54,7 +54,7 @@ again:
 	 { struct stat buf;time_t t;
 	   if(exitflag||retries==1)
 	    {
-failurel:     sleepsec= -1;p[-1]=0;goto again;
+lfailure:     sleepsec= -1;argc=p-argv-1;goto again;
 	    }
 	   if(force&&(t=time((time_t*)0),!stat(cp,&buf))&&force<t-buf.st_mtime)
 	    { unlink(cp);putse("lockfile: Forcing lock on \"");putse(cp);

@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 2.7 1991/10/22 15:31:26 berg Rel $*/
+/*$Id: procmail.h,v 2.13 1992/01/31 11:32:45 berg Rel $*/
 
 #include "includes.h"
 
@@ -10,6 +10,10 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 
 #ifndef console
 #define console devnull
+#endif
+
+#ifndef DEFsendmail
+#define DEFsendmail SENDMAIL
 #endif
 
 #ifndef SYSTEM_MBOX
@@ -56,15 +60,15 @@ extern const char shellflags[],shell[],lockext[],newline[],binsh[],
  devnull[],executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[];
 extern struct varval strenvvar[];
 extern long lastdump;
-extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder,ignwerr,
- fakedelivery;
+extern sh,pwait,retval,lcking,locknext,verbose,linebuf,rc,tofolder,tofile,
+ ignwerr,fakedelivery;
 extern volatile nextexit;
 extern volatile time_t alrmtime;
 extern pid_t thepid;
 #endif
 
 #ifdef NOmemmove
-void*memmove();
+void*smemmove();
 #endif
 #ifdef strtol
 #undef strtol
@@ -75,12 +79,12 @@ long strtol();
 char*strpbrk();
 #endif
 
-void*tmalloc(),*trealloc(),*regcomp(),sterminate(),stermchild(),flagger(),
- ftimeout();
+void*tmalloc(),*trealloc(),*bregcomp(),srequeue(),slose(),sbounce(),
+ stermchild(),ftimeout();
 pid_t sfork();
 long dump(),pipin(),renvint();
 char*readdyn(),*fromprog(),*cat(),*tstrdup(),*cstr(),*pstrspn(),
- *regexec(),*egrepin();
+ *bregexec(),*egrepin(),*lastdirsep();
 const char*tgetenv(),*hostname();
 int sgetc(),getb();
 

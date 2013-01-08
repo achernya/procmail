@@ -1,13 +1,13 @@
 /************************************************************************
  *	Collection of routines that return an int (sort of anyway :-)	*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: retint.c,v 2.12 1991/10/22 15:31:26 berg Rel $";
+static char rcsid[]="$Id: retint.c,v 2.23 1992/01/31 12:28:53 berg Rel $";
 #endif
 #include "config.h"
 #include "procmail.h"
@@ -115,10 +115,10 @@ progerr(line)const char*const line;
 opena(a)const char*const a;
 { lastfolder=cstr(lastfolder,a);yell("Opening",a);
 #ifdef O_CREAT
-  return ropen(a,O_WRONLY|O_APPEND|O_CREAT,0666);
+  return ropen(a,O_WRONLY|O_APPEND|O_CREAT,NORMperm);
 #else
  {int fd;
-  return(fd=ropen(a,O_WRONLY))<0?creat(a,0666):fd;
+  return(fd=ropen(a,O_WRONLY,0))<0?creat(a,NORMperm):fd;
  }
 #endif
 }
@@ -146,7 +146,10 @@ unlock(lockp)const char**const lockp;
 
 nomemerr()
 { log("Out of memory\nbuffer 0: \"");buf[linebuf-1]=buf2[linebuf-1]='\0';
-  log(buf);log("\"\nbuffer 1:");logqnl(buf2);retval=EX_OSERR;terminate();
+  log(buf);log("\"\nbuffer 1:");logqnl(buf2);
+  if(retval!=EX_TEMPFAIL)
+     retval=EX_OSERR;
+  terminate();
 }
 
 logqnl(a)const char*const a;
@@ -184,10 +187,14 @@ rread(fd,a,len)const int fd,len;void*const a;	       /* a sysV secure read */
 
 ropen(name,mode,mask)const char*const name;const int mode;const mode_t mask;
 { int i,r;					       /* a sysV secure open */
-  for(lcking=4,r=noresretry;0>(i=open(name,mode,mask));)
+  if(!lcking)						  /* already locking */
+     lcking=4;
+  for(r=noresretry;0>(i=open(name,mode,mask));)
      if(errno!=EINTR&&!((errno==EMFILE||errno==ENFILE)&&(r<0||r--)))
 	break;		 /* survives a temporary "file table full" condition */
-  lcking=0;return i;
+  if(lcking==4)
+     lcking=0;
+  return i;
 }
 
 rdup(p)const int p;
@@ -208,41 +215,53 @@ rpipe(fd)int fd[2];
 }
 
 lockit(name,lockp)char*name;const char**const lockp;
-{ int i;struct stat stbuf;
+{ int i,permanent=2;struct stat stbuf;
   unlock(lockp);		       /* unlock any previous lockfile FIRST */
-  if(!*name)
+  if(!*name)			  /* to prevent deadlocks (I hate deadlocks) */
      return;
-  for(lcking=1;;)		  /* to prevent deadlocks (I hate deadlocks) */
+  name=tstrdup(name); /* allocate now, so we won't hang on memory *and* lock */
+  for(;;)
    { yell("Locking",name);
-     if(!NFSxopen(name))
-      { *lockp=tstrdup(name);			   /* lock acquired, hurray! */
-term:	lcking=0;
-	if(nextexit)
-	 { log(whilstwfor);log("lockfile");logqnl(name);terminate();
-	 }
-	return;			   /* check if it's time for a lock override */
+     if(!NFSxopen(name,LOCKperm))
+      { *lockp=name;break;			   /* lock acquired, hurray! */
       }
-     if(errno==EEXIST&&!stat(name,&stbuf)&&!stbuf.st_size)
-      { time_t t;
-	if(locktimeout&&(t=time((time_t*)0),!stat(name,&stbuf)))     /* stat */
-	   if(locktimeout<t-stbuf.st_mtime)  /* till unlink should be atomic */
-	    { if(unlink(name))			 /* but can't guarantee that */
+     switch(errno)
+      { case EEXIST:
+	 { time_t t;		   /* check if it's time for a lock override */
+	   if(!stat(name,&stbuf)&&stbuf.st_size<=MAX_LOCK_SIZE&&locktimeout
+	    &&(t=time((time_t*)0),!stat(name,&stbuf))&&	 /* stat till unlink */
+	    locktimeout<t-stbuf.st_mtime)		/* should be atomic, */
+	      if(unlink(name))		       /* but I can't guarantee that */
 	       { log("Forced unlock denied on");logqnl(name);
 	       }
 	      else
 	       { log("Forcing lock on");logqnl(name);suspend();
 	       }
-	    }
-      }
-     else		       /* maybe filename too long, shorten and retry */
-      { if(errno!=ENOTDIR&&0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1]))
-	 { name[i]='\0';continue;
+	   break;
 	 }
-	log("Lockfailure on");logqnl(name);return;
+	default:	       /* maybe filename too long, shorten and retry */
+	   if(0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1]))
+	    { log("Truncating");logqnl(name);log(" and retrying lock\n");
+	      name[i]='\0';continue;
+	    }
+faillock:  log("Lock failure on");logqnl(name);goto term;
+	case ENOENT:case ENOTDIR:case EIO:case EACCES:
+	   if(!--permanent)
+	      goto faillock;
+	case ENOSPC:;
+#ifdef EDQUOT
+	case EDQUOT:;
+#endif
       }
      sleep((unsigned)locksleep);
      if(nextexit)
-	goto term;
+      {
+term:	free(name);break;		     /* drop the preallocated buffer */
+      }
+   }
+  lcking=0;
+  if(nextexit)
+   { log(whilstwfor);log("lockfile");logqnl(name);terminate();
    }
 }
 
@@ -254,6 +273,22 @@ lcllock()				   /* lock a local file (if need be) */
 	lockit(strcat(buf2,tgetenv(lockext)),&loclock);
 }
 
+sterminate()
+{ static const char*const msg[]={newline,0,"memory\n","fork\n",
+   "a file descriptor\n","a kernel lock\n"};
+  ignoreterm();
+  if(pidchild>0)	    /* don't kill what is not ours, we might be root */
+     kill(pidchild,SIGTERM);
+  if(!nextexit)
+   { nextexit=1;log("Terminating prematurely");
+     if(1!=lcking)
+      { if(1<lcking)
+	   log(whilstwfor);
+	log(msg[lcking]);terminate();
+      }
+   }
+}
+
 terminate()
 { nextexit=2;			/* prevent multiple invocations of terminate */
   if(getpid()==thepid)
@@ -262,9 +297,9 @@ terminate()
 	log(fakedelivery?"lost\n":
 	 retval==EX_TEMPFAIL?"requeued\n":"bounced\n");
       }
-     unlock(&loclock);unlock(&globlock);unlockfd();
+     unlock(&loclock);unlock(&globlock);fdunlock();
    }
-  exit(retval);
+  exit(fakedelivery==2?EX_OK:retval);
 }
 
 ignoreterm()
@@ -319,7 +354,7 @@ static ungetb;						 /* pushed back char */
 
 bopen(name)const char*const name;				 /* my fopen */
 { rcbufp=rcbufend=0;ungetb= -1;yell("Rcfile:",name);
-  return rc=ropen(name,O_RDONLY);
+  return rc=ropen(name,O_RDONLY,0);
 }
 
 getbl(p)char*p;							  /* my gets */
@@ -362,53 +397,52 @@ deliver(boxname)char*const boxname;
    (tofolder=1,opena(buf)):dirmail();
 }
 
-#ifndef lockfd
-static oldlockfd;				    /* the fd we locked last */
+#ifndef fdlock
+static oldfdlock;				    /* the fd we locked last */
 #ifdef F_SETLKW
 static struct flock flck;		/* why can't it be a local variable? */
 
-lockfd(fd)					   /* the POSIX-fcntl() lock */
+fdlock(fd)					   /* the POSIX-fcntl() lock */
 { flck.l_type=F_WRLCK;flck.l_whence=SEEK_SET;flck.l_len=0;
-  flck.l_start=tell(fd);lcking=5;fd=fcntl(oldlockfd=fd,F_SETLKW,&flck);
+  flck.l_start=tell(fd);lcking=5;fd=fcntl(oldfdlock=fd,F_SETLKW,&flck);
   lcking=0;return fd;
 }
 
-unlockfd()
-{ flck.l_type=F_UNLCK;return fcntl(oldlockfd,F_SETLK,&flck);
+fdunlock()
+{ flck.l_type=F_UNLCK;return fcntl(oldfdlock,F_SETLK,&flck);
 }
-#else
+#else /* F_SETLKW */
 #ifdef F_LOCK
 static long oldlockoffset;
 
-lockfd(fd)						 /* the sysV-lockf() */
-{ oldlockoffset=tell(fd);lcking=5;fd=lockf(oldlockfd=fd,F_LOCK,0L);lcking=0;
+fdlock(fd)						 /* the sysV-lockf() */
+{ oldlockoffset=tell(fd);lcking=5;fd=lockf(oldfdlock=fd,F_LOCK,0L);lcking=0;
   return fd;
 }
 
-unlockfd()
-{ lseek(oldlockfd,oldlockoffset,SEEK_SET);return lockf(oldlockfd,F_ULOCK,0L);
+fdunlock()
+{ lseek(oldfdlock,oldlockoffset,SEEK_SET);return lockf(oldfdlock,F_ULOCK,0L);
 }
-#else
+#else /* F_LOCK */
 #ifdef LOCK_EX
-lockfd(fd)						  /* the BSD-flock() */
-{ lcking=5;fd=flock(oldlockfd=fd,LOCK_EX);lcking=0;return fd;
+fdlock(fd)						  /* the BSD-flock() */
+{ lcking=5;fd=flock(oldfdlock=fd,LOCK_EX);lcking=0;return fd;
 }
 
-unlockfd()
-{ return flock(oldlockfd,LOCK_UN);
+fdunlock()
+{ return flock(oldfdlock,LOCK_UN);
 }
-#endif
-#endif
-#endif
-#endif
+#endif /* LOCK_EX */
+#endif /* F_LOCK */
+#endif /* F_SETLKW */
+#endif /* fdlock */
 
 #include "exopen.h"
-
-NFSxopen(name)char*name;		/* an NFS secure exclusive file open */
-{char*p,*q;int j= -2,i;
-  for(q=name;p=strpbrk(q,dirsep);q=p+1);		 /* find last DIRSEP */
-  i=q-name;strncpy(p=malloc(i+UNIQnamelen),name,i);
-  if(unique(p,p+i,0))
+					/* an NFS secure exclusive file open */
+NFSxopen(name,mode)char*name;const mode_t mode;
+{ char*p;int j= -2,i;
+  i=lastdirsep(name)-name;strncpy(p=malloc(i+UNIQnamelen),name,i);lcking=1;
+  if(unique(p,p+i,mode))
      j=myrename(p,name);	 /* try and rename it, fails if nonexclusive */
   free(p);return j;
 }

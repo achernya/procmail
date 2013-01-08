@@ -3,15 +3,15 @@
  *									*
  *	Seems to be relatively bug free.				*
  *									*
- *	Copyright (c) 1990-1991, S.R.van den Berg, The Netherlands	*
+ *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
  *	The sources can be freely copied for non-commercial use.	*
  *	#include "README"						*
  *									*
  ************************************************************************/
 #ifdef RCS
-static char rcsid[]="$Id: formail.c,v 2.11 1991/10/18 15:33:23 berg Rel $";
+static char rcsid[]="$Id: formail.c,v 2.16 1992/01/09 17:23:14 berg Rel $";
 #endif
-static char rcsdate[]="$Date: 1991/10/18 15:33:23 $";
+static char rcsdate[]="$Date: 1992/01/09 17:23:14 $";
 #include "config.h"					  /* slight overkill */
 #include "includes.h"
 
@@ -23,7 +23,7 @@ char*pstrspn();
 #define HEAD_DELIMITER	':'
 
 #define Re		(re+1)
-#define Nextchar(x)	do{x=getchar();if(feof(stdin))goto foundeof;}while(0)
+#define Nextchar(x)	do{if((x=getchar())==EOF)goto foundeof;}while(0)
 #define putssn(a,l)	tputssn(a,(size_t)(l))
 #define putcs(a)	(errout=putc(a,mystdout))
 #define PRDO		poutfd[0]
@@ -73,7 +73,8 @@ static const char mboxseparator[]=MAILBOX_SEPARATOR;
 #define dig_HDR_LEN	\
  mx(mx(mxl(From,Fromm),mxl(Date,subject)),STRLEN(mboxseparator))
 #endif
-static struct hedit{char*hline;long hlen;struct hedit*next;}*hlist;
+static struct hedit{char*hline;size_t hlen;
+ enum{h_ren,h_del,h_add,h_was,h_extract}htype;struct hedit*next;}*hlist;
 static errout,oldstdout,quiet;
 static pid_t child= -1;
 static FILE*mystdout;
@@ -87,7 +88,8 @@ char*strstr(whole,part)const char*whole,*const part;
      do
 	if(!*p)
 	   return(char*)whole;
-     while(*w++==*p++);}
+     while(*w++==*p++);
+   }
   while(*whole++);
   return(char*)0;
 }
@@ -108,21 +110,22 @@ void*trealloc(old,len)void*old;const size_t len;
 
 #include "shell.h"
 
-struct hedit*overrideh(target)const char*const target;
-{ const struct hedit*hlp;size_t len;
+struct hedit*overrideh(target,keep)const char*const target;const int keep;
+{ struct hedit*hlp;
   for(hlp=hlist;hlp;hlp=hlp->next)
-   { len=hlp->hlen;
-     if(hlp->hlen<0)
-	len= -hlp->hlen;					 /* absolute */
-     if(!strnicmp(hlp->hline,target,len))		     /* header found */
-	return (struct hedit*)hlp;
-   }
-  return(struct hedit*)0;				  /* no header found */
+     if(hlp->htype!=h_was&&!strnicmp(hlp->hline,target,hlp->hlen))
+      { if(keep>0||hlp->htype!=h_add)			  /* found field ok? */
+	   return (struct hedit*)hlp;
+	hlp->htype=h_was;			/* temporarily disable field */
+	if(keep)					/* smaller than zero */
+	   break;
+      }
+  return(struct hedit*)0;				   /* no field found */
 }
 
 main(lastm,argv)const char*const argv[];
 { int i,ch,nowm,split=0,force=0,bogus=1,every=0,areply=0,trust=0,digest=0,
-   nowait=0,keepb=0;
+   nowait=0,keepb=0,extract=0;
   size_t buflen,p=0,lnl=0,ll;time_t t;char*buf,*chp,*namep;struct hedit*hlp;
   while(chp=(char*)*++argv)
    { if((lastm= *chp++)==FM_SKIP)
@@ -155,16 +158,18 @@ usg:		 log(FM_USAGE);return EX_USAGE;
 		 nrtotal=ll;
 	      break;
 	   case FM_BOGUS:bogus=0;continue;
-	   case FM_REN_INSERT:case FM_DEL_INSERT:hlp=hlist;
+	   case FM_EXTRACT:extract=1;
+	   case FM_ADD_IFNOT:case FM_REN_INSERT:case FM_DEL_INSERT:hlp=hlist;
 	      (hlist=malloc(sizeof*hlist))->next=hlp;
 	      if(!*chp&&!(chp=(char*)*++argv))	/* concatenated or seperate? */
 		 goto usg;
-	      hlist->hline=chp;				/* add header string */
+	      hlist->hline=chp;				 /* add field string */
 	      if(!(buf=strchr(chp,HEAD_DELIMITER)))
 	       { nlog("Invalid field-name:");logqnl(chp);goto usg;
 	       }
-	      buflen=buf-chp+1;
-	      hlist->hlen=lastm==FM_REN_INSERT?buflen:-(long)buflen;
+	      hlist->hlen=buf-chp+1;
+	      hlist->htype=lastm==FM_REN_INSERT?h_ren:
+	       lastm==FM_DEL_INSERT?h_del:lastm==FM_ADD_IFNOT?h_add:h_extract;
 	   case '\0':;
 	 }
 	break;
@@ -173,7 +178,9 @@ usg:		 log(FM_USAGE);return EX_USAGE;
 parsedoptions:
 #ifdef MAILBOX_SEPARATOR
   if(split)
-   { bogus=0;every=1;
+   { every=1;
+     if(!areply)
+	bogus=0;
    }
 #endif
   mystdout=stdout;signal(SIGPIPE,SIG_IGN);
@@ -182,17 +189,22 @@ parsedoptions:
    }
   else if(every)
      goto usg;
-  *(namep=malloc(1))='\0';buf=malloc(buflen=BSIZE);t=time((time_t*)0);
+  namep=malloc(1);buf=malloc(buflen=BSIZE);t=time((time_t*)0);
   i=maxindex(rex);
-  do *(rex[i].rexp=malloc(1))='\0';
+  do rex[i].rexp=malloc(1);
   while(i--);
   while('\n'==(ch=getchar()));
+startover:
+  *namep='\0';i=maxindex(rex);
+  do *rex[i].rexp='\0';
+  while(i--);
   for(;;)					 /* start parsing the header */
    { if((buf[p++]=ch)=='\n')
       { if(lnl==p-1)				    /* end of header reached */
 	   break;
 	switch(ch=getchar())		      /* concatenate continued lines */
 	 { case ' ':case '\t':p--;continue;
+	   case EOF:ch='\n';
 	 }
 	chp=buf+lnl;
 #ifdef MAILBOX_SEPARATOR
@@ -243,86 +255,84 @@ foundfrom:	 buf[p]='\0';
 		}
 	   while(i--);
 	 }
-	if(hlp=overrideh(buf+lnl))		/* replace or delete header? */
-	 { if(hlp->hlen<0)				   /* just delete it */
-	    { p=lnl;continue;
+	if(hlp=overrideh(buf+lnl,areply))	 /* replace or delete field? */
+	   switch(hlp->htype)
+	    { case h_extract:putssn(buf+lnl+hlp->hlen,p-lnl-hlp->hlen);
+	      case h_del:p=lnl;continue;		   /* just delete it */
+	      case h_ren:
+		 if(p+2>=buflen)	    /* trouble if BSIZE<STRLEN(OldP) */
+		    buf=realloc(buf,buflen+=BSIZE);
+		 tmemmove(buf+lnl+STRLEN(OldP),buf+lnl,p-lnl);
+		 tmemmove(buf+lnl,OldP,STRLEN(OldP));p+=STRLEN(OldP);
 	    }
-	   if(p+2>=buflen)		    /* trouble if BSIZE<STRLEN(OldP) */
-	      buf=realloc(buf,buflen+=BSIZE);
-	   tmemmove(buf+lnl+STRLEN(OldP),buf+lnl,p-lnl);
-	   tmemmove(buf+lnl,OldP,STRLEN(OldP));p+=STRLEN(OldP);
-	 }
 	lnl=p;continue;
       }
      if(p>=buflen-2)
 	buf=realloc(buf,buflen+=BSIZE);
 redigest:
-     ch=getchar();
-     if(feof(stdin))
+     if((ch=getchar())==EOF)
 	ch='\n';		/* make sure the header ends with 2 newlines */
    }
-  if(areply||!force&&strncmp(buf,From,STRLEN(From)))
-   { if(!areply||!overrideh(To))
-      { putss(areply?(areply=2),To:From);
-	if(*namep)				/* found any sender address? */
-	   putss(namep);
-	else
-	   putss(UNKNOWN);}
-     if(areply)
-      { if(areply==2)
-	   putnl();
-	if(*subj.rexp&&!overrideh(subject))		   /* any Subject: ? */
-	 { putss(subject);chp=subj.rexp;
-	   if(strnicmp(pstrspn(chp," "),Re,STRLEN(Re)))
-	      putss(re);		       /* no Re: , add one ourselves */
-	   putss(chp);putnl();
+  if(!extract)
+   { if(areply||!force&&strncmp(buf,From,STRLEN(From)))
+      { if(!areply||!overrideh(To,!*namep))
+	 { putss(areply?(areply=2),To:From);
+	   if(*namep)				/* found any sender address? */
+	      putss(namep);
+	   else
+	      putss(UNKNOWN);
 	 }
-	if(*refr.rexp||*msid.rexp)	 /* any Message-ID: or References: ? */
-	 { if(!overrideh(references))
-	    { putss(references);
-	      if(*refr.rexp)
-	       { putss(refr.rexp);
+	if(areply)
+	 { if(areply==2)
+	      putnl();
+	   if(*subj.rexp&&!overrideh(subject,-1))	   /* any Subject: ? */
+	    { putss(subject);chp=subj.rexp;
+	      if(strnicmp(pstrspn(chp," "),Re,STRLEN(Re)))
+		 putss(re);		       /* no Re: , add one ourselves */
+	      putss(chp);putnl();
+	    }
+	   if(*refr.rexp||*msid.rexp)	 /* any Message-ID: or References: ? */
+	    { if(!overrideh(references,-1))
+	       { putss(references);
+		 if(*refr.rexp)
+		  { putss(refr.rexp);
+		    if(*msid.rexp)
+		       putnl();
+		  }
 		 if(*msid.rexp)
-		    putnl();
+		  { putss(msid.rexp);putnl();
+		  }
 	       }
-	      if(*msid.rexp)
-	       { putss(msid.rexp);putnl();
+	      if(*msid.rexp&&!overrideh(inreplyto,-1))
+	       { putss(inreplyto);putss(msid.rexp);putnl();
 	       }
-	    }
-	   if(*msid.rexp&&!overrideh(inreplyto))
-	    { putss(inreplyto);putss(msid.rexp);putnl();
 	    }
 	 }
+	else
+	 { putcs(' ');putss(ctime(&t));
+	 }
       }
-     else
-      { putcs(' ');putss(ctime(&t));
-      }
+     if(!areply)
+	putssn(buf,p-1);
+     for(hlp=hlist;hlp;hlp=hlp->next)
+	if(hlp->htype==h_was)
+	   hlp->htype=h_add;		      /* enable disabled field again */
+	else if(hlp->hline[hlp->hlen])
+	 { putss(hlp->hline);putnl();		    /* inject our new fields */
+	 }
+     putnl();
    }
-  if(!areply)
-     putssn(buf,p-1);
-  for(hlp=hlist;hlp;hlp=hlp->next)
-   { ll=hlp->hlen;
-     if(hlp->hlen<0)
-	ll= -hlp->hlen;
-     if(hlp->hline[ll])
-      { putss(hlp->hline);putnl();		   /* inject our new headers */
-      }
-   }
-  putnl();
-  if(areply)
-   { if(!keepb)
-      { if(mystdout!=stdout)
-	   closemine();
-	opensink();					 /* discard the body */
-      }
+  if(areply&&!keepb||extract)
+   { if(split)
+	closemine();
+     opensink();					 /* discard the body */
    }
   p=0;lnl=1;					 /* clear buffer, important! */
   if(!bogus&&!split)
      for(;;putcs(i))
 	Nextchar(i);
   for(;;)					       /* continue the quest */
-   {
-     do						 /* read line until not From */
+   { do						 /* read line until not From */
       { if(p==buflen-1)
 	   buf=realloc(buf,++buflen);
 	Nextchar(i=buf[p]);
@@ -342,17 +352,11 @@ redigest:
 #endif
 	       }
 	    }
-	if((i=='\n'||p!=1)&&areply)
-	 { if(bogus)
-	      putcs(ESCAP);
-	   break;
-	 }
 	if(lnl==1&&digest)
 	 { ll=maxindex(cdigest);
 	   do				      /* check for new digest header */
 	      if(p==cdigest[ll].lnr&&!strncmp(buf,cdigest[ll].hedr,p))
-	       { *namep=lnl=0;goto splitit;	  /* pretend we started over */
-	       }
+		 goto splitit;
 	   while(ll--);
 	 }
       }
@@ -367,12 +371,11 @@ splitit:   if((fclose(mystdout)==EOF||errout==EOF)&&!quiet)
 	    }
 	   if(!nowait)
 	      waitforit();
-	   startprog(argv);
-	   if(!lnl)					    /* digest split? */
-	      goto redigest;
-	   i='\n';
+	   startprog(argv);ch=i;--p;lnl=0;goto startover;
 	 }
       }
+     if(areply&&bogus&&*buf!='\n')
+	putcs(ESCAP);					  /* escape the body */
      lnl=p==1;putssn(buf,p);p=0;
      if(i!='\n')
 	do Nextchar(i);
