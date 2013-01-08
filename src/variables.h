@@ -1,4 +1,4 @@
-/* $Id: variables.h,v 1.5 2001/06/21 11:59:33 guenther Exp $ */
+/* $Id: variables.h,v 1.7 2001/08/27 08:44:03 guenther Exp $ */
 
 const char
  *sputenv P((const char*const a)),
@@ -6,7 +6,7 @@ const char
  *tgetenv P((const char*const a));
 void
  primeStdout P((const char*const varname)),
- retStdout P((char*const newmyenv,int fail,int unset)),
+ retStdout P((char*const newmyenv,const int fail,const int unset)),
  retbStdout P((char*const newmyenv)),
  appendlastvar P((const char*const value)),
  cleanupenv P((int preserve)),
@@ -28,5 +28,5 @@ long
 
 extern long Stdfilled;
 extern char*Stdout;
-extern const char lastfolder[],maildir[];
+extern const char lastfolder[],maildir[],scomsat[],offvalue[];;
 extern int didchd;

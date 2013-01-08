@@ -1,4 +1,4 @@
-/*$Id: includes.h,v 1.75 2001/06/27 17:07:23 guenther Exp $*/
+/*$Id: includes.h,v 1.77 2001/08/25 04:38:37 guenther Exp $*/
 
 #include "../autoconf.h"
 #ifdef NO_const
@@ -71,7 +71,7 @@
 #include <signal.h>		/* signal() kill() alarm() SIG_IGN SIGHUP
 				/* SIGINT SIGQUIT SIGALRM SIGTERM */
 #ifndef STRING_H_MISSING
-#include <string.h>		/* strcpy() strncpy() strcat() strlen()
+#include <string.h>		/* strcpy() strcat() strlen()
 				/* strspn() strcspn() strchr() strcmp()
 				   strncmp() strpbrk() strstr() memmove()
 				   strncasecmp() memset() */
@@ -485,6 +485,10 @@ extern void*memmove();
 #define memmove(to,from,count) smemmove(to,from,count)
 #endif
 
+#ifdef NOstrpbrk
+#define strpbrk(s,d) sstrpbrk(s,d)
+#endif
+
 #ifdef SLOWstrstr
 #ifdef strstr
 #undef strstr
@@ -496,10 +500,23 @@ extern void*memmove();
 #ifdef NObzero
 #define NEEDbbzero
 #else
-#define bbzero(s,l)	bzero(s,l)
+#define bbzero(s,l) bzero(s,l)
 #endif
 #else
-#define bbzero(s,l)	memset(s,'\0',l)
+#define bbzero(s,l) memset(s,'\0',l)
+#endif
+
+#ifdef NOstrlcat
+#define strlcat(d,s,z) sstrlcat(d,s,z)
+#define strlcpy(d,s,z) sstrlcpy(d,s,z)
+#endif
+
+#ifdef NOstrerror
+#define strerror(e) sstrerror(e)
+#endif
+
+#ifdef NOstrtol
+#define strtol(s,p,b) sstrtol(s,p,b)
 #endif
 
 #ifndef P

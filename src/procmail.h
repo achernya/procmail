@@ -1,4 +1,4 @@
-/*$Id: procmail.h,v 1.55 2001/06/21 17:48:12 guenther Exp $*/
+/*$Id: procmail.h,v 1.57 2001/08/25 04:38:40 guenther Exp $*/
 
 #include "includes.h"
 
@@ -93,7 +93,7 @@ extern const char shell[],lockfile[],newline[],binsh[],unexpeof[],*const*gargv,
  *const*restargv,*sgetcp,pmrc[],*rcfile,dirsep[],devnull[],empty[],lgname[],
  executing[],oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],host[],
  *defdeflock,*argv0,exceededlb[],curdir[],slogstr[],conflicting[],orgmail[],
- insufprivs[],errwwriting[],Version[];
+ insufprivs[],defpath[],errwwriting[],Version[];
 extern long filled,lastscore;
 extern int sh,pwait,retval,retvl2,rc,privileged,ignwerr,
  lexitcode,accspooldir,crestarg,savstdout,berkeley,mailfilter,erestrict,
@@ -109,7 +109,7 @@ extern gid_t gid,sgid;
  *	External variables that are checked/changed by the signal handlers:
  *	volatile time_t alrmtime;
  *	pid_t pidfilt,pidchild;
- *	volatile nextexit,lcking;
+ *	volatile int nextexit,lcking;
  *	size_t linebuf;
  *	static volatile int mailread;	in mailfold.c
  */
