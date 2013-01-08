@@ -1,6 +1,14 @@
 #! /bin/sh
 :
-#$Id: mansed,v 1.10 1993/06/21 14:24:00 berg Exp $
+#$Id: mansed,v 1.21 1994/05/26 14:12:03 berg Exp $
+
+if test -z "$IFS"
+then IFS=" \
+	\
+
+"
+  export IFS
+fi
 
 test 5 != $# &&
  echo "Don't start this script directly, use \`make'" && exit 1
@@ -18,44 +26,51 @@ then
 fi
 
 (cat <<\HERE
+.\"if n .pl +(135i-\n(.pu)
 .de Id
 .ds Rv \\$3
 .ds Dt \\$4
 ..
-.de Sh
+.rn SH Sh
+.de SH
 .br
 .ne 11
-.SH "\\$1"
+.Sh "\\$1"
 ..
-.de Ss
+.rn SS Ss
+.de SS
 .br
 .ne 10
-.SS "\\$1"
+.Ss "\\$1"
 ..
-.de Tp
+.rn TP Tp
+.de TP
 .br
 .ne 9
-.TP \\$1
+.Tp \\$1
 ..
-.de Rs
+.rn RS Rs
+.de RS
 .na
 .nf
-.RS
+.Rs
 ..
-.de Re
-.RE
+.rn RE Re
+.de RE
+.Re
 .fi
 .ad
 ..
 .de Sx
 .PP
 .ne \\$1
-.Rs
+.RS
 ..
 .de Ex
-.Re
+.RE
 .PP
 ..
+.ex
 HERE
 cat "$SRC"
 expr "X$DEST" : '.*[18]$' >$DEVNULL && cat <<HERE
@@ -63,8 +78,8 @@ expr "X$DEST" : '.*[18]$' >$DEVNULL && cat <<HERE
 This program is part of the
 .I procmail mail-processing-package
 (@PM_VERSION@) available at your nearest USENET comp.sources.misc archive, or
-at ftp.informatik.rwth-aachen.de (137.226.112.172) as
-.BR pub/unix/procmail.tar.Z .
+at ftp.informatik.rwth-aachen.de as
+.BR pub/packages/procmail/procmail.tar.gz .
 .Sh MAILINGLIST
 There exists a mailinglist for questions relating to any program in the
 procmail package:
@@ -84,8 +99,9 @@ cat <<HERE
 Stephen R. van den Berg at RWTH-Aachen, Germany
 .Rs
 @MY_MAIL_ADDR@
-@MY_ALT_MAIL_ADDR@
+.\" @MY_ALT_MAIL_ADDR@
 .Re
+.\".if n .pl -(\n(.tu-1i)
 HERE
  )| sed -f man.sed |
  if test -f man.sed.1

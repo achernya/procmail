@@ -1,6 +1,12 @@
-/*$Id: includes.h,v 1.24 1993/06/21 14:24:25 berg Exp $*/
+/*$Id: includes.h,v 1.44 1994/06/24 10:44:57 berg Exp $*/
 
 #include "../autoconf.h"
+#ifdef NO_const
+#ifdef const
+#undef const
+#endif
+#define const
+#endif
 #include "../config.h"
 	/* not all the "library identifiers" specified here need to be
 	   available for all programs in this package; some have substitutes
@@ -9,19 +15,32 @@
 #ifndef _HPUX_SOURCE
 #define _HPUX_SOURCE	      /* sad, but needed on HP-UX when compiling -Aa */
 #endif
+#ifndef NO_FIX_MALLOC
+#define NO_FIX_MALLOC		   /* we don't need a `fixed' malloc(0) call */
+#endif				/* saves a few bytes in some implementations */
 
 #include <sys/types.h>		/* pid_t mode_t uid_t gid_t off_t */
+#ifndef LIMITS_H_MISSING
+#include <limits.h>		/* absolutely nothing, just for fun */
+#undef LIMITS_H_MISSING
+#endif
 #ifndef UNISTD_H_MISSING
 #include <unistd.h>		/* open() read() write() close() dup() pipe()
-				/* fork() getuid() getgid() getpid() execve()
-				   execvp() sleep() setuid() setgid()
-				   setrgid() chown() */
+				/* fork() getuid() geteuid() getgid() getegid()
+				   getpid() execve() execvp() sleep() setuid()
+				   setgid() setruid() setrgid() setegid()
+				   chown() nice() */
+#else
+#undef UNISTD_H_MISSING
 #endif
 #include <stdio.h>		/* setbuf() fclose() stdin stdout stderr
 				/* fopen() fread() fwrite() fgetc() getc()
-				   fdopen() putc() fputs() FILE EOF */
+				   fdopen() putc() fputs() printf() sprintf()
+				   fprintf() sscanf() FILE EOF */
 #ifndef STDDEF_H_MISSING
 #include <stddef.h>		/* ptrdiff_t size_t */
+#else
+#undef STDDEF_H_MISSING
 #endif
 #ifndef STDLIB_H_MISSING
 #include <stdlib.h>		/* getenv() malloc() realloc() free()
@@ -37,8 +56,10 @@
 				/* struct dirent */
 #endif
 #ifndef SYS_WAIT_H_MISSING
-#include <sys/wait.h>		/* wait() WIFEXITED() WIFSTOPPED()
-				/* WEXITSTATUS() */
+#include <sys/wait.h>		/* wait() waitpid() WIFEXITED() WIFSTOPPED()
+				/* WEXITSTATUS() WTERMSIG() */
+#else
+#undef SYS_WAIT_H_MISSING
 #endif
 #ifndef SYS_UTSNAME_H_MISSING
 #include <sys/utsname.h>	/* uname() utsname */
@@ -52,7 +73,15 @@
 				/* strspn() strcspn() strchr() strcmp()
 				   strncmp() strpbrk() strstr() memmove() */
 #endif
-#include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN */
+#ifndef MATH_H_MISSING
+#include <math.h>		/* pow() */
+#endif
+#ifndef SYSLOG_H_MISSING
+#include <syslog.h>		/* openlog() syslog() closelog() LOG_EMERG
+				/* LOG_ALERT LOG_ERR LOG_NOTICE LOG_PID
+				   LOG_MAIL */
+#endif
+#include <errno.h>		/* EINTR EEXIST ENFILE EACCES EAGAIN EXDEV */
 #ifndef SYSEXITS_H_MISSING
 #include <sysexits.h>		/* EX_OK EX_USAGE EX_NOINPUT EX_NOUSER
 				/* EX_UNAVAILABLE EX_OSERR EX_OSFILE
@@ -61,25 +90,31 @@
 #endif
 
 #ifdef STDLIB_H_MISSING
+#undef STDLIB_H_MISSING
 void*malloc(),*realloc();
 const char*getenv();
 #endif
 #ifdef DIRENT_H_MISSING
+#undef DIRENT_H_MISSING
 #ifndef NDIR_H_MISSING
 #include <ndir.h>
 #define dirent	direct
 #else
+#undef NDIR_H_MISSING
 #ifndef SYS_NDIR_H_MISSING
 #include <sys/ndir.h>
 #define dirent	direct
 #else
+#undef SYS_NDIR_H_MISSING
 #ifndef SYS_DIR_H_MISSING
 #include <sys/dir.h>
 #define dirent	direct
 #else			  /* due to brain-damaged NeXT sys/dirent.h contents */
+#undef SYS_DIR_H_MISSING
 #ifndef SYS_DIRENT_H_MISSING	     /* sys/dirent.h must be moved down here */
 #include <sys/dirent.h>
 #else
+/*#undef SYS_DIRENT_H_MISSING			       /* needed by autoconf */
 /* I give up, I can only hope that your system defines DIR and struct dirent */
 #endif
 #endif
@@ -87,6 +122,7 @@ const char*getenv();
 #endif
 #endif /* DIRENT_H_MISSING */
 #ifdef STRING_H_MISSING
+#undef STRING_H_MISSING
 #include <strings.h>
 #ifndef strchr
 char*strchr();
@@ -94,9 +130,15 @@ char*strchr();
 char*strpbrk();
 #endif
 #ifdef SYS_UTSNAME_H_MISSING
+#undef SYS_UTSNAME_H_MISSING
 #define NOuname
 #endif
+#ifdef MATH_H_MISSING
+#undef MATH_H_MISSING
+double pow();
+#endif
 #ifdef SYSEXITS_H_MISSING
+#undef SYSEXITS_H_MISSING
 		/* Standard exit codes, original list maintained
 		   by Eric Allman (eric@berkeley.edu) */
 #define EX_OK		0
@@ -194,8 +236,12 @@ char*strpbrk();
 #define S_ISUID 04000
 #define S_ISGID 02000
 #endif
+#ifndef S_ISVTX
+#define S_ISVTX 01000
+#endif
 
 #ifdef WMACROS_NON_POSIX
+#undef WMACROS_NON_POSIX
 #ifdef WIFEXITED
 #undef WIFEXITED
 #endif
@@ -204,6 +250,9 @@ char*strpbrk();
 #endif
 #ifdef WEXITSTATUS
 #undef WEXITSTATUS
+#endif
+#ifdef WTERMSIG
+#undef WTERMSIG
 #endif
 #endif /* WMACROS_NON_POSIX */
 
@@ -216,9 +265,12 @@ char*strpbrk();
 #ifndef WEXITSTATUS
 #define WEXITSTATUS(waitval)	((waitval)>>8&255)
 #endif
+#ifndef WTERMSIG
+#define WTERMSIG(waitval)	((waitval)&255)
+#endif
 
 extern /*const*/char**environ;
-extern errno;
+extern int errno;
 
 #ifndef STDIN_FILENO
 #define STDIN	0
@@ -246,6 +298,16 @@ extern errno;
 #endif
 #endif
 
+#ifdef SYSLOG_H_MISSING
+#undef SYSLOG_H_MISSING
+#define openlog(ident,logopt,facility)	0
+#define syslog				(void)
+#define LOG_EMERG			0
+#define LOG_ALERT			0
+#define LOG_ERR				0
+#define LOG_NOTICE			0
+#endif
+
 #ifndef NOuname
 #ifndef P		  /* SINIX V5.23 has the wrong prototype for uname() */
 extern int uname();					 /* so we fix it :-) */
@@ -259,8 +321,8 @@ extern int uname();					 /* so we fix it :-) */
 
 #ifndef strchr		   /* for very old K&R compatible include files with */
 #ifdef P						/* new K&R libraries */
-#ifdef const
 #ifdef void
+#ifdef NO_const
 extern char*strchr();
 extern char*strpbrk();
 extern char*strstr();
@@ -272,30 +334,83 @@ extern void*memmove();
 
 #define Const			/*const*/     /* Convex cc doesn't grok this */
 
-#ifdef const
 #ifndef P				      /* no prototypes without const */
+#ifdef NO_const
 #define P(args) ()
 #endif
 #endif
 
 #ifdef NOrename
+#undef NOrename
 #define rename(old,new) (-(link(old,new)||unlink(old)))
 #endif
 
+#ifndef NOsetregid
 #ifdef NOsetrgid
-#ifdef NOsetregid
-#define setrgid(gid)	(-1)
-#else
 #define setrgid(gid)	setregid(gid,-1)
+#define setruid(uid)	setreuid(uid,-1)
+#endif
+#ifdef NOsetegid
+#define setegid(gid)	setregid(-1,gid)
+#endif
+#else
+#ifndef NOsetresgid
+#ifdef NOsetrgid
+#define setrgid(gid)	setresgid(gid,-1,-1)
+#define setruid(uid)	setresuid(uid,-1,-1)
+#endif
+#ifdef NOsetegid
+#define setegid(gid)	setresgid(-1,gid,-1)
+#endif
+#else
+#ifdef NOsetrgid
+#define setrgid(gid)	(-1)
+#define setruid(uid)	(-1)
+#endif
+#ifdef NOsetegid
+#define setegid(gid)	setgid(gid)
+#endif
 #endif
 #endif
 
+#ifdef NOsetrgid
+#undef NOsetrgid
+#endif
+#ifdef NOsetegid
+#undef NOsetegid
+#endif
+#ifdef NOsetregid
+#undef NOsetregid
+#endif
+#ifdef NOsetresgid
+#undef NOsetresgid
+#endif
+
+#ifdef NOpow
+#define tpow(x,y)	(x)
+#else
+#define tpow(x,y)	pow(x,y)
+#endif
+
 #ifdef NOmkdir
+#undef NOmkdir
 #define mkdir(dir,mode) (-1)
+#endif
+
+#ifdef NOwaitpid
+#undef NOwaitpid
+#define waitpid(pid,stat_loc,options)	0
 #endif
 
 #ifdef NOmemmove
 #define memmove(to,from,count) smemmove(to,from,count)
+#endif
+
+#ifdef SLOWstrstr
+#ifdef strstr
+#undef strstr
+#endif
+#define strstr(haystack,needle) sstrstr(haystack,needle)
 #endif
 
 #ifndef P
@@ -304,16 +419,30 @@ extern void*memmove();
 #define Q(args)		() /* needed until function definitions are ANSI too */
 
 #ifdef oBRAIN_DAMAGE
+#undef oBRAIN_DAMAGE
 #undef offsetof
 #endif
 #ifndef offsetof
 #define offsetof(s,m) ((char*)&(((s*)sizeof(s))->m)-(char*)sizeof(s))
 #endif
 
-#define PROGID		const char progid[]="Stephen R. van den Berg"
+#define SETerrno(v)	(errno=(v))	       /* multi-threading errno hook */
+
+#define PROGID		/*const*/char progid[]="Stephen R. van den Berg"
 #define maxindex(x)	(sizeof(x)/sizeof((x)[0])-1)
 #define STRLEN(x)	(sizeof(x)-1)
 #define ioffsetof(s,m)	((int)offsetof(s,m))
-#define numeric(x)	((unsigned)((x)-'0')<='9'-'0')
+#define numeric(x)	((unsigned)(x)-'0'<='9'-'0')
+#define charNUM(num,v)	char num[8*sizeof(v)*4/10+1+1]
 
 #define mx(a,b)		((a)>(b)?(a):(b))
+
+typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
+#ifdef uchar
+#undef uchar
+#endif
+#define uchar uschar
+
+#ifdef NO_const
+#undef NO_const
+#endif

@@ -1,4 +1,4 @@
-/*$Id: network.h,v 1.5 1993/01/28 14:22:17 berg Exp $*/
+/*$Id: network.h,v 1.6 1994/05/26 14:13:17 berg Exp $*/
 
 #include <sys/socket.h>			/* socket() sendto() AF_INET
 					/* SOCK_DGRAM */

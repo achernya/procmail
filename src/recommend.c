@@ -2,8 +2,8 @@
  *	recommend	Analyses the installation, and makes		*
  *			recommendations about suid/sgid modes		*
  ************************************************************************/
-/*$Id: recommend.c,v 1.5 1993/03/12 16:54:43 berg Exp $*/
-#include "includes.h"				       /* also for fprintf() */
+/*$Id: recommend.c,v 1.9 1994/06/01 17:22:30 berg Exp $*/
+#include "includes.h"
 
 #ifndef SYSTEM_MBOX
 #define SYSTEM_MBOX	SYSTEM_MAILBOX
@@ -20,11 +20,11 @@ char*lastdirsep(filename)const char*filename;	 /* finds the next character */
 { const char*p;					/* following the last DIRSEP */
   while(p=strpbrk(filename,dirsep))
      filename=p+1;
-  return(char*)filename;
+  return (char*)filename;
 }
 
 main(argc,argv)const int argc;const char*const argv[];
-{ struct group*grp;struct stat stbuf;gid_t gid=NOBODY_gid;
+{ struct group*grp;struct stat stbuf;gid_t gid=(gid_t)-1;
   const char*const*p;mode_t sgid=0;int chmdir=0;
   if(argc!=3)
    { fprintf(stderr,"Please run this program via 'make recommend'\n");

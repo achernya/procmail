@@ -1,4 +1,13 @@
-/*$Id: sublib.c,v 1.8 1993/01/26 12:30:51 berg Exp $*/
+/************************************************************************
+ *	Collection of standard library substitute routines		*
+ *									*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
+ ************************************************************************/
+#ifdef RCS
+static /*const*/char rcsid[]=
+ "$Id: sublib.c,v 1.13 1994/06/28 16:56:49 berg Exp $";
+#endif
 #include "includes.h"
 #include "sublib.h"
 
@@ -16,7 +25,8 @@ jiasc:;
      while(--count);
    }
   else
-   { to+=count;from+=count;goto jidesc;
+   { to+=count;from+=count;
+     goto jidesc;
      do
       { *--to= *--from;					  /* copy from below */
 jidesc:;
@@ -25,7 +35,8 @@ jidesc:;
    }
   return To/*old*/;
 #else
-{ bcopy(From,To,count);return To;
+{ bcopy(From,To,count);
+  return To;
 #endif /* NObcopy */
 }
 #endif /* NOmemmove */
@@ -38,17 +49,80 @@ char*strpbrk(st,del)const char*const st,*del;
   for(f=0;*del;)
      if((t=strchr(st,*del++))&&(!f||t<f))
 	f=t;
-  return(char*)f;
+  return (char*)f;
 }
 #endif
 
-#ifdef NOstrstr
-char*strstr(whole,part)const char*whole,*const part;
-{ size_t i;const char*end;
-  for(end=strchr(whole,'\0')-(i=strlen(part))+1;--end>=whole;)
-     if(!strncmp(end,part,i))
-	return(char*)end;
-  return 0;
+#ifdef BENCHSIZE					     /* for autoconf */
+#ifndef SLOWstrstr
+#define SLOWstrstr
+#else
+#undef BENCHSIZE
+#endif
+#endif
+#ifdef SLOWstrstr
+/*
+ *	My personal strstr() implementation that beats most other algorithms.
+ *	Until someone tells me otherwise, I assume that this is the
+ *	fastest implementation of strstr() in C.
+ *	I deliberately chose not to comment it.	 You should have at least
+ *	as much fun trying to understand it, as I had to write it :-).
+ */
+typedef unsigned chartype;
+
+char*sstrstr(phaystack,pneedle)const char*const phaystack;
+ const char*const pneedle;
+{ register const uchar*haystack,*needle;register chartype b,c;
+  haystack=(const uchar*)phaystack;
+  if(b= *(needle=(const uchar*)pneedle))
+   { haystack--;				  /* possible ANSI violation */
+     do
+	if(!(c= *++haystack))
+	   goto ret0;
+     while(c!=b);
+     if(!(c= *++needle))
+	goto foundneedle;
+     ++needle;
+     goto jin;
+     for(;;)
+      { ;{ register chartype a;
+	   do
+	    { if(!(a= *++haystack))
+		 goto ret0;
+	      if(a==b)
+		 break;
+	      if(!(a= *++haystack))
+		 goto ret0;
+shloop:;    }
+	   while(a!=b);
+jin:	   if(!(a= *++haystack))
+	      goto ret0;
+	   if(a!=c)
+	      goto shloop;
+	 }
+	;{ register chartype a;
+	   ;{ register const uchar*rhaystack,*rneedle;
+	      if(*(rhaystack=haystack--+1)==(a= *(rneedle=needle)))
+		 do
+		  { if(!a)
+		       goto foundneedle;
+		    if(*++rhaystack!=(a= *++needle))
+		       break;
+		    if(!a)
+		       goto foundneedle;
+		  }
+		 while(*++rhaystack==(a= *++needle));
+	      needle=rneedle;		   /* took the register-poor aproach */
+	    }
+	   if(!a)
+	      break;
+	 }
+      }
+   }
+foundneedle:
+  return (char*)haystack;
+ret0:
+  return (char*)0;
 }
 #endif
 			    /* strtol replacement which lacks range checking */
@@ -59,7 +133,8 @@ long strtol(start,ptr,base)const char*start,**const ptr;
      goto fault;
   for(;;str++)					  /* skip leading whitespace */
    { switch(*str)
-      { case '\t':case '\n':case '\v':case '\f':case '\r':case ' ':continue;
+      { case '\t':case '\n':case '\v':case '\f':case '\r':case ' ':
+	   continue;
       }
      break;
    }
@@ -83,7 +158,7 @@ long strtol(start,ptr,base)const char*start,**const ptr;
   do
    { found=1;result=result*base+i;str++;		 /* start converting */
 jumpin:
-     if((i= *str-'0')<10);
+     if((i=(unsigned)*str-'0')<10);
      else if(i-'A'+'0'<='Z'-'A')
 	i-='A'-10-'0';			   /* collating sequence dependency! */
      else if(i-'a'+'0'<'z'-'a')
@@ -98,7 +173,7 @@ fault:
   return sign?-result:result;
 }
 #else /* NOstrtol */
-#ifndef NOstrstr
+#ifndef SLOWstrstr
 #ifndef NOstrpbrk
 #ifndef NOmemmove
 int sublib_dummy_var;		      /* to prevent insanity in some linkers */

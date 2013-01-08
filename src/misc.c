@@ -1,14 +1,15 @@
 /************************************************************************
  *	Miscellaneous routines used by procmail				*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: misc.c,v 1.26 1993/06/21 14:24:41 berg Exp $";
+ "$Id: misc.c,v 1.55 1994/06/28 16:56:31 berg Exp $";
 #endif
 #include "procmail.h"
+#include "acommon.h"
 #include "sublib.h"
 #include "robust.h"
 #include "misc.h"
@@ -17,20 +18,30 @@ static /*const*/char rcsid[]=
 #include "cstdio.h"
 #include "exopen.h"
 #include "regexp.h"
+#include "mcommon.h"
 #include "goodies.h"
 #include "locking.h"
 #include "mailfold.h"
 
-const char lastfolder[]="LASTFOLDER";
 struct varval strenvvar[]={{"LOCKSLEEP",DEFlocksleep},
  {"LOCKTIMEOUT",DEFlocktimeout},{"SUSPEND",DEFsuspend},
  {"NORESRETRY",DEFnoresretry},{"TIMEOUT",DEFtimeout},{"VERBOSE",DEFverbose},
  {"LOGABSTRACT",DEFlogabstract}};
+struct varstr strenstr[]={{"SHELLMETAS",DEFshellmetas},{"LOCKEXT",DEFlockext},
+ {"MSGPREFIX",DEFmsgprefix},{"COMSAT",""},{"TRAP",""},
+ {"SHELLFLAGS",DEFshellflags},{"DEFAULT",DEFdefault},{"SENDMAIL",DEFsendmail}};
+
+#define MAXvarvals	 maxindex(strenvvar)
+#define MAXvarstrs	 maxindex(strenstr)
+
+const char lastfolder[]="LASTFOLDER";
 int didchd;
-static fakedelivery;
+char*globlock;
+static time_t oldtime;
+static int fakedelivery;
 		       /* line buffered to keep concurrent entries untangled */
 void elog(newt)const char*const newt;
-{ int lnew,i;static lold;static char*old;char*p;
+{ int lnew;size_t i;static lold;static char*old;char*p;
 #ifndef O_CREAT
   lseek(STDERR,(off_t)0,SEEK_END);	  /* locking should be done actually */
 #endif
@@ -40,7 +51,7 @@ void elog(newt)const char*const newt;
   if(p=lold?realloc(old,i):malloc(i))			 /* unshelled malloc */
    { memmove((old=p)+lold,newt,(size_t)lnew);			   /* append */
      if(p[(lold=i)-1]=='\n')					     /* EOL? */
-	rwrite(STDERR,p,i),lold=0,free(p);		/* flush the line(s) */
+	rwrite(STDERR,p,(int)i),lold=0,free(p);		/* flush the line(s) */
    }
   else						   /* no memory, force flush */
 flush:
@@ -61,25 +72,40 @@ void ignoreterm P((void))
   signal(SIGQUIT,SIG_IGN);
 }
 
-void setids(uid,gid)const uid_t uid;const gid_t gid;
-{ if(setrgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
-     setgid(gid);	   /* sets the saved gid as well; we can't use that! */
-  setuid(uid);setgid(gid);
+void shutdesc P((void))
+{ rclose(savstdout);closelog();closerc();
+}
+
+void setids P((void))
+{ if(rcstate!=rc_NORMAL)
+   { if(setrgid(gid))	/* due to these !@#$%^&*() POSIX semantics, setgid() */
+	setgid(gid);	   /* sets the saved gid as well; we can't use that! */
+     setruid(uid);setuid(uid);setegid(gid);rcstate=rc_NORMAL;
+#if !DEFverbose
+     verbose=0;
+#endif
+   }
 }
 
 void writeerr(line)const char*const line;
-{ nlog("Error while writing to");logqnl(line);
+{ nlog(errwwriting);logqnl(line);
 }
 
-forkerr(pid,a)const pid_t pid;const char*const a;
+int forkerr(pid,a)const pid_t pid;const char*const a;
 { if(pid==-1)
-   { nlog("Failed forking");logqnl(a);return 1;
+   { nlog("Failed forking");logqnl(a);
+     return 1;
    }
   return 0;
 }
 
-void progerr(line)const char*const line;
-{ nlog("Program failure of");logqnl(line);
+void progerr(line,xitcode)const char*const line;int xitcode;
+{ charNUM(num,thepid);
+  nlog("Program failure (");
+  if(xitcode<0)
+     xitcode= -xitcode,elog("-");
+  ultstr(0,(unsigned long)xitcode,num);elog(num);
+  elog(") of");logqnl(line);
 }
 
 void chderr(dir)const char*const dir;
@@ -90,13 +116,43 @@ void readerr(file)const char*const file;
 { nlog("Couldn't read");logqnl(file);
 }
 
+void verboff P((void))
+{ verbose=0;
+#ifdef SIGUSR1
+  qsignal(SIGUSR1,(void(*)())verboff);
+#endif
+}
+
+void verbon P((void))
+{ verbose=1;
+#ifdef SIGUSR2
+  qsignal(SIGUSR2,(void(*)())verbon);
+#endif
+}
+
 void yell(a,b)const char*const a,*const b;		/* log if VERBOSE=on */
 { if(verbose)
      nlog(a),logqnl(b);
 }
 
+void newid P((void))
+{ thepid=getpid();oldtime=0;
+}
+
+void zombiecollect P((void))
+{ while(waitpid((pid_t)-1,(int*)0,WNOHANG)>0);	      /* collect any zombies */
+}
+
 void nlog(a)const char*const a;
-{ elog(procmailn);elog(": ");elog(a);
+{ time_t newtime;
+  static const char colnsp[]=": ";
+  elog(procmailn);elog(colnsp);
+  if(verbose&&oldtime!=(newtime=time((time_t*)0)))
+   { charNUM(num,thepid);
+     elog("[");oldtime=newtime;ultstr(0,(unsigned long)thepid,num);elog(num);
+     elog("] ");elog(ctime(&oldtime));elog(procmailn);elog(colnsp);
+   }
+  elog(a);
 }
 
 void logqnl(a)const char*const a;
@@ -108,15 +164,27 @@ void skipped(x)const char*const x;
      nlog("Skipped"),logqnl(x);
 }
 
-nextrcfile P((void))		/* next rcfile specified on the command line */
-{ const char*p;
+int nextrcfile P((void))	/* next rcfile specified on the command line */
+{ const char*p;int rval=2;
   while(p= *gargv)
    { gargv++;
      if(!strchr(p,'='))
-      { rcfile=p;return 1;
+      { rcfile=p;
+	return rval;
       }
+     rval=1;			       /* not the first argument encountered */
    }
   return 0;
+}
+
+void onguard P((void))
+{ lcking|=lck_LOCKFILE;
+}
+
+void offguard P((void))
+{ lcking&=~lck_LOCKFILE;
+  if(nextexit==1)	  /* make sure we are not inside Terminate() already */
+     elog(newline),Terminate();
 }
 
 void sterminate P((void))
@@ -134,12 +202,12 @@ void sterminate P((void))
 	   for(j=0;!((i>>=1)&1);j++);
 	   elog(msg[j]);
 	 }
-	elog(newline);terminate();
+	elog(newline);Terminate();
       }
    }
 }
 
-void terminate P((void))
+void Terminate P((void))
 { ignoreterm();
   if(retvl2!=EX_OK)
      fakedelivery=0,retval=retvl2;
@@ -151,22 +219,16 @@ void terminate P((void))
       }
      else
 	logabstract(tgetenv(lastfolder));
-     closerc();
+     shutdesc();
      if(!(lcking&lck_ALLOCLIB))			/* don't reenter malloc/free */
-	exectrap(tgetenv("TRAP"));
+	exectrap(traps);
      nextexit=2;unlock(&loclock);unlock(&globlock);fdunlock();
-   }
-  exit(fakedelivery==2?EX_OK:retval);
+   }					/* flush the logfile & exit procmail */
+  elog("");exit(fakedelivery==2?EX_OK:retval);
 }
 
 void suspend P((void))
-{ long t;
-  sleep((unsigned)suspendv);
-  if(alrmtime)
-     if((t=alrmtime-time((time_t*)0))<=1)	  /* if less than 1s timeout */
-	ftimeout();				  /* activate it by hand now */
-     else		    /* set it manually again, to avoid problems with */
-	alarm((unsigned)t);	/* badly implemented sleep library functions */
+{ ssleep((unsigned)suspendv);
 }
 
 void app_val(sp,val)struct dyna_long*const sp;const off_t val;
@@ -178,7 +240,7 @@ void app_val(sp,val)struct dyna_long*const sp;const off_t val;
   sp->offs[sp->filled++]=val;				     /* append to it */
 }
 
-alphanum(c)const unsigned c;
+int alphanum(c)const unsigned c;
 { return numeric(c)||c-'a'<='z'-'a'||c-'A'<='Z'-'A'||c=='_';
 }
 
@@ -222,7 +284,7 @@ void setdef(name,contents)const char*const name,*const contents;
 }
 
 void metaparse(p)const char*p;				    /* result in buf */
-{ if(sh=!!strpbrk(p,tgetenv(shellmetas)))
+{ if(sh=!!strpbrk(p,shellmetas))
      strcpy(buf,p);			 /* copy literally, shell will parse */
   else
 #ifndef GOT_bin_test
@@ -249,7 +311,7 @@ char*lastdirsep(filename)const char*filename;	 /* finds the next character */
 { const char*p;					/* following the last DIRSEP */
   while(p=strpbrk(filename,dirsep))
      filename=p+1;
-  return(char*)filename;
+  return (char*)filename;
 }
 
 char*cat(a,b)const char*const a,*const b;
@@ -258,12 +320,13 @@ char*cat(a,b)const char*const a,*const b;
 
 char*tstrdup(a)const char*const a;
 { int i;
-  i=strlen(a)+1;return tmemmove(malloc(i),a,i);
+  i=strlen(a)+1;
+  return tmemmove(malloc(i),a,i);
 }
 
 const char*tgetenv(a)const char*const a;
 { const char*b;
-  return(b=getenv(a))?b:"";
+  return (b=getenv(a))?b:"";
 }
 
 char*cstr(a,b)char*const a;const char*const b;	/* dynamic buffer management */
@@ -282,14 +345,6 @@ void setlastfolder(folder)const char*const folder;
    }
 }
 
-char*skpspace(chp)const char*chp;
-{ for(;;chp++)
-     switch(*chp)
-      { case ' ':case '\t':continue;
-	default:return(char*)chp;
-      }
-}
-
 char*gobenv(chp)char*chp;
 { int found,i;
   found=0;
@@ -304,11 +359,13 @@ char*gobenv(chp)char*chp;
   return 0;
 }
 
-asenvcpy(src)char*src;
+int asenvcpy(src)char*src;
 { strcpy(buf,src);
   if(src=strchr(buf,'='))			     /* is it an assignment? */
-   { strcpy((char*)(sgetcp=buf2),++src);readparse(src,sgetc,2);sputenv(buf);
-     src[-1]='\0';asenv(src);return 1;
+   { const char*chp;
+     strcpy((char*)(sgetcp=buf2),++src);readparse(src,sgetc,2);
+     chp=sputenv(buf);src[-1]='\0';asenv(chp);
+     return 1;
    }
   return 0;
 }
@@ -316,7 +373,7 @@ asenvcpy(src)char*src;
 void asenv(chp)const char*const chp;
 { static const char slinebuf[]="LINEBUF",logfile[]="LOGFILE",Log[]="LOG",
    sdelivered[]="DELIVERED",includerc[]="INCLUDERC",eumask[]="UMASK",
-   host[]="HOST";
+   dropprivs[]="DROPPRIVS",shift[]="SHIFT";
   if(!strcmp(buf,slinebuf))
    { if((linebuf=renvint(0L,chp)+XTRAlinebuf)<MINlinebuf+XTRAlinebuf)
 	linebuf=MINlinebuf+XTRAlinebuf;		       /* check minimum size */
@@ -331,40 +388,55 @@ void asenv(chp)const char*const chp;
      opnlog(chp);
   else if(!strcmp(buf,Log))
      elog(chp);
+  else if(!strcmp(buf,exitcode))
+     setxit=1;
+  else if(!strcmp(buf,shift))
+   { int i;
+     if((i=renvint(0L,chp))>0)
+      { if(i>crestarg)
+	   i=crestarg;
+	crestarg-=i;restargv+=i;		     /* shift away arguments */
+      }
+   }
+  else if(!strcmp(buf,dropprivs))			  /* drop privileges */
+   { if(renvint(0L,chp))
+	setids();
+   }
   else if(!strcmp(buf,sdelivered))			    /* fake delivery */
    { if(renvint(0L,chp))				    /* is it really? */
-      { lcking|=lck_LOCKFILE;		    /* just to prevent interruptions */
-	if((thepid=sfork())>0)
-	 { nextexit=2;lcking&=~lck_LOCKFILE;exit(retvl2);
-	 }					/* signals may cause trouble */
+      { onguard();
+	if((thepid=sfork())>0)			/* signals may cause trouble */
+	   nextexit=2,lcking&=~lck_LOCKFILE,exit(retvl2);
 	if(!forkerr(thepid,procmailn))
 	   fakedelivery=1;
-	thepid=getpid();lcking&=~lck_LOCKFILE;
-	if(nextexit)				 /* signals occurred so far? */
-	   elog(newline),terminate();
+	newid();offguard();
       }
    }
   else if(!strcmp(buf,lockfile))
      lockit((char*)chp,&globlock);
   else if(!strcmp(buf,eumask))
-     umask((mode_t)strtol(chp,(char**)0,8));
+     doumask((mode_t)strtol(chp,(char**)0,8));
   else if(!strcmp(buf,includerc))
      pushrc(chp);
   else if(!strcmp(buf,host))
    { const char*name;
-     if(strncmp(chp,name=hostname(),HOSTNAMElen))
+     if(strcmp(chp,name=hostname()))
       { yell("HOST mismatched",name);
 	if(rc<0||!nextrcfile())			  /* if no rcfile opened yet */
-	   retval=EX_OK,terminate();		  /* exit gracefully as well */
-	closerc();rc=rc_NOFILE;
+	   retval=EX_OK,Terminate();		  /* exit gracefully as well */
+	closerc();
       }
    }
   else
    { int i=MAXvarvals;
      do					      /* several numeric assignments */
 	if(!strcmp(buf,strenvvar[i].name))
-	 { strenvvar[i].val=renvint(strenvvar[i].val,chp);break;
-	 }
+	   strenvvar[i].val=renvint(strenvvar[i].val,chp);
+     while(i--);
+     i=MAXvarstrs;
+     do						 /* several text assignments */
+	if(!strcmp(buf,strenstr[i].sname))
+	   strenstr[i].sval=chp;
      while(i--);
    }
 }
@@ -375,7 +447,8 @@ long renvint(i,env)const long i;const char*const env;
   if(p==env)
    { for(;;p++)					  /* skip leading whitespace */
       { switch(*p)
-	 { case '\t':case ' ':continue;
+	 { case '\t':case ' ':
+	      continue;
 	 }
 	break;
       }
@@ -390,10 +463,73 @@ long renvint(i,env)const long i;const char*const env;
   return t;
 }
 
+void squeeze(target)char*target;
+{ int state;char*src;
+  for(state=0,src=target;;target++,src++)
+   { switch(*target= *src)
+      { case '\n':
+	   if(state==1)
+	      target-=2;			     /* throw out \ \n pairs */
+	   state=2;
+	   continue;
+	case '\\':state=1;
+	   continue;
+	case ' ':case '\t':
+	   if(state==2)					     /* skip leading */
+	    { target--;					       /* whitespace */
+	      continue;
+	    }
+	default:state=0;
+	   continue;
+	case '\0':;
+      }
+     break;
+   }
+}
+
 char*egrepin(expr,source,len,casesens)char*expr;const char*source;
- const long len;
-{ source=(const char*)bregexec((struct eps*)(expr=(char*)
-   bregcomp(expr,!casesens)),(const uchar*)source,len>0?
-   (size_t)len:(size_t)0,!casesens);
-  free(expr);return(char*)source;
+ const long len;int casesens;
+{ if(*expr)		 /* only do the search if the expression is nonempty */
+   { source=(const char*)bregexec((struct eps*)(expr=(char*)
+      bregcomp(expr,!casesens)),(const uchar*)source,(const uchar*)source,
+      len>0?(size_t)len:(size_t)0,!casesens);
+     free(expr);
+   }
+  return (char*)source;
+}
+
+const struct passwd*savepass(spass,uid)struct passwd*const spass;
+ const uid_t uid;
+{ struct passwd*tpass;
+  if(spass->pw_name&&spass->pw_uid==uid)
+     goto ret;
+  if(tpass=getpwuid(uid))				  /* save by copying */
+   { spass->pw_uid=tpass->pw_uid;spass->pw_gid=tpass->pw_gid;
+     spass->pw_name=cstr(spass->pw_name,tpass->pw_name);
+     spass->pw_dir=cstr(spass->pw_dir,tpass->pw_dir);
+     spass->pw_shell=cstr(spass->pw_shell,tpass->pw_shell);
+ret: return spass;
+   }
+  return (const struct passwd*)0;
+}
+
+int enoughprivs(passinvk,euid,egid,uid,gid)const struct passwd*const passinvk;
+ const uid_t euid,uid;const gid_t egid,gid;
+{ return euid==ROOT_uid||passinvk&&passinvk->pw_uid==uid||euid==uid&&egid==gid;
+}
+
+void initdefenv P((void))
+{ int i=MAXvarstrs;
+  do	   /* initialise all non-empty string variables into the environment */
+     if(*strenstr[i].sval)
+	setdef(strenstr[i].sname,strenstr[i].sval);
+  while(i--);
+}
+
+const char*newdynstring(adrp,chp)struct dynstring**const adrp;
+ const char*const chp;
+{ struct dynstring*curr;size_t len;
+  curr=malloc(ioffsetof(struct dynstring,ename[0])+(len=strlen(chp)+1));
+  tmemmove(curr->ename,chp,len);curr->enext= *adrp;*adrp=curr;
+  return curr->ename;
 }

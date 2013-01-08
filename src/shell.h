@@ -1,4 +1,4 @@
-/*$Id: shell.h,v 1.4 1993/06/14 13:13:26 berg Exp $*/
+/*$Id: shell.h,v 1.5 1994/05/26 14:13:41 berg Exp $*/
 
 #ifdef malloc
 #undef malloc

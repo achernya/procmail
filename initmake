@@ -1,9 +1,35 @@
 #! /bin/sh
 :
-#$Id: initmake,v 1.37 1993/06/23 14:35:06 berg Exp $
+# Copyright (c) 1992-1994, S.R. van den Berg, The Netherlands
+#$Id: initmake,v 1.53 1994/05/26 14:10:48 berg Exp $
+
+if test -z "$IFS"
+then IFS=" \
+	\
+
+"
+  export IFS
+fi
 
 PATH=.:$PATH
 BSHELL=$1
+
+O="cd ."
+if $O
+then
+:
+else
+  echo "Your BSHELL=$BSHELL seems to be severely handicapped."
+  case "$BSHELL" in
+     *zsh*) ;;
+     *) echo "(If I wouldn't know better, I'd say you're trying to sell"
+	echo "me a buggy zsh :-)" ;;
+  esac
+  echo "Please edit the Makefile and try setting BSHELL to a shell which"
+  echo "is more backwards compatible with a Bourne, Korn or POSIX shell."
+  exit 1
+fi
+
 shift; MSHELL=$1
 shift; RM="$1"
 shift; MV="$1"
@@ -30,7 +56,31 @@ case "$SHELL" in
   *sh*)
      case "$SHELL" in
 	*csh*) echo "Warning: really perverted make detected"; SHELL="";;
-     esac;;
+	*zsh*) $RM src/_autotst
+	    $SHELL <<HERE
+	    O="echo test >src/_autotst"
+	    exec 2>$DEVNULL
+	    \$O
+HERE
+	   if test ! -f src/_autotst
+	   then
+	      echo "Warning: your $SHELL is broken, avoiding it"; SHELL=""
+	   fi ;;
+     esac
+     if test ! -z "$SHELL"
+     then
+	$SHELL <<HERE
+	exec 2>$DEVNULL
+	echo test >src/_autotst
+	echo test >src/_autotst
+HERE
+	if test $? = 1
+	then
+	   echo "Warning: your $SHELL has noclobber turned on, avoiding it"
+	   SHELL=""
+	fi
+     fi
+     $RM src/_autotst;;
   *) echo "Warning: perverted make detected"; SHELL="";;
 esac
 test -z "$SHELL" && SHELL=$BSHELL
@@ -65,6 +115,17 @@ then
 fi
 
 cd src				# diving into the source directory ######
+
+newln=""
+$RM _autotst.rrr _autotst
+echo hi >_autotst.rrr
+if $LN _autotst.rrr _autotst
+then
+:
+else
+   $LN -s _autotst.rrr _autotst && LN="$LN -s" && newln=yes
+fi
+
 cat >_autotst.c <<HERE
 main()
 { return 0;
@@ -78,8 +139,8 @@ for a in "$CC" cc gcc
 do
   echo $a $CFLAGS1 _autotst.c -o _autotst $LDFLAGS1 >>_autotst.rrr
   test -z "$cc" -a ! -z "$a" &&
-   ($a $CFLAGS1 _autotst.c -o _autotst $LDFLAGS1) >>_autotst.rrr \
-   2>&1 && cc="$a"
+   (exec >>_autotst.rrr 2>&1; $a $CFLAGS1 _autotst.c -o _autotst $LDFLAGS1) &&
+   cc="$a"
   echo "::::" >>_autotst.rrr
 done
 if test -z "$cc"
@@ -124,7 +185,8 @@ LDFLAGSC=""
 
 test -f _autotst.$O || $cc -c $CFLAGS1 $CFLAGS _autotst.c >$DEVNULL 2>&1
 $cc $CFLAGS1 $CFLAGS _autotst.$O -o _autotst $LDFLAGS1 -lc >_autotst.rrr 2>&1 \
- && if grep "[\"']c['\"]" _autotst.rrr >$DEVNULL
+ && if grep "[\"']c['\"]" _autotst.rrr >$DEVNULL ||
+   fgrep libc _autotst.rrr >$DEVNULL
   then
   :
   else
@@ -133,57 +195,76 @@ $cc $CFLAGS1 $CFLAGS _autotst.$O -o _autotst $LDFLAGS1 -lc >_autotst.rrr 2>&1 \
 
 LDFLAGS="$SEARCHLIBS"
 firstrun=yes
+checkpath=no
 
 while $RM _autotst
  $cc $CFLAGS1 $CFLAGS _autotst.$O -o _autotst $LDFLAGS1 $LDFLAGS \
   $LDFLAGSC >_autotst.rrr 2>&1
  test $firstrun = yes -o ! -f _autotst
 do
-  firstrun=no
   set dummy $LDFLAGS
   shift
   echo 2>&1 "	...scanning for $# libraries..."
   NEWLDFLAGS=""
-  for a in $LDFLAGS dummy
+  for lib in `echo _dummy_ $LDFLAGS | sed -e s/-l//g`
   do
-     if test dummy != $a
+     if test _dummy_ != $lib
      then
-	lib=`expr $a : '-l\(.*\)'`
-	if $FGREP lib$lib _autotst.rrr >$DEVNULL ||
-	 $FGREP -e $a _autotst.rrr >$DEVNULL ||
-	 grep "[\"']$lib['\"]" _autotst.rrr >$DEVNULL
-	then
-	:
-	else
-	   OLDIFS="$IFS"; IFS=":$IFS"
-	   found=no
-	   for libpath in $LIBPATHS $LD_LIBRARY_PATH
+	a=-l$lib
+	 ( exec <_autotst.rrr
+	   while read b
 	   do
-	      set $libpath/*lib$lib[A-Z.]*
-	      test -f $1 && found=yes
+	      case ":$b:" in
+		 *_autotst.$O*) ;;
+		 *lib$lib[!a-z_]*|*$a[!a-z_]*|*[!a-z]$lib[!a-z_]*) exit 1;;
+	      esac
 	   done
-	   IFS="$OLDIFS"
+	   exit 0
+	 )
+	if test $? = 0
+	then
+	   found=yes
+	   if test $checkpath = yes
+	   then
+	      OLDIFS="$IFS"; IFS=":$IFS"
+	      found=no
+	      for libpath in $LIBPATHS $LD_LIBRARY_PATH
+	      do
+		 set $libpath/*lib$lib[A-Z.]*
+		 test -f $1 && found=yes
+	      done
+	      IFS="$OLDIFS"
+	   fi
 	   test yes = $found && NEWLDFLAGS="$NEWLDFLAGS $a"
 	fi
      fi
   done
   if test a"$LDFLAGS" = a"$NEWLDFLAGS"
   then
-     echo 2>&1 "Whoeaaa!  There's something fishy going on here."
-     echo 2>&1 "You have a look and see if you detect anything uncanny:"
-     echo 2>&1 "-------------------------------------------------------"
-     cat 2>&1 _autotst.rrr
-     echo 2>&1 "-------------------------------------------------------"
-     echo 2>&1 \
+     if test $checkpath = yes
+     then
+	echo 2>&1 "Whoeaaa!  There's something fishy going on here."
+	echo 2>&1 "You have a look and see if you detect anything uncanny:"
+	echo 2>&1 "*******************************************************"
+	cat 2>&1 _autotst.rrr
+	echo 2>&1 "*******************************************************"
+	echo 2>&1 \
        "I suggest you take a look at the definition of LDFLAGS* and SEARCHLIBS"
-     echo 2>&1 "in the Makefile before you try make again."
-     echo 2>&1 "Also: write me a mail showing the errorlog you just generated."
-     echo 2>&1 "The errorlog can still be found in src/_autotst.rrr"
-     echo 2>&1 "It would be helpful if you could mention what machine and OS"
-     echo 2>&1 "you are trying to compile this on (uname -a).  Thanks."
-     exit 1
+	echo 2>&1 "in the Makefile before you try make again."
+	echo 2>&1 \
+	 "Also: write me a mail showing the errorlog you just generated."
+	echo 2>&1 "The errorlog can still be found in src/_autotst.rrr"
+	echo 2>&1 \
+	 "It would be helpful if you could mention what machine and OS"
+	echo 2>&1 "you are trying to compile this on (uname -a).  Thanks."
+	exit 1
+     fi
+     checkpath=yes
+  else
+     checkpath=no
   fi
   LDFLAGS="$NEWLDFLAGS"
+  firstrun=no
 done
 
 $RM _autotst.$O _autotst.c _autotst
@@ -198,9 +279,12 @@ for a in $SUBDIRS
 do
   if test ! -f $a/Makefile.init
   then
-     $LN $a/Makefile $a/Makefile.init
-     $RM $a/Makefile
-     $LN $a/Makefile.init $a/Makefile
+     case "$LN" in
+	*-s*) cp $a/Makefile $a/Makefile.init ;;
+	*) $LN $a/Makefile $a/Makefile.init
+	   $RM $a/Makefile
+	   $LN $a/Makefile.init $a/Makefile ;;
+     esac
   fi
 done
 
@@ -211,6 +295,7 @@ echo "# Makefile.1 - mark, don't (re)move this, a sed script needs it
 
 test a$SHELL != a$MSHELL && echo  "SHELL	= $SHELL"	>>_Makefile
 echo "FGREP	= $FGREP"				>>_Makefile
+test -z "$newln" || echo "LN	= $LN"			>>_Makefile
 test -z "$MAKE" && echo "MAKE	= make"			>>_Makefile
 test a"$cc" != a"$CC" && echo "CC	= $cc"		>>_Makefile
 
@@ -268,7 +353,7 @@ do
   echo							>>src/_Makefile
   echo "../new/$a: $a ../config.check"			>>src/_Makefile
   echo "	@\$(RM) \$@"				>>src/_Makefile
-  echo "	\$(LN) $a \$@"				>>src/_Makefile
+  echo "	\$(LN) ../src/$a \$@"			>>src/_Makefile
 done
 
 for a in $MANSS
@@ -276,7 +361,7 @@ do
   echo							>>man/_Makefile
   echo "../new/$a: $a ../config.check"			>>man/_Makefile
   echo "	@\$(RM) \$@"				>>man/_Makefile
-  echo "	\$(LN) $a \$@"				>>man/_Makefile
+  echo "	\$(LN) ../man/$a \$@"			>>man/_Makefile
 done
 
 for a in $MANS1S

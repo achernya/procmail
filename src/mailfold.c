@@ -1,14 +1,15 @@
 /************************************************************************
  *	Routines that deal with the mailfolder(format)			*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: mailfold.c,v 1.32 1993/07/01 11:58:32 berg Exp $";
+ "$Id: mailfold.c,v 1.49 1994/06/28 16:56:26 berg Exp $";
 #endif
 #include "procmail.h"
+#include "acommon.h"
 #include "sublib.h"
 #include "robust.h"
 #include "shell.h"
@@ -21,9 +22,8 @@ static /*const*/char rcsid[]=
 #include "mailfold.h"
 #ifndef NO_COMSAT
 #include "network.h"
-
-const char scomsat[]="COMSAT";
 #endif
+
 int logopened,tofile;
 off_t lasttell;
 static long lastdump;
@@ -38,7 +38,8 @@ static long getchunk(s,fromw,len)const int s;const char*fromw;const long len;
       { rwrite(s,esc,STRLEN(esc));lastdump++;			/* escape it */
 	if(i>=escFrom_.filled)				      /* last block? */
 	   return len;				/* yes, give all what's left */
-	dif=escFrom_.offs[i]-dist;break;	     /* the whole next block */
+	dif=escFrom_.offs[i]-dist;		     /* the whole next block */
+	break;
       }
      else if(dif>0)				/* passed this spot already? */
 	break;
@@ -55,7 +56,7 @@ long dump(s,source,len)const int s;const char*source;long len;
      lasttell=lseek(s,(off_t)0,SEEK_END);smboxseparator(s);	 /* optional */
 #ifndef NO_NFS_ATIME_HACK					/* separator */
      if(part&&tofile)		       /* if it is a file, trick NFS into an */
-	len--,part--,rwrite(s,source++,1),sleep(1);	    /* a_time<m_time */
+	len--,part--,rwrite(s,source++,1),ssleep(1);	    /* a_time<m_time */
 #endif
      goto jin;
      do
@@ -75,11 +76,13 @@ writefin:
 	nlog("Kernel-unlock failed\n");
      i=rclose(s);
    }			   /* return an error even if nothing was to be sent */
-  tofile=0;return i&&!len?-1:len;
+  tofile=0;
+  return i&&!len?-1:len;
 }
 
-static dirfile(chp,linkonly)char*const chp;const int linkonly;
-{ if(chp)
+static int dirfile(chp,linkonly)char*const chp;const int linkonly;
+{ const static char lkingto[]="Linking to";
+  if(chp)
    { long i=0;			     /* first let us try to prime i with the */
 #ifndef NOopendir		     /* highest MH folder number we can find */
      long j;DIR*dirp;struct dirent*dp;char*chp2;
@@ -94,50 +97,57 @@ static dirfile(chp,linkonly)char*const chp;const int linkonly;
 #endif /* NOopendir */
      ;{ int ok;
 	do ultstr(0,++i,chp);		       /* find first empty MH folder */
-	while((ok=link(buf2,buf))&&errno==EEXIST);
+	while((ok=linkonly?link(buf2,buf):hlink(buf2,buf))&&errno==EEXIST);
 	if(linkonly)
-	 { if(ok)
+	 { yell(lkingto,buf);
+	   if(ok)
 	      goto nolnk;
 	   goto ret;
 	 }
       }
-     unlink(buf2);goto opn;
+     unlink(buf2);
+     goto opn;
    }
   ;{ struct stat stbuf;
      stat(buf2,&stbuf);
      ultoan((unsigned long)stbuf.st_ino,      /* filename with i-node number */
-      strchr(strcat(buf,tgetenv(msgprefix)),'\0'));
+      strchr(strcat(buf,msgprefix),'\0'));
    }
   if(linkonly)
-   { yell("Linking to",buf);
+   { yell(lkingto,buf);
      if(link(buf2,buf))	   /* hardlink the new file, it's a directory folder */
 nolnk:	nlog("Couldn't make link to"),logqnl(buf);
      goto ret;
    }
-  if(!myrename(buf2,buf))	       /* rename it, we need the same i-node */
+  if(!rename(buf2,buf))		       /* rename it, we need the same i-node */
 opn: return opena(buf);
 ret:
   return -1;
 }
 
-static ismhdir(chp)char*const chp;
+static int ismhdir(chp)char*const chp;
 { if(chp-1>=buf&&chp[-1]==*MCDIRSEP_&&*chp==chCURDIR)
-   { chp[-1]='\0';return 1;
+   { chp[-1]='\0';
+     return 1;
    }
   return 0;
 }
 				       /* open file or new file in directory */
-deliver(boxname,linkfolder)char*boxname,*linkfolder;
-{ struct stat stbuf;char*chp;int mhdir;mode_t cumask;
-  umask(cumask=umask(0));cumask=UPDATE_MASK&~cumask;tofile=to_FILE;
+int deliver(boxname,linkfolder)char*boxname,*linkfolder;
+{ struct stat stbuf;char*chp;int mhdir;mode_t numask;
   asgnlastf=1;
+  if(*boxname=='|'&&(!linkfolder||linkfolder==Tmnate))
+   { setlastfolder(boxname);
+     return rdup(savstdout);
+   }
+  numask=UPDATE_MASK&~cumask;tofile=to_FILE;
   if(boxname!=buf)
      strcpy(buf,boxname);		 /* boxname can be found back in buf */
   if(*(chp=buf))				  /* not null length target? */
      chp=strchr(buf,'\0')-1;		     /* point to just before the end */
   mhdir=ismhdir(chp);				      /* is it an MH folder? */
   if(!stat(boxname,&stbuf))					/* it exists */
-   { if(cumask&&!(stbuf.st_mode&UPDATE_MASK))
+   { if(numask&&!(stbuf.st_mode&UPDATE_MASK))
 	chmod(boxname,stbuf.st_mode|UPDATE_MASK);
      if(!S_ISDIR(stbuf.st_mode))	 /* it exists and is not a directory */
 	goto makefile;				/* no, create a regular file */
@@ -146,7 +156,8 @@ deliver(boxname,linkfolder)char*boxname,*linkfolder;
 makefile:
    { if(linkfolder)	  /* any leftovers?  Now is the time to display them */
 	concatenate(linkfolder),skipped(linkfolder);
-     tofile=strcmp(devnull,buf)?to_FOLDER:0;return opena(boxname);
+     tofile=strcmp(devnull,buf)?to_FOLDER:0;
+     return opena(boxname);
    }
   if(linkfolder)		    /* any additional directories specified? */
    { size_t blen;
@@ -160,7 +171,7 @@ makefile:
   else					 /* fixup directory name, append a / */
      strcat(chp,MCDIRSEP_),strcpy(buf2,buf),chp=0;
   ;{ int fd= -1;		/* generate the name for the first directory */
-     if(unique(buf2,strchr(buf2,'\0'),NORMperm,verbose)&&
+     if(unique(buf2,strchr(buf2,'\0'),NORMperm,verbose,0)&&
       (fd=dirfile(chp,0))>=0&&linkfolder)	 /* save the file descriptor */
 	for(strcpy(buf2,buf),boxname=linkfolder;boxname!=Tmnate;)
 	 { strcpy(buf,boxname);		/* go through the list of other dirs */
@@ -169,7 +180,7 @@ makefile:
 	   mhdir=ismhdir(chp);			      /* is it an MH folder? */
 	   if(stat(boxname,&stbuf))			 /* it doesn't exist */
 	      mkdir(buf,NORMdirperm);				/* create it */
-	   else if(cumask&&!(stbuf.st_mode&UPDATE_MASK))
+	   else if(numask&&!(stbuf.st_mode&UPDATE_MASK))
 	      chmod(buf,stbuf.st_mode|UPDATE_MASK);
 	   if(mhdir)
 	      *chp='\0',chp[-1]= *MCDIRSEP_;
@@ -213,10 +224,12 @@ void logabstract(lstfolder)const char*const lstfolder;
    }
 #ifndef NO_COMSAT
   ;{ int s;struct sockaddr_in addr;char*chp,*chad;	     /* @ seperator? */
-     if(chad=strchr(chp=(char*)tgetenv(scomsat),SERV_ADDRsep))
+     if(chad=strchr(chp=(char*)scomsat,SERV_ADDRsep))
 	*chad++='\0';		      /* split it up in service and hostname */
-     else if(!renvint(-1L,scomsat))		/* or is it a false boolean? */
+     else if(!renvint(-1L,chp))			/* or is it a false boolean? */
 	return;					       /* ok, no comsat then */
+     else
+	chp="";				  /* set to yes, so take the default */
      if(!chad||!*chad)						  /* no host */
 #ifndef IP_localhost
 	chad=COMSAThost;				      /* use default */
@@ -229,7 +242,8 @@ void logabstract(lstfolder)const char*const lstfolder;
 #endif /* IP_localhost */
       { const struct hostent*host;	      /* what host?  paranoid checks */
 	if(!(host=gethostbyname(chad))||!host->h_0addr_list)
-	 { endhostent();return;		     /* host can't be found, too bad */
+	 { endhostent();		     /* host can't be found, too bad */
+	   return;
 	 }
 	addr.sin_family=host->h_addrtype;	     /* address number found */
 	tmemmove(&addr.sin_addr,host->h_0addr_list,host->h_length);
@@ -241,7 +255,8 @@ void logabstract(lstfolder)const char*const lstfolder;
      if(chp==chad)			       /* the service is not numeric */
       { const struct servent*serv;
 	if(!(serv=getservbyname(chp,COMSATprotocol)))	   /* so get its no. */
-	 { endservent();return;
+	 { endservent();
+	   return;
 	 }
 	addr.sin_port=serv->s_port;endservent();
       }
@@ -260,7 +275,7 @@ void logabstract(lstfolder)const char*const lstfolder;
 #endif /* NO_COMSAT */
 }
 
-static concnd;					 /* last concatenation value */
+static int concnd;				 /* last concatenation value */
 
 void concon(ch)const int ch;   /* flip between concatenated and split fields */
 { size_t i;
@@ -271,13 +286,21 @@ void concon(ch)const int ch;   /* flip between concatenated and split fields */
    }
 }
 
+static void ffrom(chp)const char*chp;
+{ while(chp=strstr(chp,FROM_EXPR))
+     app_val(&escFrom_,(off_t)(++chp-themail));	       /* bogus From_ found! */
+}
+
 void readmail(rhead,tobesent)const long tobesent;
-{ char*chp,*pastend,*realstart;
+{ char*chp,*pastend,*realstart;static size_t contlengthoffset;
   ;{ long dfilled;
      if(rhead)					/* only read in a new header */
       { dfilled=mailread=0;chp=readdyn(malloc(1),&dfilled);filled-=tobesent;
 	if(tobesent<dfilled)		   /* adjust buffer size (grow only) */
-	   themail=realloc(themail,dfilled+filled);
+	 { realstart=themail;
+	   thebody=(themail=realloc(themail,dfilled+filled))+
+	    (thebody-realstart);
+	 }
 	tmemmove(themail+dfilled,thebody,filled);tmemmove(themail,chp,dfilled);
 	free(chp);themail=realloc(themail,1+(filled+=dfilled));
       }
@@ -286,29 +309,72 @@ void readmail(rhead,tobesent)const long tobesent;
 	   rhead=1;	 /* yup, we read in a new header as well as new mail */
 	mailread=0;dfilled=thebody-themail;themail=readdyn(themail,&filled);
       }
-     pastend=filled+(thebody=themail);
+     *(pastend=filled+(thebody=themail))='\0';		   /* terminate mail */
      while(thebody<pastend&&*thebody++=='\n');	     /* skip leading garbage */
      realstart=thebody;
      if(rhead)			      /* did we read in a new header anyway? */
       { confield.filled=0;concnd='\n';
-	while(thebody=
-	 egrepin("[^\n]\n[\n\t ]",thebody,(long)(pastend-thebody),1))
-	   if(thebody[-1]!='\n')		  /* mark continuated fields */
-	      app_val(&confield,(off_t)(--thebody-1-themail));
-	   else
-	      goto eofheader;		   /* empty line marks end of header */
+	while(thebody=strchr(thebody,'\n'))
+	   switch(*++thebody)			  /* mark continuated fields */
+	    { case '\t':case ' ':app_val(&confield,(off_t)(thebody-1-themail));
+	      default:
+		 continue;		   /* empty line marks end of header */
+	      case '\n':thebody++;
+		 goto eofheader;
+	    }
 	thebody=pastend;      /* provide a default, in case there is no body */
-eofheader:;
+eofheader:
+	contlengthoffset=0;
+	if(chp=egrepin("^Content-Length:",themail,(long)(thebody-themail),0))
+	   contlengthoffset=chp-themail;
       }
      else			       /* no new header read, keep it simple */
 	thebody=themail+dfilled; /* that means we know where the body starts */
+   }		      /* to make sure that the first From_ line is uninjured */
+  escFrom_.filled=0;
+  ;{ int i;				    /* eradicate From_ in the header */
+     i= *thebody;*thebody='\0';ffrom(realstart);*thebody=i;
    }
-  ;{ int f1stchar;    /* to make sure that the first From_ line is uninjured */
-     f1stchar= *realstart;*(chp=realstart)='\0';escFrom_.filled=0;
-     while(chp=egrepin(FROM_EXPR,chp,(long)(pastend-chp),1))
-      { while(*--chp!='\n');		       /* where did this line start? */
-	app_val(&escFrom_,(off_t)(++chp-themail));chp++;	   /* bogus! */
+  if((chp=thebody)>themail)
+     chp--;
+  if(contlengthoffset)
+   { unsigned places;long cntlen,actcntlen;	    /* minus one, for safety */
+     chp=themail+contlengthoffset;cntlen=filled-(thebody-themail)-1;
+     for(actcntlen=places=0;;
+	 *chp++=cntlen>0?(actcntlen=actcntlen*10+9,'9'):' ',places++)
+      { switch(*chp)
+	 { default:					/* fill'r up, please */
+	      continue;
+	   case '\n':case '\0':;		      /* ok, end of the line */
+	 }
+	break;
       }
-     *realstart=f1stchar;mailread=1;
+     if(cntlen>0)			       /* any Content-Length at all? */
+      { charNUM(num,cntlen);
+	ultstr(places,cntlen,num);		       /* our preferred size */
+	if(!num[places])	       /* does it fit in the existing space? */
+	   tmemmove(chp-places,num,places),actcntlen=cntlen;	      /* yup */
+	chp=thebody+actcntlen;		  /* skip the actual no we specified */
+      }
+   }
+  ffrom(chp);mailread=1;	  /* eradicate From_ in the rest of the body */
+}
+
+char*findtstamp(start,end)const char*start,*end;
+{ start=skpspace(start);start+=strcspn(start," \t\n");
+  if(skpspace(start)>=(end-=25))
+     return (char*)start;
+  while(!(end[13]==':'&&end[15]==':')&&--end>start);
+  ;{ int spc=0;
+     while(end-->start)
+      { switch(*end)
+	 { case ' ':case '\t':spc=1;
+	      continue;
+	 }
+	if(!spc)
+	   continue;
+	break;
+      }
+     return (char*)end+1;
    }
 }

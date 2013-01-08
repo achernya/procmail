@@ -1,4 +1,6 @@
-.Id $Id: procmailex.man,v 1.16 1993/06/21 14:24:06 berg Exp $
+Please read the README file in this directory first.
+.ex
+.Id $Id: procmailex.man,v 1.31 1994/06/14 12:03:19 berg Exp $
 .TH PROCMAILEX 5 \*(Dt BuGless
 .na
 .SH NAME
@@ -6,16 +8,20 @@ procmailex \- procmail rcfile examples
 .SH SYNOPSIS
 .B $HOME/@PROCMAILRC@ examples
 .ad
-.Sh DESCRIPTION
+.SH DESCRIPTION
 For a description of the rcfile format see
 .BR procmailrc (5).
+.PP
+The weighted scoring technique is described in detail in the
+.BR procmailsc (5)
+man page.
 .PP
 This man page shows several example recipes.  For examples of complete rcfiles
 you can check the NOTES section in
 .BR procmail (1),
 or look at the example rcfiles part of the procmail source distribution
 (procmail*/examples/?procmailrc).
-.Sh EXAMPLES
+.SH EXAMPLES
 Sort out all mail coming from the scuba-dive mailing list into the mailfolder
 scubafile (uses the locallockfile scubafile.lock).
 .Sx 3
@@ -25,6 +31,19 @@ scubafile
 .Ex
 Forward all mail from peter about compilers to william (and keep a copy
 of it here in petcompil).
+.Sx 10
+:0
+* ^From.*peter
+* ^Subject:.*compilers
+{
+   :0 @CONTINUE@
+   ! william@somewhere.edu
+
+   :0
+   petcompil
+}
+.Ex
+An equivalent solution that accomplishes the same:
 .Sx 7
 :0 @CONTINUE@
 * ^From.*peter
@@ -46,6 +65,20 @@ An equivalent, but slightly slower solution that accomplishes the same:
    * ^Subject:.*compilers
    petcompil
 .Ex
+If your system doesn't generate or generates incorrect leading `From '
+lines on every mail, you can fix this by calling up procmail with
+the \-@FROMWHOPT@@REFRESH_TIME@ option.  To fix the same problem by
+different means, you could have inserted the following two
+recipes above all other recipes in your rcfile.  They will filter the header
+of any mail through the first formail which will strip any leading `From '
+line, and then through the second formail which then regenerates it.
+.Sx 5
+:0 @FILTER@@PASS_HEAD@@WAIT_EXIT@
+| formail \-@FM_DEL_INSERT@ "From "
+
+:0 @FILTER@@PASS_HEAD@@WAIT_EXIT@
+| formail
+.Ex
 Add the headers of all messages that didn't come from the postmaster
 to your private header collection (for
 statistics or mail debugging); and use the lockfile `headc.lock'.  In order
@@ -56,6 +89,12 @@ removed as soon as the pipe has accepted the mail.
 :0 @PASS_HEAD@@WAIT_EXIT@@CONTINUE@:
 * !@FROMMkey@
 | uncompress headc.Z; cat >>headc; compress headc
+.Ex
+Or, if you would use the more efficient gzip instead of compress:
+.Sx 3
+:0 @PASS_HEAD@@WAIT_EXIT@@CONTINUE@:
+* !@FROMMkey@
+| gzip >>headc.gz
 .Ex
 Forward all mails shorter than 1000 bytes to my home address (no lockfile
 needed on this recipe).
@@ -69,7 +108,7 @@ messages, and store them into surfing, using surfing.lock as the locallockfile.
 .Sx 3
 :0:
 * ^Subject:.*surfing.*Digest
-| formail @FM_SKIP@1 \-@FM_DIGEST@@FM_SPLIT@ cat >>surfing
+| formail @FM_SKIP@1 \-@FM_DIGEST@@FM_SPLIT@ >>surfing
 .Ex
 Store everything coming from the postmaster or mailer-daemon (like bounced
 mail) into the file postm, using postm.lock as the locallockfile.
@@ -92,7 +131,7 @@ doesn't follow accepted conventions, this might not be enough).
 .Sx 4
 :0 @PASS_HEAD@ @CONTINUE@
 * !^FROM_DAEMON
-* !^From +YOUR_LOGIN_NAME
+* !^From +YOUR_USERNAME
 | (formail \-@FM_REPLY@ \-@FM_ADD_ALWAYS@"Precedence: junk";\e
    echo "Mail received.") | $SENDMAIL \-t
 .Ex
@@ -104,27 +143,30 @@ program.  This recipe is based on the same principles as the last one (prevent
 by extracting the name of the sender and appending it to the file
 $ALREADYSENT, if the name is
 .B not
-already in there.  If the name was new, an autoreply will be sent (using the
-`@ALSO_N_IF_SUCC@' flag functionality).  To reliably extract the name of the
+already in there.  If the name was new, it's name will be appended to the
+database and an autoreply will be sent.  To reliably extract the name of the
 sender, I let formail generate an autoreply header (thereby making it figure
 out the most appropriate sender address), and then telling it to extract the
 value of the `To:' field.
-.Sx 14
+.Sx 17
 SHELL=/bin/sh    # for other shells, this might need adjustment
-ALREADYSENT=$HOME/vacation     # the vacation database
 
-:0 @PASS_HEAD@@WAIT_EXIT_QUIET@@CONTINUE@:                       # the lockfile is important
+:0
 * !^FROM_DAEMON
-* !^From +YOUR_LOGIN_NAME
-| FROM="`formail \-@FM_REPLY@@FM_EXTRACT@ To:`" ;\e
-  if fgrep \-e "$FROM" <$ALREADYSENT ;\e
-  then exit 1 ;\e
-  else echo "$FROM" >>$ALREADYSENT ;\e
-  fi
+* !^From +YOUR_USERNAME
+{
+  FROM=`formail \-@FM_REPLY@@FM_EXTRACT@ To:`
+  ALREADYSENT=$HOME/vacation     # the vacation database
 
-   :0 @ALSO_N_IF_SUCC@@PASS_HEAD@@CONTINUE@
-   | (formail \-@FM_REPLY@@FM_ADD_ALWAYS@"Precedence: junk";\e
-      echo "Mail received.") | $SENDMAIL \-t
+  :0 @CONTINUE@:                       # the lockfile is important
+  * !? fgrep \-e "$FROM" $ALREADYSENT
+  | echo $FROM >>$ALREADYSENT; \e
+    (formail \-@FM_REPLY@@FM_ADD_ALWAYS@"Precedence: junk"; \e
+      echo "I received your mail,"; \e
+      echo "but I won't be back until Monday."; \e
+      echo "-- "; cat $HOME/.signature \e
+    ) | $SENDMAIL \-t
+}
 .Ex
 Store all messages concerning TeX in separate, unique filenames, in a directory
 named texmail (this directory has to exist); there is no need to use lockfiles
@@ -163,7 +205,7 @@ is created automatically:
 .Sx 9
 MONTHFOLDER=`date +%y-%m`
 
-:0 @IGNORE_WRITERR@
+:0 @IGNORE_WRITERR@@CONTINUE@
 * ? test ! \-d $MONTHFOLDER
 | mkdir $MONTHFOLDER
 
@@ -180,6 +222,18 @@ DUMMY=`test \-d $MONTHFOLDER || mkdir $MONTHFOLDER`
 * meeting
 ${MONTHFOLDER}/meeting
 .Ex
+If you are subscribed to several mailinglists and people cross-post to
+some of them, you usually receive several duplicate mails (one from every
+list).  The following simple recipe eliminates duplicate mails.  It tells
+formail to keep an 8KB cache file in which it will store the Message-IDs of
+the most recent mails you received.  Since Message-IDs are guaranteed to
+be unique for every new mail, they are ideally suited to weed out duplicate
+mails.  Simply put the following recipe at the top of your rcfile, and
+no duplicate mail will get past it.
+.Sx 2
+:0 @WAIT_EXIT_QUIET@@PASS_HEAD@: msgid.lock
+| formail \-@FM_DUPLICATE@ 8192 msgid.cache
+.Ex
 When delivering to emacs folders (i.e. mailfolders managed by any emacs
 mail package, e.g. RMAIL or VM) directly, you should use emacs-compatible
 lockfiles.  The emacs mailers are a bit braindamaged in that respect, they get
@@ -192,6 +246,11 @@ MAILDIR=Mail
 * ^Subject:.*whatever
 mailbox
 .Ex
+Alternatively, you can have procmail deliver into its own set of mailboxes,
+which you then periodically empty and copy over to your emacs files using
+.BR movemail .
+Movemail uses mailbox.lock local lockfiles per mailbox.
+.PP
 To extract certain headers from a mail and put them into environment
 variables you can use any of the following constructs:
 .Sx 5
@@ -205,15 +264,21 @@ If you are using temporary files in a procmailrc file, and want to make
 sure that they are removed just before procmail exits, you could use
 something along the lines of:
 .Sx 2
-TEMPORARY=/tmp/pmail.$$
+TEMPORARY=$HOME/tmp/pmail.$$
 TRAP="/bin/rm \-f $TEMPORARY"
 .Ex
 The TRAP keyword can also be used to change the exitcode of procmail.
 I.e. if you want procmail to return an exitcode of `1' instead of its
-regular exitcodes, you could simply use:
-.Sx 2
+regular exitcodes, you could use:
+.Sx 3
+EXITCODE=""
 TRAP="exit 1;"   # The trailing semi-colon is important
                  # since exit is not a standalone program
+.Ex
+Or, if the exitcode does not need to depend on the programs run from
+the TRAP, you can use a mere:
+.Sx 1
+EXITCODE=1
 .Ex
 The following recipe prints every incoming mail that looks like a postscript
 file.
@@ -229,11 +294,21 @@ line).  The second condition only matches at the start of the body (i.e.
 right after the
 .B first
 empty line).
-.Sx
+.Sx 4
 :0 @HEAD_GREP@@BODY_GREP@ @PASS_BODY@
 * ^^(.+$)*From[ :].*print-server
 * ^^(.+$)*^%!
 | lpr
+.Ex
+The same as above, but now by slightly different means:
+.Sx 7
+:0
+* ^From[ :].*print-server
+{
+  :0 @BODY_GREP@ @PASS_BODY@
+  * ^^%!
+  | lpr
+}
 .Ex
 Suppose you have two accounts, you use both accounts regularly, but they are
 in very distinct places (i.e. you can only read mail that arrived at either one
@@ -255,14 +330,64 @@ If someone sends you a mail with the word `retrieve' in the subject, the
 following will automatically send back the contents of info_file to the
 sender.  Like in all recipes where we send mail, we watch out for mail
 loops.
-.Sx 7
-:0 @CONTINUE@@FILTER@@PASS_HEAD@
-* !^X-Loop: yourname@your.main.mail.address
+.Sx 6
+:0
+* !^From +YOUR_USERNAME
+* !^Subject:.*Re:
+* !^FROM_DAEMON
 * ^Subject:.*retrieve
-| formail -r -A"X-Loop: yourname@your.main.mail.address"
+| (formail \-@FM_REPLY@ ; cat info_file) | $SENDMAIL \-oi \-t
+.Ex
+Now follows an example for a very simple fileserver accessible by mail.
+For more demanding applications, I suggest you take a look at the mailinglist
+package included with the procmail source distribution.  The most notable
+deficiency of the `fileserver' you see below is that it doesn't do any
+access checking.  It simply looks at the Subject: field in the header and
+extracts the names mentioned after the word `request'.  These names are
+put in the variable FILE, which is subsequently used to cat the files.
+The best way to enhance this fileserver would probably be to create a shell
+script to take care of the more complicated checks and operations.
+.Sx 17
+:0
+* !^X-Loop: yourname@your.main.mail.address
+* !^Subject:.*Re:
+* !^FROM_DAEMON
+* ^Subject:.*request
+{
+  MAILDIR=$HOME/fileserver   # chdir to the fileserver directory
 
-  :0 A
-  | (cat ; cat info_file ) | $SENDMAIL -oi -t
+  :0 @PASS_HEAD@             # extract the requested filename(s)
+  FILES=| sed \-n \-e 's/^Subject:.*request \(.*\)/\1/p'
+
+  :0 @FILTER@                # reverse the mailheader
+  | formail \-@FM_REPLY@@FM_ADD_ALWAYS@ "X-Loop: yourname@your.main.mail.address"
+
+  :0
+  | (cat; cat $FILES) | $SENDMAIL \-oi \-t
+}
+.Ex
+The following example preconverts all plain-text mail arriving in certain
+encoded MIME formats into a more compact 8-bit format which can be used
+and displayed more easily by most programs.  The mmencode program is part
+of Nathaniel Borenstein's metamail package.
+.Sx 17
+:0
+* ^Content-Type: *text/plain
+{
+  :0 @FILTER@@PASS_BODY@@WAIT_EXIT@
+  * ^Content-Transfer-Encoding: *quoted-printable
+  | mmencode \-u \-q
+
+     :0 @ALSO_NEXT_RECIPE@@FILTER@@PASS_HEAD@@WAIT_EXIT@
+     | formail \-@FM_DEL_INSERT@ "Content-Transfer-Encoding: 8bit"
+
+  :0 @FILTER@@PASS_BODY@@WAIT_EXIT@
+  * ^Content-Transfer-Encoding: *base64
+  | mmencode \-u \-b
+
+     :0 @ALSO_NEXT_RECIPE@@FILTER@@PASS_HEAD@@WAIT_EXIT@
+     | formail \-@FM_DEL_INSERT@ "Content-Transfer-Encoding: 8bit"
+}
 .Ex
 The following one is rather exotic, but it only serves to demonstrate a
 feature.  Suppose you have a file in your HOME directory called ".urgent",
@@ -277,12 +402,37 @@ URGMATCH=`cat $HOME/.urgent`
 :0 @BODY_GREP@:
 * $^From.*${URGMATCH}.*
 urgent
-.Re
-.Sh "SEE ALSO"
+.Ex
+An entirely different application for procmail would be to conditionally
+apply filters to a certain (outgoing) text or mail.  A typical example
+would be a filter through which you pipe all outgoing mail, in order
+to make sure that it will be MIME encoded only if it needs to be.
+I.e. in this case you could start procmail in the middle of a pipe like:
+.Sx 1
+cat newtext | procmail ./mimeconvert | mail chris@where.ever
+.Ex
+The
+.B mimeconvert
+rcfile could contain something like (the =0x80= and =0xff= should
+be substituted with the real 8-bit characters):
+.Sx 10
+DEFAULT=|     # pipe to stdout instead of
+              # delivering mail as usual
+:0 @BODY_GREP@@FILTER@@PASS_BODY@@WAIT_EXIT@
+* [=0x80=-=0xff=]
+| mmencode -q
+
+  :0 @ALSO_NEXT_RECIPE@@FILTER@@PASS_HEAD@@WAIT_EXIT@
+  | formail \-I 'MIME-Version: 1.0' \e
+     \-I 'Content-Type: text/plain; charset=ISO-8859-1' \e
+     \-I 'Content-Transfer-Encoding: quoted-printable'
+.Ex
+.SH "SEE ALSO"
 .na
 .nh
 .BR procmail (1),
 .BR procmailrc (5),
+.BR procmailsc (5),
 .BR sh (1),
 .BR csh (1),
 .BR mail (1),

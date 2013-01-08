@@ -8,8 +8,11 @@ Feature summary for procmail:
 	+ Does not use *any* temporary files
 	+ Uses standard egrep regular expressions
 	+ It poses a very low impact on your system's resources
+	  (it's 1.4 times faster than the average /bin/mail in user-cpu
+	   time)
 	+ Allows for very-easy-to-use yes-no decisions on where the mail
 	  should go (can take the size of the mail into consideration)
+	+ Also allows for neural-net-type weighted scoring of mails
 	+ Filters, delivers and forwards mail *reliably*
 	+ Provides a reliable hook (you might even say anchor :-) for any
 	  programs or shell scripts you may wish to start upon mail arrival
@@ -40,12 +43,18 @@ Feature summary for procmail:
 	  support (*fully* downwards compatible with /bin/mail); in which case
 	  it can heal your system mailbox, if something messes up the
 	  permissions
+	+ Secure system mailbox handling (contrary to several well known
+	  /bin/mail implementations)
+	+ Provides for a controlled execution of programs and scripts from
+	  the aliases file (i.e. under defined user ids)
 	+ Allows you to painlessly shift the system mailboxes into the
 	  user's home directories
 	+ It runs on virtually all (old and future) operating systems which
 	  names start with a 'U' or end in an 'X' :-) (i.e. extremely portable
 	  code; POSIX, ANSI C and K&R conforming)
 	+ Is clock skew immune (e.g. in the case of NFS mounted mailboxes)
+	+ Can be used as a general mailfilter for whole groups of messages
+	  (e.g. when called from within sendmail.cf rules).
 	+ Works with (among others?) sendmail, smail, MMDF and mailsurr
 
 Feature summary for formail:
@@ -56,6 +65,8 @@ Feature summary for formail:
 	+ Can split up digests into the individual messages
 	+ Can split up saved articles into the individual articles
 	+ Can do simple header munging/extraction
+	+ Can extract messages from mailboxes
+	+ Can recognise duplicate messages
 
 Feature summary for lockfile:
 	+ Provides NFS-secure lockfiles to shell script programmers

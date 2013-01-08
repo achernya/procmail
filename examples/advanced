@@ -3,12 +3,11 @@ Discusses:
 		1. One home directory, several machine architectures
 		2. Procmail as an integrated local mail delivery agent
 		2a.Special directions for sites with sendmail
-		2b.Special directions for sites with smail
-		2c.Special directions for sites with SysV /etc/mail/mailsurr
+		2b.Special directions for sites with ZMailer
+		2c.Special directions for sites with smail
+		2d.Special directions for sites with SysV /etc/mail/mailsurr
 		3. Changing the mail spool directory to $HOME for all users
 		4. Security considerations (when installing procmail suid root)
-		5. Some exorbitant examples of rcfile formats
-		6. Some advanced examples of the use of the 'A' flag
 
 				---
 
@@ -23,11 +22,11 @@ depending on from which machine it is called) two executables of procmail,
 I have the following suggestion to use as a .forward file (examples are for
 sparc and sun3 architectures):
 
-"|IFS=' ';if /usr/bin/sparc;then exec /home/berg/bin.sun4/procmail;else exec /home/berg/bin.sun3/procmail;fi #YOUR_LOGIN_NAME"
+"|IFS=' ';if /usr/bin/sparc;then exec /home/berg/bin.sun4/procmail;else exec /home/berg/bin.sun3/procmail;fi ||exit 75 #YOUR_USERNAME"
 
 or alternatively:
 
-"|IFS=' ';exec /home/berg/bin.`/usr/bin/arch`/procmail #YOUR_LOGIN_NAME"
+"|IFS=' '&& exec /home/berg/bin.`/usr/bin/arch`/procmail ||exit 75 #YOUR_USERNAME"
 
 Please note, in the .forward file there can NOT be any newlines between
 the doublequotes, i.e. the former example *has* to be typed in as one long
@@ -35,16 +34,33 @@ line.
 
 If, on the other hand, you have to log in to every machine to read mail
 arrived for you on that machine, a different solution might be more
-appropriate; in that case put something like the following two lines in your
-.forward file:
+appropriate.
+
+If you have sendmail v6.xx and later, you simply create two .forward files.
+In the .forward file you put:
 
 YOUR_LOGIN_NAME@your.favourite.machine
-"|IFS=' ';test .`/bin/uname -n` != .your.favourite.machine || exec /usr/local/bin/procmail #YOUR_LOGIN_NAME"
+
+And, in a second file named .forward.your.favourite.machine you put:
+
+"|exec /usr/local/bin/procmail #YOUR_USERNAME"
+
+If you have an older sendmail, you could put something like the following two
+lines in your .forward file:
+
+YOUR_LOGIN_NAME@your.favourite.machine
+"|IFS=' ';test .`/bin/uname -n` != .your.favourite.machine || exec /usr/local/bin/procmail #YOUR_USERNAME"
 
 The leading dots are important.	 Check what `/bin/uname -n` returns on
 your.favourite.machine, and substitute that for your.favourite.machine in the
 sample .forward file.  If your system does not have /bin/uname, check if there
 is a /bin/hostname.
+
+With some sendmails, the last suggestion causes you to get a superfluous
+copy in the system mailfolder.	If that is the case, you'll have to change
+your .forward to something like:
+
+"|IFS=' ';if test .`/bin/uname -n` == .your.favourite.machine ; then exec /usr/local/bin/procmail; else exec /usr/lib/sendmail -oi YOUR_LOGIN_NAME@your.favourite.machine; fi"
 
 				---
 
@@ -74,7 +90,7 @@ read mail or check for mail).  So, it would definitely be preferred if you
 could edit the invocation of /bin/mail from within your mail transport agent
 to invoke procmail instead (with appropriate flags, if needed).	 Special
 directions detailing this process for some of the more popular MTAs are
-included in sections (2a) and (2b) below.
+included in subsections below.
 
 In addition to needing root privileges upon startup, on some systems procmail
 needs to be sgid to daemon or mail.  One way to check is by looking at the
@@ -98,9 +114,13 @@ your sendmail.cf:
 Mlocal, P=/usr/local/bin/procmail, F=lsSDFMhPfn, S=10, R=20,
 	A=procmail -a $h -d $u
 
-The `f' and the `n' flags can be omitted (if your sendmail generates correct
-From_ lines).  As for the options "S=10, R=20": if your system uses others or
-none on the current Mlocal definition, use those instead of "S=10, R=20".
+As for the fields "S=10, R=20": if your system uses others or none on the
+current Mlocal definition, use those instead of "S=10, R=20".
+
+To impose a 2MB limit on mails, you could add a `Maxsize=' field like in:
+
+Mlocal, P=/usr/local/bin/procmail, F=lsSDFMhPfn, S=10, R=20, M=2000000
+	A=procmail -a $h -d $u
 
 In order to take advantage of the meta argument that can be passed to
 procmail you'd have to change to $#local mailer rule to set the $@ host name
@@ -112,7 +132,17 @@ filter.	 For more information, see EXAMPLES section the procmail(1) man page.
 
 				---
 
-2b.Special directions for sites with smail
+2b.Special directions for sites with ZMailer
+   -----------------------------------------
+
+The following line should be inserted into (or take the place of any previous
+local definition in) your sm.conf file for the Transport Agent:
+
+local	sSPfn	/usr/local/bin/procmail		procmail -a $h -d $u
+
+				---
+
+2c.Special directions for sites with smail
    ---------------------------------------
 
 For smail 2.x users there are two options:
@@ -132,7 +162,7 @@ local: return_path, local, from, driver=pipe; user=root,
 
 				---
 
-2c.Special directions for sites with SysV /etc/mail/mailsurr
+2d.Special directions for sites with SysV /etc/mail/mailsurr
    ---------------------------------------------------------
 
 Some systems use a SysV /bin/mail that supports mailsurr.  To interface
@@ -151,13 +181,13 @@ There are many different reasons why more and more sites decide not to
 store mail in /usr/spool/mail or /usr/mail anymore.
 Some of the obvious advantages when storing mail in the recipient's home
 directory are:
-	- Mail is automatically subject to his quota limitations.
-	- Often there is more room on the home partitions than on that
+	- Mail is automatically subject to the user's quota limitations.
+	- Often there is more room on the home partition(s) than on that
 	  one /usr/mail partition.
 
 The quota limitations also apply to /usr/spool/mail or /usr/mail if procmail
-does the delivery.  This quota limitation often does not work with the
-regular /bin/mail since it often writes the mailbox with root permissions
+does the delivery.  These quota limitations often do not work with the
+regular /bin/mail since that usually writes the mailbox with root permissions
 (eluding the quota restrictions).
 
 However, if you are going to install procmail as the integrated local
@@ -195,76 +225,5 @@ procmail will always have the uid of the person whose commands it is executing.
 To summarise, procmail will only behave better if made suid/sgid something, in
 fact, making procmail suid/sgid something will *improve* security on systems
 which have dynamically linked libraries.
-
-				---
-
-5. Some exorbitant examples of rcfile formats
-   ------------------------------------------
-
-# Now follows an example of what you can do in a procmailrc file
-HELLO=oneword
-HELLO="two words"
-HELLO='two words'	HELLO  =	one\
-word
-HELLO=two\ words
-HELLO=two\ `echo words`
-HELLO=			# empty
-HELLO			# This will wipe "HELLO" from the environment
-HELLO	 =    "three words"\ yes
-HELLO	=	"$HELLO `cat somefile`	"	# Trailing blanks
-HELLO = "wheeee`date`${HELLO} this works too"	 HELLO = 'But so does this!'
-
-# As you can see, every trick in the book of /bin/sh programming can be used
-# (and more).
-
-LOCALLOCKFILE = llf
-
-  :0:$LOCALLOCKFILE
-  * grep for this
- |$HELLO		# calls up a program named "But" with 3 arguments
-
-:0: "test ing"		# lockfilename with a space in it
-  * grep for this
-  |$HELLO
-
-:0
-* or for this
-|"$HELLO"		# tries to call up a program named "But so does this!"
-
-:0
-* and this
-|$HELLO \
-there		# action lines can be continued
-
-				---
-
-6. Some advanced examples of the use of the 'A' flag
-   -------------------------------------------------
-
-:0c		# Specify the 'c' otherwise we never arrive at the next recipe
-* ^From Myfriend
-every_message_from_my_friend		# Mailbox for everything he/she writes
-
-:0 Ac			# Note the 'c' again
-! my_other_friend      # Forward everything Myfriend writes to my_other_friend
-
-:0 Ac
-* ^Subject:.*jokes
-! my_third_friend	# Forward everything Myfriend writes about jokes
-			# to my_third_friend
-
-:0 A
-* ^Subject:.*parties
-* !beach
-! my_fourth_friend	# Forward everything Myfriend writes about parties,
-			# except beach parties, to my_fourth_friend
-
-:0 A			# Provide a mail sink, in order to fake procmail into
-/dev/null		# believing that the mail was absorbed/delivered,
-			# even if the mail was about beach parties :-).
-		# This is not the best solution though, better would be to
-		# rearrange these last five recipes so that the current
-		# number one or two is last, the current number five can be
-		# omitted then.
 
 				---

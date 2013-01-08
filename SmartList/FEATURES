@@ -1,4 +1,4 @@
-Summary of what the mailinglist scripts in here provide:
+Summary of what SmartList provides:
 	+ The overseeable management of an arbitrary number of mailinglists
 	+ Convenient and simple creation of new mailinglists
 	+ Convenient and simple removal of existing mailinglists
@@ -15,10 +15,11 @@ Summary of what the mailinglist scripts in here provide:
 	+ Submissions can be limited to people on the accept list (which could
 	  be the current list of subscribers)
 	+ The fully automated subscription mechanism allows for a reject list
-	  of unwanted subscribers
-	+ Auto-digest-generation (configurable per list)
-	+ Joint management of several mailinglists possible (through hardlinked
-	  rcfiles)
+	  of unwanted subscribers and a general address screening mechanism
+	  which allows you to control exactly who is allowed to subscribe
+	+ Optional implicit subscription upon first submission to the list
+	+ MIME-compliant auto-digest-generation (configurable per list)
+	+ Joint management of several mailinglists possible
 	+ Customisation per mailinglist or mailinglist group possible (simply
 	  remove or create the desired hardlinks)
 	+ A listmaintainer can be assigned per list;  miscellaneous requests
@@ -30,5 +31,10 @@ Summary of what the mailinglist scripts in here provide:
 	+ Integrated archiving service
 	+ Integrated diagnostic aid to give hints to the maintainer about
 	  possible problems
+	+ Moderated mailinglists with an arbitrary number of moderators
+	+ Automatically eliminates duplicate submissions
 	+ You can set up a mailinglist to function as a standalone mail
 	  archive server
+	+ Extended MIME support (autorecognition of well known file formats)
+	+ The archive server can send arbitrarily long (even binary) files
+	  in MIME-multipart mails

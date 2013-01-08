@@ -1,12 +1,6 @@
-/*$Id: procmail.h,v 1.14 1993/06/21 14:24:52 berg Exp $*/
+/*$Id: procmail.h,v 1.26 1994/06/24 10:45:08 berg Exp $*/
 
 #include "includes.h"
-
-typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
-#ifdef uchar
-#undef uchar
-#endif
-#define uchar uschar
 
 #ifdef console
 #define DEFverbose 1
@@ -22,11 +16,23 @@ typedef unsigned char uschar;	     /* sometimes uchar is already typedef'd */
 #define SYSTEM_MBOX	SYSTEM_MAILBOX
 #endif
 
-#define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
+#ifndef ETCRC
+#define ETCRC	0
+#endif
 
-#define rc_NOFILE	(-1)
-#define rc_NOSGID	(-2)		      /* you can forget any sgidness */
-#define rc_INIT		(-3)
+#define MAX32	((long)(~(unsigned long)0>>1))
+#define MIN32	(-(long)MAX32)
+
+#define XTRAlinebuf	2	     /* surplus of LINEBUF (see readparse()) */
+#ifdef MAXPATHLEN
+#if MAXPATHLEN>DEFlinebuf		/* to protect people from themselves */
+#undef DEFlinebuf
+#define DEFlinebuf MAXPATHLEN
+#endif
+#endif
+
+#define rc_NOSGID	1		      /* you can forget any sgidness */
+#define rc_NORMAL	2
 
 #define MCDIRSEP	(dirsep+STRLEN(dirsep)-1)      /* most common DIRSEP */
 #define MCDIRSEP_	(dirsep+STRLEN(DIRSEP)-1)
@@ -44,22 +50,30 @@ extern struct varval{const char*const name;long val;}strenvvar[];
 #define suspendv	(strenvvar[2].val)
 #define noresretry	(strenvvar[3].val)
 #define timeoutv	(strenvvar[4].val)
-#define verbose		(strenvvar[5].val)
+#define verbose		(*(volatile long*)&strenvvar[5].val)
 #define lgabstract	(strenvvar[6].val)
 
-struct dyna_long{size_t filled,tspace;off_t*offs;};
+extern struct varstr{const char*const sname,*sval;}strenstr[];
+#define shellmetas	(strenstr[0].sval)
+#define lockext		(strenstr[1].sval)
+#define msgprefix	(strenstr[2].sval)
+#define scomsat		(strenstr[3].sval)
+#define traps		(strenstr[4].sval)
+#define shellflags	(strenstr[5].sval)
+#define fdefault	(strenstr[6].sval)
+#define sendmail	(strenstr[7].sval)
 
 int
  eqFrom_ P((const char*const a));
 
-extern char*buf,*buf2,*globlock,*loclock,*tolock,*Stdout,*themail,*thebody;
-extern const char shellflags[],shell[],lockfile[],lockext[],newline[],binsh[],
- unexpeof[],shellmetas[],*const*gargv,*const*restargv,*sgetcp,*rcfile,
- dirsep[],msgprefix[],devnull[],lgname[],executing[],oquote[],cquote[],
- whilstwfor[],procmailn[],Mail[],home[],maildir[],*defdeflock,*argv0;
-extern long filled;
-extern sh,pwait,retval,retvl2,lcking,rc,ignwerr,lexitcode,asgnlastf,
- accspooldir,crestarg;
+extern char*buf,*buf2,*loclock,*tolock,*Stdout,*themail,*thebody;
+extern const char shell[],lockfile[],newline[],binsh[],unexpeof[],*const*gargv,
+ *const*restargv,*sgetcp,*rcfile,dirsep[],devnull[],lgname[],executing[],
+ oquote[],cquote[],whilstwfor[],procmailn[],Mail[],home[],maildir[],host[],
+ *defdeflock,*argv0,errwwriting[],slogstr[];
+extern long filled,lastscore;
+extern int sh,pwait,retval,retvl2,lcking,rcstate,rc,ignwerr,lexitcode,
+ asgnlastf,accspooldir,crestarg,skiprc,savstdout;
 extern size_t linebuf;
 extern volatile nextexit;
 extern pid_t thepid;

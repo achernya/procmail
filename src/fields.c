@@ -1,12 +1,12 @@
 /************************************************************************
  *	Routines to deal with the header-field objects in formail	*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: fields.c,v 1.10 1993/04/27 17:33:55 berg Exp $";
+ "$Id: fields.c,v 1.17 1994/06/28 16:56:07 berg Exp $";
 #endif
 #include "includes.h"
 #include "formail.h"
@@ -16,31 +16,47 @@ static /*const*/char rcsid[]=
 #include "fields.h"
 #include "ecommon.h"
 #include "formisc.h"
-
-struct field*findf(p,hdr)const struct field*const p,*hdr;
-{ size_t i;char*chp;		/* find a field in the linked list of fields */
-  for(i=p->id_len,chp=(char*)p->fld_text;hdr;hdr=hdr->fld_next)
-     if(i==hdr->id_len&&!strnIcmp(chp,hdr->fld_text,i))	 /* case insensitive */
-	return(struct field*)hdr;
-  return(struct field*)0;
+				/* find a field in the linked list of fields */
+struct field*findf(p,ah)const struct field*const p;register struct field**ah;
+{ size_t i;int uhead;char*chp;register struct field*h;
+  uhead=ah==&uheader||ah==&Uheader;
+  for(i=p->id_len,chp=(char*)p->fld_text,h= *ah;h;h= *(ah= &h->fld_next))
+     if(i>=h->id_len&&!strnIcmp(chp,h->fld_text,h->id_len))
+      { if(i>h->id_len&&uhead)			     /* finalise the header? */
+	   *ah=0,(*(ah=addfield(ah,chp,i)))->fld_next=h,(h= *ah)->fld_ref=0;
+	return h;
+      }
+  return (struct field*)0;
 }
 
-struct field**addfield(pointer,text,totlen)register struct field**pointer;
+void clear_uhead(hdr)register struct field*hdr;
+{ for(;hdr;hdr=hdr->fld_next)
+     hdr->fld_ref=0;
+}
+
+struct field**addfield(pointer,text,totlen)struct field**pointer;
  const char*const text;const size_t totlen;    /* add field to a linked list */
-{ register struct field*p;
-  while(*pointer)			      /* skip to the end of the list */
-     pointer= &(*pointer)->fld_next;
-  (*pointer=p=malloc(FLD_HEADSIZ+totlen))->fld_next=0;	 /* create the field */
-  p->id_len=breakfield(text,totlen);		  /* and copy field contents */
-  tmemmove(p->fld_text,text,p->tot_len=totlen);return pointer;
+{ register struct field*p,**pp;int idlen;
+  for(pp=pointer;*pp;pp= &(*pp)->fld_next);   /* skip to the end of the list */
+  (*pp=p=malloc(FLD_HEADSIZ+totlen))->fld_next=0;idlen=breakfield(text,totlen);
+  p->id_len=idlen>0?idlen:pp==&rdheader?0:-idlen;	    /* copy contents */
+  tmemmove(p->fld_text,text,p->tot_len=totlen);
+  return pp;
+}
+
+struct field*delfield(pointer)struct field**pointer;
+{ struct field*fldp;
+  *pointer=(fldp= *pointer)->fld_next;free(fldp);
+  return *pointer;
 }
 
 void concatenate(fldp)struct field*const fldp;
 { register char*p;register size_t l;	    /* concatenate a continued field */
-  l=fldp->tot_len;p=fldp->fld_text;
-  while(l--)
-     if(*p++=='\n'&&l)	     /* by substituting all newlines except the last */
-	p[-1]=' ';
+  l=fldp->tot_len;
+  if(!eqFrom_(p=fldp->fld_text))	    /* don't concatenate From_ lines */
+     while(l--)
+	if(*p++=='\n'&&l)    /* by substituting all newlines except the last */
+	   p[-1]=' ';
 }
 
 void renfield(pointer,oldl,newname,newl)struct field**const pointer;
@@ -53,10 +69,11 @@ void renfield(pointer,oldl,newname,newl)struct field**const pointer;
 
 static void extractfield(p)register struct field*p;
 { if(xheader||Xheader)					 /* extracting only? */
-   { if(findf(p,xheader))			   /* extract field contents */
-      { putssn(p->fld_text+p->id_len,p->tot_len-p->id_len);return;
+   { if(findf(p,&xheader))			   /* extract field contents */
+      { putssn((char*)p->fld_text+p->id_len,p->tot_len-p->id_len);
+	return;
       }
-     if(!findf(p,Xheader))				   /* extract fields */
+     if(!findf(p,&Xheader))				   /* extract fields */
 	return;
    }
   lputssn(p->fld_text,p->tot_len);		      /* display it entirely */
@@ -70,25 +87,30 @@ void flushfield(pointer)register struct field**pointer;	 /* delete and print */
 
 void dispfield(p)register const struct field*p;
 { for(;p;p=p->fld_next)			     /* print list non-destructively */
-     if(p->id_len<p->tot_len-1)			 /* any contents to display? */
+     if(p->id_len+1<p->tot_len)			 /* any contents to display? */
 	extractfield(p);
 }
-
-readhead P((void))  /* try and append one valid field to rdheader from stdin */
+		    /* try and append one valid field to rdheader from stdin */
+int readhead P((void))
 { getline();
-  if(!eqFrom_(buf))				    /* it's not a From_ line */
-   { if(!breakfield(buf,buffilled))	   /* not the start of a valid field */
+  if(eqFrom_(buf))					/* it's a From_ line */
+   { if(rdheader)
+	return 0;			       /* the From_ line was a fake! */
+     for(;buflast=='>';getline());	    /* gather continued >From_ lines */
+   }
+  else
+   { if(breakfield(buf,buffilled)<=0)	   /* not the start of a valid field */
 	return 0;
      for(;;getline())		      /* get the rest of the continued field */
       { switch(buflast)			     /* will this line be continued? */
-	 { case ' ':case '\t':continue;			  /* yep, it sure is */
+	 { case ' ':case '\t':				  /* yep, it sure is */
+	      continue;
 	 }
 	break;
       }
    }
-  else if(rdheader)
-     return 0;				       /* the From_ line was a fake! */
-  addbuf();return 1;		  /* phew, got the field, add it to rdheader */
+  addbuf();			  /* phew, got the field, add it to rdheader */
+  return 1;
 }
 
 void addbuf P((void))

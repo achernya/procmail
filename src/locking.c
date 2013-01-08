@@ -1,22 +1,24 @@
 /************************************************************************
  *	Whatever is needed for (un)locking files in various ways	*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: locking.c,v 1.16 1993/06/21 14:24:30 berg Exp $";
+ "$Id: locking.c,v 1.40 1994/06/28 16:56:23 berg Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
 #include "shell.h"
 #include "misc.h"
+#include "pipes.h"
 #include "exopen.h"
 #include "locking.h"
 
 void lockit(name,lockp)char*name;char**const lockp;
-{ int permanent=nfsTRY,triedforce=0;struct stat stbuf;time_t t;
+{ int permanent=nfsTRY,triedforce=0,locktype=doLOCK;struct stat stbuf;time_t t;
+  zombiecollect();
   if(*lockp)
    { if(!strcmp(name,*lockp))	/* compare the previous lockfile to this one */
 	return;			 /* they're equal, save yourself some effort */
@@ -25,22 +27,26 @@ void lockit(name,lockp)char*name;char**const lockp;
   if(!*name)
      return;
   if(!strcmp(name,defdeflock))	       /* is it the system mailbox lockfile? */
-#ifdef fdlock
+   { locktype=doCHECK|doLOCK;
+#ifndef fdlock
      if(!accspooldir)
-      { yell("Bypassed locking",name);return;
+      { yell("Bypassed locking",name);
+	return;
       }
      else
 #endif
-	setgid(sgid);		       /* try and get some extra permissions */
+	setegid(sgid);		       /* try and get some extra permissions */
+   }
   name=tstrdup(name); /* allocate now, so we won't hang on memory *and* lock */
   for(lcking|=lck_LOCKFILE;;)
    { yell("Locking",name);	    /* in order to cater for clock skew: get */
-     if(!xcreat(name,LOCKperm,&t,0))	       /* time t from the filesystem */
-      { *lockp=name;break;			   /* lock acquired, hurray! */
+     if(!xcreat(name,LOCKperm,&t,locktype))    /* time t from the filesystem */
+      { *lockp=name;				   /* lock acquired, hurray! */
+	break;
       }
      switch(errno)
       { case EEXIST:		   /* check if it's time for a lock override */
-	   if(!lstat(name,&stbuf)&&stbuf.st_size<=MAX_LOCK_SIZE&&locktimeout
+	   if(!lstat(name,&stbuf)&&stbuf.st_size<=MAX_locksize&&locktimeout
 	    &&!lstat(name,&stbuf)&&locktimeout<t-stbuf.st_mtime)
 	     /*
 	      * stat() till unlink() should be atomic, but can't guarantee that
@@ -50,12 +56,17 @@ void lockit(name,lockp)char*name;char**const lockp;
 	      if(S_ISDIR(stbuf.st_mode)||unlink(name))
 		 triedforce=1,nlog("Forced unlock denied on"),logqnl(name);
 	      else
-	       { nlog("Forcing lock on");logqnl(name);suspend();goto ce;
+	       { nlog("Forcing lock on");logqnl(name);suspend();
+		 goto ce;
 	       }
 	    }
 	   else
 	      triedforce=0;		 /* legitimate iteration, clear flag */
 	   break;
+	case ENOSPC:		   /* no space left, treat it as a transient */
+#ifdef EDQUOT						      /* NFS failure */
+	case EDQUOT:		      /* maybe it was a short term shortage? */
+#endif
 	case ENOENT:case ENOTDIR:case EIO:case EACCES:
 	   if(--permanent)
 	      goto ds;
@@ -65,79 +76,70 @@ void lockit(name,lockp)char*name;char**const lockp;
 	 { int i;
 	   if(0<(i=strlen(name)-1)&&!strchr(dirsep,name[i-1]))
 	    { nlog("Truncating");logqnl(name);elog(" and retrying lock\n");
-	      name[i]='\0';permanent=nfsTRY;goto ce;
+	      name[i]='\0';permanent=nfsTRY;
+	      goto ce;
 	    }
 	 }
 #endif
 	default:
-faillock:  nlog("Lock failure on");logqnl(name);goto term;
-	case ENOSPC:;
-#ifdef EDQUOT
-	case EDQUOT:;
-#endif
+faillock:  nlog("Lock failure on");logqnl(name);
+	   goto term;
       }
      permanent=nfsTRY;
-ds:  sleep((unsigned)locksleep);
+ds:  ssleep((unsigned)locksleep);
 ce:  if(nextexit)
-term: { free(name);break;		     /* drop the preallocated buffer */
+term: { free(name);			     /* drop the preallocated buffer */
+	break;
       }
    }
-  if(rc!=rc_INIT)				     /* we opened any rcfile */
-     setgid(gid);		      /* we put back our regular permissions */
+  if(rcstate==rc_NORMAL)			   /* we already set our ids */
+     setegid(gid);		      /* we put back our regular permissions */
   lcking&=~lck_LOCKFILE;
   if(nextexit)
-   { elog(whilstwfor);elog("lockfile");logqnl(name);terminate();
-   }
+     elog(whilstwfor),elog("lockfile"),logqnl(name),Terminate();
 }
 
 void lcllock P((void))				    /* lock a local lockfile */
-{ char*lckfile;
-  if(!strcmp(lckfile=tolock?tolock:strcat(buf2,tgetenv(lockext)),
-   tgetenv(lockfile)))
-     nlog("Deadlock attempted on"),logqnl(lckfile);
-  else
-     lockit(lckfile,&loclock);
+{ char*lckfile;			    /* locking /dev/null or | would be silly */
+  if(tolock||strcmp(buf2,devnull)&&strcmp(buf2,"|"))
+   { lckfile=tolock?tolock:strcat(buf2,lockext);
+     if(globlock&&!strcmp(lckfile,globlock))	 /* same as global lockfile? */
+	nlog("Deadlock attempted on"),logqnl(lckfile);
+     else
+	lockit(lckfile,&loclock);
+   }
 }
 
 void unlock(lockp)char**const lockp;
 { lcking|=lck_LOCKFILE;
   if(*lockp)
    { if(!strcmp(*lockp,defdeflock))    /* is it the system mailbox lockfile? */
-	if(!accspooldir)
-	   goto no_lock;
-	else
-	   setgid(sgid);	       /* try and get some extra permissions */
+	setegid(sgid);		       /* try and get some extra permissions */
      yell("Unlocking",*lockp);
      if(unlink(*lockp))
 	nlog("Couldn't unlock"),logqnl(*lockp);
-     if(rc!=rc_INIT)				     /* we opened any rcfile */
-	setgid(gid);		      /* we put back our regular permissions */
+     if(rcstate==rc_NORMAL)			   /* we already set our ids */
+	setegid(gid);		      /* we put back our regular permissions */
      if(!nextexit)			   /* if not inside a signal handler */
 	free(*lockp);
      *lockp=0;
    }
-no_lock:
-  lcking&=~lck_LOCKFILE;
-  if(nextexit==1)	    /* make sure we are not inside terminate already */
-     elog(newline),terminate();
+  offguard();
 }
 					/* an NFS secure exclusive file open */
-xcreat(name,mode,tim,chownit)const char*const name;const mode_t mode;
+int xcreat(name,mode,tim,chownit)const char*const name;const mode_t mode;
  time_t*const tim;const int chownit;
-{ char*p;int j= -2,i;
+{ char*p;int j= -2;size_t i;
   i=lastdirsep(name)-name;strncpy(p=malloc(i+UNIQnamelen),name,i);
-  if(unique(p,p+i,mode,verbose))       /* try and rename the unique filename */
-   { if(chownit&&chown(p,uid,sgid))			 /* try and chown it */
-      { unlink(p);goto sorry;			 /* forget it, no permission */
-      }
-     if(tim)
+  if(unique(p,p+i,mode,verbose,chownit)) /* try & rename the unique filename */
+   { if(tim)
       { struct stat stbuf;	 /* return the filesystem time to the caller */
 	stat(p,&stbuf);*tim=stbuf.st_mtime;
       }
      j=myrename(p,name);
    }
-sorry:
-  free(p);return j;
+  free(p);
+  return j;
 }
 	/* if you've ever wondered what conditional compilation was good for */
 #ifndef fdlock						/* watch closely :-) */
@@ -163,12 +165,15 @@ static off_t oldlockoffset;
 #define REITlockf	0
 #endif /* USElockf */
 
-fdlock(fd)
+int fdlock(fd)
 { int ret;
+  if(verbose)
+     nlog("Acquiring kernel-lock\n");
 #if REITfcntl+REITflock+REITlockf>1
-  for(;;nlog("Reiterating kernel-lock\n"),sleep((unsigned)locksleep))
+  for(;!toutflag;verbose&&(nlog("Reiterating kernel-lock\n"),0),
+   ssleep((unsigned)locksleep))
 #endif
-   {
+   { zombiecollect();
 #ifndef NOfcntl_lock
      flck.l_type=F_WRLCK;flck.l_whence=SEEK_SET;flck.l_len=0;
      flck.l_start=tell(fd);
@@ -183,19 +188,22 @@ fdlock(fd)
      if((ret|=lockf(fd,F_TLOCK,(off_t)0))&&(errno==EAGAIN||errno==EACCES||
       errno==EWOULDBLOCK))
 ufcntl:
-      { flck.l_type=F_UNLCK;fcntl(fd,F_SETLK,&flck);continue;
+      { flck.l_type=F_UNLCK;fcntl(fd,F_SETLK,&flck);
+	continue;
       }
 #ifdef USEflock
      if((ret|=flock(fd,LOCK_EX|LOCK_NB))&&(errno==EAGAIN||errno==EACCES||
       errno==EWOULDBLOCK))
-      { lockf(fd,F_ULOCK,(off_t)0);goto ufcntl;
+      { lockf(fd,F_ULOCK,(off_t)0);
+	goto ufcntl;
       }
 #endif /* USEflock */
 #else /* USElockf */
 #ifdef USEflock
      if((ret|=flock(fd,LOCK_EX|LOCK_NB))&&(errno==EAGAIN||errno==EACCES||
       errno==EWOULDBLOCK))
-      { flck.l_type=F_UNLCK;fcntl(fd,F_SETLK,&flck);continue;
+      { flck.l_type=F_UNLCK;fcntl(fd,F_SETLK,&flck);
+	continue;
       }
 #endif /* USEflock */
 #endif /* USElockf */
@@ -205,7 +213,8 @@ ufcntl:
 #ifdef USEflock
      if((ret|=flock(fd,LOCK_EX|LOCK_NB))&&(errno==EAGAIN||errno==EACCES||
       errno==EWOULDBLOCK))
-      { lockf(fd,F_ULOCK,(off_t)0);continue;
+      { lockf(fd,F_ULOCK,(off_t)0);
+	continue;
       }
 #endif /* USEflock */
 #else /* USElockf */
@@ -214,11 +223,12 @@ ufcntl:
 #endif /* USEflock */
 #endif /* USElockf */
 #endif /* NOfcntl_lock */
-     oldfdlock=fd;lcking&=~lck_KERNEL;return ret;
+     oldfdlock=fd;lcking&=~lck_KERNEL;
+     return ret;
    }
 }
 
-fdunlock P((void))
+int fdunlock P((void))
 { int i;
   if(oldfdlock<0)
      return -1;
@@ -232,6 +242,7 @@ fdunlock P((void))
 #ifndef NOfcntl_lock
   flck.l_type=F_UNLCK;i|=fcntl(oldfdlock,F_SETLK,&flck);
 #endif
-  oldfdlock= -1;return i;
+  oldfdlock= -1;
+  return i;
 }
 #endif /* fdlock */

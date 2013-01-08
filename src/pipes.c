@@ -1,12 +1,12 @@
 /************************************************************************
  *	Routines related to setting up pipes and filters		*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: pipes.c,v 1.15 1993/06/21 14:24:46 berg Exp $";
+ "$Id: pipes.c,v 1.33 1994/06/28 16:56:36 berg Exp $";
 #endif
 #include "procmail.h"
 #include "robust.h"
@@ -15,27 +15,38 @@ static /*const*/char rcsid[]=
 #include "pipes.h"
 #include "common.h"
 #include "cstdio.h"
+#include "exopen.h"
+#include "mcommon.h"
 #include "goodies.h"
 #include "mailfold.h"
 
+const char exitcode[]="EXITCODE";
+static const char comma[]=",";
+int setxit;
 pid_t pidchild;
 volatile time_t alrmtime;
+volatile int toutflag;
 static char*lastexec,*backblock;
 static long backlen;	       /* length of backblock, filter recovery block */
 static pid_t pidfilt;
-static pipw,pbackfd[2];			       /* the emergency backpipe :-) */
+static pbackfd[2];			       /* the emergency backpipe :-) */
+int pipw;
 
 void inittmout(progname)const char*const progname;
-{ lastexec=cstr(lastexec,progname);
+{ lastexec=cstr(lastexec,progname);toutflag=0;
   alrmtime=timeoutv?time((time_t*)0)+(unsigned)timeoutv:0;
   alarm((unsigned)timeoutv);
 }
 
 void ftimeout P((void))
-{ alarm(0);alrmtime=0;
-  if(pidchild>0&&!kill(pidchild,SIGTERM))	   /* careful, killing again */
-	nlog("Timeout, terminating"),logqnl(lastexec);
-  signal(SIGALRM,(void(*)())ftimeout);
+{ alarm(0);alrmtime=0;toutflag=1;nlog("Timeout, ");	 /* careful, killing */
+  elog(pidchild>0&&!kill(pidchild,SIGTERM)?"terminating":"was waiting for");
+  logqnl(lastexec);signal(SIGALRM,(void(*)())ftimeout);
+}
+
+void resettmout P((void))
+{ if(alrmtime)				       /* any need to reset timeout? */
+     alarm((unsigned)(alrmtime=0));			    /* reset timeout */
 }
 
 static void stermchild P((void))
@@ -52,9 +63,9 @@ static void stermchild P((void))
 }
 
 static void childsetup P((void))
-{ lexitcode=EX_UNAVAILABLE;signal(SIGTERM,(void(*)())stermchild);
-  signal(SIGINT,(void(*)())stermchild);signal(SIGHUP,(void(*)())stermchild);
-  signal(SIGQUIT,(void(*)())stermchild);closerc();
+{ lexitcode=EX_UNAVAILABLE;qsignal(SIGTERM,stermchild);
+  qsignal(SIGINT,stermchild);qsignal(SIGHUP,stermchild);
+  qsignal(SIGQUIT,stermchild);shutdesc();
 }
 
 static void getstdin(pip)const int pip;
@@ -65,16 +76,17 @@ static void callnewprog(newname)const char*const newname;
 { if(sh)					 /* should we start a shell? */
    { const char*newargv[4];
      yell(executing,newname);newargv[3]=0;newargv[2]=newname;
-     newargv[1]=tgetenv(shellflags);*newargv=tgetenv(shell);shexec(newargv);
+     newargv[1]=shellflags;*newargv=tgetenv(shell);shexec(newargv);
    }
   ;{ register const char*p;int argc;
      argc=1;p=newname;	     /* If no shell, chop up the arguments ourselves */
      if(verbose)
-      { nlog(executing);elog(oquote);goto no_1st_comma;
+      { nlog(executing);elog(oquote);
+	goto no_1st_comma;
       }
      do					     /* show chopped up command line */
       { if(verbose)
-	 { elog(",");
+	 { elog(comma);
 no_1st_comma:
 	   elog(p);
 	 }
@@ -83,7 +95,7 @@ no_1st_comma:
 	 { const char*const*walkargs=restargv;
 	   goto No_1st_comma;
 	   do
-	    { elog(",");
+	    { elog(comma);
 No_1st_comma: elog(*walkargs);					/* expand it */
 	    }
 	   while(*++walkargs);
@@ -112,7 +124,7 @@ No_1st_comma: elog(*walkargs);					/* expand it */
    }
 }
 
-pipthrough(line,source,len)char*line,*source;const long len;
+int pipthrough(line,source,len)char*line,*source;const long len;
 { int pinfd[2],poutfd[2];
   if(Stdout)
      PWRB=PRDB= -1;
@@ -131,51 +143,90 @@ pipthrough(line,source,len)char*line,*source;const long len;
 	rclose(PWRO),stermchild();
      if(dump(PWRO,source,len)&&!ignwerr)  /* send in the text to be filtered */
 	writeerr(line),lexitcode=EX_IOERR,stermchild();
-     if(pwait&&waitfor(pidfilt)!=EX_OK)	 /* check the exitcode of the filter */
-      { pidfilt=0;
-	if(pwait&2)				  /* do we put it on report? */
-	   pwait=4;			     /* no, we'll look the other way */
-	else
-	   progerr(line);		      /* I'm going to tell my mommy! */
-	stermchild();
+     ;{ int excode;	      /* optionally check the exitcode of the filter */
+	if(pwait&&(excode=waitfor(pidfilt))!=EX_OK)
+	 { pidfilt=0;
+	   if(pwait&2)				  /* do we put it on report? */
+	    { pwait=4;			     /* no, we'll look the other way */
+	      if(verbose)
+		 goto perr;
+	    }
+	   else
+perr:	      progerr(line,excode);	      /* I'm going to tell my mommy! */
+	   stermchild();
+	 }
       }
      rclose(PWRB);exit(EX_OK);			  /* allow parent to proceed */
    }
   rclose(PWRB);rclose(PWRI);getstdin(PRDI);
   if(forkerr(pidchild,procmailn))
-     return 1;
+     return -1;
   if(Stdout)
    { retStdout(readdyn(Stdout,&Stdfilled));
-     if(pwait)
-	return pipw;
+     return pipw;
    }
   return 0;		    /* we stay behind to read back the filtered text */
 }
 
 long pipin(line,source,len)char*const line;char*source;long len;
 { int poutfd[2];
+#if 0						     /* not supported (yet?) */
+  if(!sh)					/* shortcut builtin commands */
+   { const char*t1,*t2,*t3;
+     static const char pbuiltin[]="Builtin";
+     t1=strchr(line,'\0')+1;
+     if(!strcmp(test,line))
+      { if(t1!=Tmnate)
+	 { t2=strchr(t1,'\0')+1;
+	   if(t2!=Tmnate)
+	    { t3=strchr(t2,'\0')+1;
+	      if(t3!=Tmnate&&!strcmp(t2,"=")&&strchr(t3,'\0')==Tmnate-1)
+	       { int excode;
+		 if(verbose)
+		  { nlog(pbuiltin);elog(oquote);elog(test);elog(comma),
+		 if(!ignwerr)
+		    writeerr(line);
+		 else
+		    len=0;
+		 if(pwait&&(excode=strcmp(t1,t3)?1:EX_OK)!=EX_OK)
+		  { if(!(pwait&2)||verbose)	  /* do we put it on report? */
+		       progerr(line,excode);
+		    len=1;
+		  }
+		 goto builtin;
+	       }
+	    }
+	 }
+      }
+   }
+#endif
   rpipe(poutfd);
   if(!(pidchild=sfork()))				    /* spawn program */
-     rclose(PWRO),closerc(),getstdin(PRDO),callnewprog(line);
+     rclose(PWRO),shutdesc(),getstdin(PRDO),callnewprog(line);
   rclose(PRDO);
   if(forkerr(pidchild,line))
-     return 1;					    /* dump mail in the pipe */
+     return -1;					    /* dump mail in the pipe */
   if((len=dump(PWRO,source,len))&&(!ignwerr||(len=0)))
      writeerr(line);		       /* pipe was shut in our face, get mad */
-  if(pwait&&waitfor(pidchild)!=EX_OK)	    /* optionally check the exitcode */
-   { if(!(pwait&2))				  /* do we put it on report? */
-	progerr(line);
-     len=1;
+  ;{ int excode;			    /* optionally check the exitcode */
+     if(pwait&&(excode=waitfor(pidchild))!=EX_OK)
+      { if(!(pwait&2)||verbose)			  /* do we put it on report? */
+	   progerr(line,excode);
+	len=1;
+      }
    }
   pidchild=0;
+builtin:
   if(!sh)
      concatenate(line);
-  setlastfolder(line);return len;
+  setlastfolder(line);
+  return len;
 }
 
 char*readdyn(bf,filled)char*bf;long*const filled;
 { int i;long oldsize;
-  oldsize= *filled;goto jumpin;
+  oldsize= *filled;
+  goto jumpin;
   do
    { *filled+=i;				/* change listed buffer size */
 jumpin:
@@ -192,15 +243,19 @@ jumpback:;
       { getstdin(PRDB);			       /* filter ready, get backpipe */
 	if(1==rread(STDIN,buf,1))		      /* backup pipe closed? */
 	 { bf=realloc(bf,(*filled=oldsize+1)+BLKSIZ);bf[oldsize]= *buf;
+	   pipw=NO_PROCESS;
 	   if(pwait)
-	      waitfor(pidchild);
-	   pidchild=0;goto jumpback;	       /* filter goofed, rescue data */
+	      pipw=waitfor(pidchild);
+	   pidchild=0;
+	   goto jumpback;		       /* filter goofed, rescue data */
 	 }
       }
      if(pwait)
 	pipw=waitfor(pidchild);		      /* reap your child in any case */
    }
   pidchild=0;					/* child must be gone by now */
+  if(!(pwait&2))
+     pipw=0;				    /* keep quiet about any failures */
   if(!*filled)
      return realloc(bf,1);		     /* +1 for housekeeping purposes */
   return realloc(bf,*filled+1);			/* minimise the buffer space */
@@ -221,7 +276,7 @@ char*fromprog(name,dest,max)char*name;char*const dest;size_t max;
   rclose(PWRI);p=dest;
   if(!forkerr(pidchild,name))
    { name=tstrdup(name);
-     while(0<(i=rread(PRDI,p,max))&&(p+=i,max-=i));	    /* read its lips */
+     while(0<(i=rread(PRDI,p,(int)max))&&(p+=i,max-=i));    /* read its lips */
      if(0<rread(PRDI,p,1))
 	nlog("Excessive output quenched from"),logqnl(name);
      rclose(PRDI);free(name);
@@ -230,13 +285,24 @@ char*fromprog(name,dest,max)char*name;char*const dest;size_t max;
    }
   else
      rclose(PRDI);
-  pidchild=0;*p='\0';return p;
+  pidchild=0;*p='\0';
+  return p;
 }
 
 void exectrap(tp)const char*const tp;
-{ if(*tp)
-   { int newret;
-     metaparse(tp);concon('\n');inittmout(buf);
+{ int forceret;
+  ;{ char*p;
+     if(setxit&&(p=getenv(exitcode)))		 /* user specified exitcode? */
+      { if((forceret=renvint(-2L,p))>=0)	     /* yes, is it positive? */
+	   retval=forceret;				 /* then override it */
+      }
+     else if(*tp)		 /* no EXITCODE set, TRAP found, provide one */
+      { strcpy(p=buf2,exitcode);*(p+=STRLEN(exitcode))='=';
+	ultstr(0,(unsigned long)retval,p+1);sputenv(buf2);forceret= -1;
+      }
+   }
+  if(*tp)
+   { metaparse(tp);concon('\n');inittmout(buf);
      if(!(pidchild=sfork()))	     /* connect stdout to stderr before exec */
       { int poutfd[2];
 	Stdout=buf;childsetup();rpipe(poutfd);rclose(STDOUT);pidfilt=thepid;
@@ -247,7 +313,11 @@ void exectrap(tp)const char*const tp;
 	 }					 /* call up the TRAP program */
 	rclose(PWRO);rdup(STDERR);forkerr(pidchild,buf);callnewprog(buf);
       }
-     if(!forkerr(pidchild,buf)&&(newret=waitfor(pidchild))!=EX_OK)
-	retval=newret;			       /* supersede the return value */
+     ;{ int newret;
+	if(!forkerr(pidchild,buf)&&
+	   (newret=waitfor(pidchild))!=EX_OK&&
+	   forceret==-2)
+	   retval=newret;		       /* supersede the return value */
+      }
    }
 }

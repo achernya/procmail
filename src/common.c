@@ -1,12 +1,12 @@
 /************************************************************************
- *	Some common routines for procmail and formail			*
+ *	Some routines common to procmail and formail			*
  *									*
- *	Copyright (c) 1990-1992, S.R. van den Berg, The Netherlands	*
- *	#include "README"						*
+ *	Copyright (c) 1990-1994, S.R. van den Berg, The Netherlands	*
+ *	#include "../README"						*
  ************************************************************************/
 #ifdef RCS
 static /*const*/char rcsid[]=
- "$Id: common.c,v 1.11 1992/11/13 12:57:58 berg Exp $";
+ "$Id: common.c,v 1.19 1994/06/28 16:56:01 berg Exp $";
 #endif
 #include "procmail.h"
 #include "sublib.h"
@@ -36,14 +36,18 @@ void detab(p)char*p;
      *p=' ';			     /* take out all tabs and other specials */
 }
 
-char*pstrspn(whole,sub)const char*whole,*const sub;
-{ while(*whole&&strchr(sub,*whole))
-     whole++;
-  return(char*)whole;
+char*skpspace(chp)const char*chp;
+{ for(;;chp++)
+     switch(*chp)
+      { case ' ':case '\t':
+	   continue;
+	default:
+	   return (char*)chp;
+      }
 }
 
 #ifdef NOstrcspn
-strcspn(whole,sub)const char*const whole,*const sub;
+int strcspn(whole,sub)const char*const whole,*const sub;
 { const register char*p;
   p=whole;
   while(*p&&!strchr(sub,*p))
@@ -64,7 +68,17 @@ void ultstr(minwidth,val,dest)unsigned long val;char*dest;
   while(val/=10);
 }
 
-strnIcmp(a,b,l)register const char*a,*b;register size_t l;
+int waitfor(pid)const pid_t pid;	      /* wait for a specific process */
+{ int i;pid_t j;
+  while(pid!=(j=wait(&i))||WIFSTOPPED(i))
+     if(-1==j)
+	return NO_PROCESS;
+     else if(!pid)
+	break;
+  return lexitcode=WIFEXITED(i)?WEXITSTATUS(i):-WTERMSIG(i);
+}
+
+int strnIcmp(a,b,l)register const char*a,*b;register size_t l;
 { unsigned i,j;
   if(l)						 /* case insensitive strncmp */
      do

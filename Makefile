@@ -1,4 +1,4 @@
-#$Id: Makefile,v 1.32 1993/06/25 13:38:38 berg Exp $
+#$Id: Makefile,v 1.56 1994/06/01 18:52:01 berg Exp $
 
 # change BASENAME to your home directory if need be
 BASENAME = /usr/local
@@ -28,7 +28,7 @@ MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 # install.man		Installs the man pages from ./new to $(MAN[15]DIR)
 # install		Does both
 # recommend		Show some recommended suid/sgid modes
-# suid			Impose the modes shown by 'make recommend'
+# install-suid		Impose the modes shown by 'make recommend'
 # clean			Attempts to restore the package to pre-make state
 # realclean		Attempts to restore the package to pre-make-init state
 # deinstall		Removes any previously installed binaries and man
@@ -37,12 +37,16 @@ MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 # procmail		Preinstalls just all procmail related stuff to ./new
 # formail		Preinstalls just all formail related stuff to ./new
 # lockfile		Preinstalls just all lockfile related stuff to ./new
+# setid			Creates the setid binary needed by the SmartList
+#			installation
 ########################
 
 # Makefile.0 - mark, don't (re)move this, a sed script needs it
 
+LOCKINGTEST=__defaults__
+
 #LOCKINGTEST=/tmp .	# Uncomment and add any directories you see fit.
-#			If LOCKINGTEST is undefined, autoconf will not
+#			If LOCKINGTEST is defined, autoconf will NOT
 #			prompt you to enter additional directories.
 #			See INSTALL for more information about the
 #			significance of the locking tests.
@@ -51,16 +55,28 @@ MAN5DIR	  = $(MANDIR)/man$(MAN5SUFFIX)
 # Only edit below this line if you *think* you know what you are doing #
 ########################################################################
 
+#LOCKINGTEST=100	# Uncomment (and change) if you think you know
+#			it better than the autoconf lockingtests.
+#			This will cause the lockingtests to be hotwired.
+#			100	to enable fcntl()
+#			010	to enable lockf()
+#			001	to enable flock()
+#			Or them together to get the desired combination.
+
 # Optional system libraries we search for
-SEARCHLIBS = -ldir -lx -lsocket -lnet -linet -lnsl_s -lnsl_i -lnsl -lsun -lgen\
- -lsockdns
+SEARCHLIBS = -lm -ldir -lx -lsocket -lnet -linet -lnsl_s -lnsl_i -lnsl -lsun \
+ -lgen -lsockdns
 #			-lresolv	# not really needed, is it?
 
 # Informal list of directories where we look for the libraries in SEARCHLIBS
-LIBPATHS=/lib /usr/lib /usr/local/lib /usr/ucblib /usr/5lib /usr/ucb/lib \
- /lib/386
+LIBPATHS=/lib /usr/lib /usr/local/lib
 
-CFLAGS0 = -O #-pedantic #-Wid-clash-6
+GCC_WARNINGS = -O2 -pedantic -Wimplicit -Wreturn-type -Wunused -Wformat \
+ -Wtraditional -Wshadow -Wid-clash-6 -Wpointer-arith -Wconversion \
+ -Waggregate-return #-Wuninitialized
+
+# The place to put your favourite extra cc flag
+CFLAGS0 = -O #$(GCC_WARNINGS)
 LDFLAGS0= -s
 
 CFLAGS1 = $(CFLAGS0) #-posix -Xp
@@ -71,7 +87,7 @@ LDFLAGS1= $(LDFLAGS0) #-lcposix
 O	= o
 RM	= /bin/rm -f
 MV	= mv -f
-LN	= ln -f
+LN	= ln
 BSHELL	= /bin/sh
 INSTALL = cp
 DEVNULL = /dev/null
@@ -79,7 +95,7 @@ DEVNULL = /dev/null
 SUBDIRS = src man
 BINSS	= procmail lockfile formail mailstat
 MANS1S	= procmail formail lockfile
-MANS5S	= procmailrc procmailex
+MANS5S	= procmailrc procmailsc procmailex
 
 # Makefile - mark, don't (re)move this, a sed script needs it
 
@@ -91,6 +107,8 @@ all: init
 make:
 	@$(BSHELL) -c "exit 0"
 
+.PRECIOUS: Makefile
+
 init:
 	$(BSHELL) ./initmake $(BSHELL) "$(SHELL)" "$(RM)" "$(MV)" "$(LN)" \
 	 "$(SEARCHLIBS)" \
@@ -101,7 +119,8 @@ init:
 	 "$(BINDIR)"
 
 makefiles makefile Makefiles Makefile: init
+	@$(BSHELL) -c "exit 0"
 
-bins mans install.bin install.man install recommend suid clean realclean \
-veryclean clobber deinstall autoconf.h $(BINSS) multigram: init
+bins mans install.bin install.man install recommend install-suid clean setid \
+realclean veryclean clobber deinstall autoconf.h $(BINSS) multigram: init
 	$(HIDEMAKE) make $@

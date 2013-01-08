@@ -1,4 +1,4 @@
-#$Id: Makefile.1,v 1.18 1993/06/23 12:55:29 berg Exp $
+#$Id: Makefile.1,v 1.36 1994/06/06 17:33:15 berg Exp $
 
 HIDEMAKE=$(MAKE)
 
@@ -6,6 +6,8 @@ all: bins mans recommend
 
 make:
 	@$(SHELL) -c "exit 0"
+
+.PRECIOUS: Makefile
 
 bins: config.check src/Makefile
 	cd src; $(MAKE) $(NBINS)
@@ -18,7 +20,7 @@ autoconf.h: src/Makefile src/autoconf
 
 procmail: config.check src/Makefile man/Makefile
 	cd src; $(MAKE) ../new/$@ ../new/mailstat
-	cd man; $(MAKE) ../new/$@.1 ../new/$@rc.5 ../new/$@ex.5
+	cd man; $(MAKE) ../new/$@.1 ../new/$@rc.5 ../new/$@ex.5 ../new/$@sc.5
 
 mailstat: procmail
 
@@ -26,11 +28,11 @@ formail lockfile: config.check src/Makefile man/Makefile
 	cd src; $(MAKE) ../new/$@
 	cd man; $(MAKE) ../new/$@.1
 
-multigram: config.check src/Makefile man/Makefile
+setid multigram: config.check src/Makefile man/Makefile
 	cd src; $(MAKE) $@
 
 config.check: config.h
-	@echo Housekeeping file >$@
+	echo Housekeeping file >$@
 	@-mkdir new 2>$(DEVNULL); exit 0
 	@-if $(FGREP) -n -e '`' config.h $(DEVNULL) | $(FGREP) -v EOFName ; \
 	 then \
@@ -40,13 +42,13 @@ config.check: config.h
 
 recommend: src/Makefile
 	@cd src; $(MAKE) $@ >$(DEVNULL)
-	@echo ----------------------------------------------------------------\
----------------
+	@echo ================================================================\
+===============
 	@if $(FGREP) CF_no_procmail_yet autoconf.h >$(DEVNULL); \
 	 then echo If you are a system administrator you should consider \
 integrating procmail; echo into the mail-delivery system -- for advanced \
-functionality AND SECURITY --.; echo For more information about this topic \
-you should look in the examples/advanced; echo file.; elif \
+functionality, speed AND; echo SECURITY "--.  For" more information about \
+this topic you should look in the; echo examples/advanced file.; elif \
 	 cat /usr/lib/sendmail.cf /etc/sendmail.cf 2>$(DEVNULL) | \
 	 grep 'Mlocal.*procmail.*F=[a-zA-Z]*u' >$(DEVNULL) ; then \
 	 echo The recommendation for the sendmail.cf entry of procmail has \
@@ -55,25 +57,29 @@ changed.; echo I suggest you remove the '`u'"'"-flag 'like in:'; echo ; \
 	 /etc/sendmail.cf; then echo /etc/sendmail.cf; else \
 	 echo /usr/lib/sendmail.cf; fi`; fi
 	@echo
-	@echo "Also, HIGHLY RECOMMENDED (type 'make suid' to execute it):"
+	@echo \
+	 "Also, HIGHLY RECOMMENDED (type 'make install-suid' to execute it):"
 	@echo
 	@src/$@ $(BINDIR)/procmail $(BINDIR)/lockfile >suid.sh
 	@src/$@ $(BINDIR)/procmail $(BINDIR)/lockfile
-	@echo ----------------------------------------------------------------\
----------------
+	@echo ================================================================\
+===============
 
 suid.sh: recommend
 
-suid: suid.sh install.bin
-	@cat $@.sh
-	@$(SHELL) ./$@.sh
+install-suid: suid.sh install.bin
+	@cat suid.sh
+	@$(SHELL) ./suid.sh
 	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINSS)
 
 $(MANS): mans
 
 $(BINS): bins
 
-install.man: $(MANS)
+$(BASENAME):
+	mkdir $(BASENAME)
+
+install.man: $(MANS) $(BASENAME)
 	@-mkdir $(MANDIR) 2>$(DEVNULL); exit 0
 	@-mkdir $(MAN1DIR) 2>$(DEVNULL); exit 0
 	@-mkdir $(MAN5DIR) 2>$(DEVNULL); exit 0
@@ -82,16 +88,17 @@ install.man: $(MANS)
 	  do $(INSTALL) new/$$a.1 $(MAN1DIR)/$$a.$(MAN1SUFFIX); done
 	@for a in $(MANS5S); \
 	  do $(INSTALL) new/$$a.5 $(MAN5DIR)/$$a.$(MAN5SUFFIX); done
-	@echo Housekeeping file >install.man
+	echo Housekeeping file >install.man
 
-install.bin: $(BINS)
+install.bin: $(BINS) $(BASENAME)
 	@-mkdir $(BINDIR) 2>$(DEVNULL); exit 0
 	@chmod 0755 $(BINS)
 	$(INSTALL) $(BINS) $(BINDIR)
 	@-dirname / >$(DEVNULL) || $(INSTALL) examples/dirname $(BINDIR)
-	@echo Housekeeping file >install.bin
+	echo Housekeeping file >install.bin
 
-install: install.man install.bin
+install:
+	@$(MAKE) install.man install.bin
 	@echo
 	@cd $(BINDIR); echo Installed in $(BINDIR); ls -l $(BINSS)
 	@cd $(MAN1DIR); echo Installed in $(MAN1DIR); ls -l $(MANS1)
@@ -99,19 +106,19 @@ install: install.man install.bin
 	@$(MAKE) recommend
 
 deinstall:
-	@echo ----------------------------- Deinstalling the procmail package.
+	@echo ============================= Deinstalling the procmail package.
 	@$(RM) install.man install.bin
-	@echo ----------------------------- Checking if everything was removed:
+	@echo ============================= Checking if everything was removed:
 	@-cd $(BINDIR); $(RM) $(BINSS); ls -l $(BINSS); exit 0
 	@-cd $(MAN1DIR); $(RM) $(MANS1); ls -l $(MANS1); exit 0
 	@-cd $(MAN5DIR); $(RM) $(MANS5); ls -l $(MANS5); exit 0
-	@echo ----------------------------- Ready.
+	@echo ============================= Ready.
 
 clean: config.check
 	-for a in $(SUBDIRS); do cd $$a; $(MAKE) $@; cd ..; done; exit 0
-	cd mailinglist; $(RM) targetdir.h list.id.* id.test
+	cd SmartList; $(RM) targetdir.h targetdir.tmp install.list
 	$(RM) $(MANS) $(BINS) install.man install.bin suid.sh _Makefile \
-	 core autoconf.h.tmp
+	 *core* autoconf.h.tmp
 
 realclean: clean _init
 	$(RM) config.check
@@ -127,13 +134,15 @@ _init:
 	$(MV) _Makefile Makefile
 	$(RM) Makefile.0
 
-man/Makefile: man/Makefile.0
+man/Makefile: man/Makefile.0 Makefile
 
-src/Makefile: src/Makefile.0
+src/Makefile: src/Makefile.0 Makefile
 
-man/Makefile src/Makefile: Makefile
-	$(MAKE) _init; $(HIDEMAKE) init
-
-Makefile: Makefile.1 initmake
+man/Makefile src/Makefile Makefile: Makefile.1 initmake
+	sed -e '/^# Makefile.1 - mark/,$$ d' <Makefile >_Makefile
+	cat Makefile.0 >>_Makefile
+	$(MV) _Makefile Makefile
+	$(RM) Makefile.0
+	$(HIDEMAKE) init
 
 init makefiles Makefiles makefile: man/Makefile src/Makefile

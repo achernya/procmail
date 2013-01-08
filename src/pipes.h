@@ -1,8 +1,9 @@
-/*$Id: pipes.h,v 1.4 1992/11/11 14:00:33 berg Exp $*/
+/*$Id: pipes.h,v 1.9 1994/05/26 14:13:20 berg Exp $*/
 
 void
  inittmout P((const char*const progname)),
  ftimeout P((void)),
+ resettmout P((void)),
  exectrap P((const char*const tp));
 int
  pipthrough P((char*line,char*source,const long len));
@@ -19,5 +20,9 @@ char*
 #define PRDB	pbackfd[0]
 #define PWRB	pbackfd[1]
 
+extern const char exitcode[];
+extern int setxit;
 extern pid_t pidchild;
 extern volatile time_t alrmtime;
+extern volatile toutflag;
+extern int pipw;
